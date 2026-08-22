@@ -1,9 +1,7 @@
 import {
   Button,
-  Container,
   Group,
   Loader,
-  Paper,
   PasswordInput,
   Stack,
   Text,
@@ -21,6 +19,7 @@ import {
 } from "../components/Auth/authErrors";
 import type { AuthIntent } from "../components/Auth/authIntent";
 import { readAuthIntent } from "../components/Auth/authIntent";
+import { StandbySlate } from "../components/Layout/StandbySlate";
 import { auth } from "../firebase";
 import {
   isResetPasswordRequest,
@@ -179,8 +178,8 @@ export const ResetPassword = () => {
           : ""));
 
   return (
-    <Container size={460} my={40}>
-      <Paper withBorder shadow="md" p={30} radius="md">
+    <StandbySlate code="Password reset">
+      <div style={{ width: "100%" }}>
         <Title order={1} ta="center" tabIndex={-1} ref={headingRef}>
           {heading}
         </Title>
@@ -204,7 +203,12 @@ export const ResetPassword = () => {
             <Button fullWidth onClick={openSignIn}>
               Sign in
             </Button>
-            <Button fullWidth variant="default" onClick={openForgotPassword}>
+            <Button
+              fullWidth
+              variant="outline"
+              color="dark.0"
+              onClick={openForgotPassword}
+            >
               Request a new reset email
             </Button>
           </Stack>
@@ -223,7 +227,8 @@ export const ResetPassword = () => {
               verifyError.category !== "expired-action-code" && (
                 <Button
                   fullWidth
-                  variant="default"
+                  variant="outline"
+                  color="dark.0"
                   onClick={() => setVerifyAttempt((n) => n + 1)}
                 >
                   Try again
@@ -268,7 +273,7 @@ export const ResetPassword = () => {
             </Group>
           </Stack>
         )}
-      </Paper>
-    </Container>
+      </div>
+    </StandbySlate>
   );
 };

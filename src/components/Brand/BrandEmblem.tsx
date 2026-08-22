@@ -1,0 +1,63 @@
+import { useId } from "react";
+import { EMBLEM_MIN_HEIGHT } from "./brandSizes";
+
+interface BrandEmblemProps {
+  /** Rendered height in px; the emblem is 160 x 200, so width is 0.8 x height. */
+  height?: number;
+  className?: string;
+  /** Accessible name; omit when the surrounding element already names the brand. */
+  label?: string;
+}
+
+/**
+ * The Victory Flame emblem as inline SVG (geometry from
+ * docs/brand/source/grab-your-torch-emblem-color.svg). Inline so it can sit
+ * in the mobile bug, buttons, and empty states without an extra request.
+ * The trophy is transparent negative space cut by a mask; the mask id is
+ * unique per instance so several emblems on one page never collide.
+ */
+export const BrandEmblem = ({
+  height = 40,
+  className,
+  label,
+}: BrandEmblemProps) => {
+  const maskId = `gyt-trophy-${useId().replace(/:/g, "")}`;
+  const h = Math.max(EMBLEM_MIN_HEIGHT, height);
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 160 200"
+      width={Math.round(h * 0.8)}
+      height={h}
+      className={className}
+      role={label ? "img" : undefined}
+      aria-label={label}
+      aria-hidden={label ? undefined : true}
+      focusable="false"
+    >
+      <defs>
+        <mask id={maskId}>
+          <rect width="160" height="200" fill="white" />
+          <path
+            fill="black"
+            d="M56 70h48v10c0 21-8 33-20 38v10h14v10H62v-10h14v-10c-12-5-20-17-20-38V70Zm-13 7h13v10H48c1 10 5 16 13 19l-3 9c-11-4-17-14-18-29l-1-9h4Zm61 0h13l3 0-1 9c-1 15-7 25-18 29l-3-9c8-3 12-9 13-19h-7V77Z"
+          />
+        </mask>
+      </defs>
+      <path
+        fill="#FF5A36"
+        mask={`url(#${maskId})`}
+        d="M80 4c30 27 50 53 50 84 0 31-21 52-50 56-29-4-50-25-50-55 0-24 13-41 34-62 3 17 0 31-11 46 18-8 28-29 27-69Z"
+      />
+      <path
+        fill="#FFC83D"
+        mask={`url(#${maskId})`}
+        d="M87 34c22 22 31 38 29 58-2 19-15 33-34 38 9-10 15-22 15-36 0-11-4-20-11-30 3-10 3-20 1-30Z"
+      />
+      <path fill="#1177FF" d="M31 142h98l-16 20H47l-16-20Z" />
+      <path fill="#18D5F2" d="M43 148h74l-8 8H51l-8-8Z" />
+      <path fill="#071D3A" d="M65 162h30l-8 38H73l-8-38Z" />
+      <path fill="#1177FF" d="M76 168h13l-6 27h-7v-27Z" />
+    </svg>
+  );
+};

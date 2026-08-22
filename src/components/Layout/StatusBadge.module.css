@@ -1,0 +1,58 @@
+.root {
+  --badge-bg: transparent;
+  --badge-color: var(--mantine-color-text);
+  --badge-bd: 1px solid transparent;
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  letter-spacing: var(--gyt-label-tracking);
+}
+
+.live {
+  --badge-bg: var(--mantine-color-signal-5);
+  --badge-color: var(--mantine-color-navy-9);
+}
+
+.live::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--mantine-color-navy-9);
+}
+
+.watch-along {
+  --badge-bg: var(--mantine-color-gold-4);
+  --badge-color: var(--mantine-color-navy-9);
+}
+
+.in-progress {
+  --badge-color: var(--mantine-color-text);
+  --badge-bd: 1px solid var(--gyt-rule-strong);
+}
+
+.complete {
+  --badge-color: var(--mantine-color-dimmed);
+  --badge-bd: 1px solid var(--gyt-rule-strong);
+}
+
+.pending {
+  --badge-color: var(--mantine-color-dimmed);
+  --badge-bd: 1px dashed var(--gyt-rule-strong);
+}
+
+.season {
+  --badge-bg: var(--mantine-color-navy-9);
+  --badge-color: var(--mantine-color-dark-0);
+}
+
+[data-mantine-color-scheme="dark"] .season {
+  --badge-bg: var(--mantine-color-league-6);
+  --badge-color: var(--mantine-color-white);
+}
+
+.admin {
+  --badge-bg: var(--mantine-color-ember-6);
+  --badge-color: var(--mantine-color-navy-9);
+}

@@ -1,44 +1,39 @@
-import { Button, Container, Group, Stack, Text, Title } from "@mantine/core";
-import { IconFlame, IconRefresh } from "@tabler/icons-react";
+import { Button, Text, Title } from "@mantine/core";
 import { Component, type ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { StandbySlate } from "../Layout/StandbySlate";
 
 type RouteErrorFallbackProps = {
   onReload: () => void;
 };
 
 const RouteErrorFallback = ({ onReload }: RouteErrorFallbackProps) => (
-  <Container size={500} py="xl" role="alert">
-    <Stack align="center" gap="lg">
-      <Title order={1} ta="center">
-        This page could not be loaded
-      </Title>
-      <Text c="dimmed" size="lg" ta="center" maw={420}>
-        A new version of Grab Your Torch may have just been released. Reloading
-        the page usually fixes this.
-      </Text>
-      <Group>
-        <Button
-          size="lg"
-          variant="gradient"
-          gradient={{ from: "blue", to: "cyan" }}
-          onClick={onReload}
-          leftSection={<IconRefresh size={20} />}
-        >
+  <StandbySlate
+    role="alert"
+    code="Off air"
+    actions={
+      <>
+        <Button size="md" onClick={onReload}>
           Reload page
         </Button>
         <Button
-          size="lg"
-          variant="default"
           component={Link}
           to="/"
-          leftSection={<IconFlame size={20} />}
+          variant="outline"
+          size="md"
+          color="dark.0"
         >
           Go home
         </Button>
-      </Group>
-    </Stack>
-  </Container>
+      </>
+    }
+  >
+    <Title order={1}>This page could not be loaded</Title>
+    <Text c="dimmed" maw={420}>
+      A new version of Grab Your Torch may have just been released. Reloading
+      the page usually fixes this.
+    </Text>
+  </StandbySlate>
 );
 
 type ErrorBoundaryProps = {

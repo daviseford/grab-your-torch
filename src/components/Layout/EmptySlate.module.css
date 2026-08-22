@@ -1,0 +1,31 @@
+/* Empty states print as an outlined rule box, never a gray card. */
+.root {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--mantine-spacing-sm);
+  padding: var(--mantine-spacing-xl) var(--mantine-spacing-md);
+  border: 1px dashed var(--gyt-rule-strong);
+  border-radius: var(--mantine-radius-md);
+  text-align: center;
+}
+
+.title {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.text {
+  max-width: 48ch;
+  color: var(--mantine-color-dimmed);
+  font-size: var(--mantine-font-size-sm);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--mantine-spacing-sm);
+  margin-top: var(--mantine-spacing-xs);
+}

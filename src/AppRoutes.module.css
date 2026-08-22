@@ -7,7 +7,7 @@
   overflow: hidden;
   z-index: 1000;
   padding: var(--mantine-spacing-sm) var(--mantine-spacing-md);
-  background: var(--mantine-color-blue-6);
+  background: var(--mantine-color-league-6);
   color: var(--mantine-color-white);
   font-weight: 600;
   text-decoration: none;
@@ -22,17 +22,69 @@
   }
 }
 
-.title {
-  font-family: var(--mantine-font-family);
-  font-size: clamp(1.25rem, 1.1rem + 0.7vw, 1.75rem);
-  font-weight: 800;
-  line-height: 1;
-  color: light-dark(var(--mantine-color-black), var(--mantine-color-white));
-  letter-spacing: -0.04em;
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-lg);
+  height: 100%;
+  padding: 0 var(--mantine-spacing-lg);
 
-  @media (max-width: $mantine-breakpoint-sm) {
-    margin-left: auto;
+  @media (max-width: $mantine-breakpoint-md) {
+    gap: var(--mantine-spacing-sm);
+    padding: 0 var(--mantine-spacing-md);
   }
+}
+
+.bug {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  color: var(--mantine-color-dark-0);
+  text-decoration: none;
+  border-radius: var(--mantine-radius-sm);
+}
+
+.bugLockup {
+  display: block;
+  width: 180px;
+  height: auto;
+
+  @media (max-width: $mantine-breakpoint-md) {
+    width: 160px;
+  }
+
+  @media (max-width: 26em) {
+    display: none;
+  }
+}
+
+.bugCompact {
+  display: none;
+  align-items: center;
+  gap: 8px;
+
+  @media (max-width: 26em) {
+    display: flex;
+  }
+}
+
+.bugWordmark {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 1rem;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.bugWordmark em {
+  font-style: italic;
+  color: var(--mantine-color-signal-5);
+}
+
+.burger {
+  --burger-color: var(--mantine-color-dark-0);
+  margin-left: auto;
 }
 
 .main {

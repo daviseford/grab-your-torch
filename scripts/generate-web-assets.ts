@@ -63,9 +63,13 @@ async function generateSvgs(): Promise<void> {
       path.join(BRAND_SOURCE_DIR, out.source),
       "utf8",
     );
-    let svg = source;
+    let svg = out.derive ? out.derive(source) : source;
     if (out.outline) {
-      svg = stampProvenance(outlineSvgText(source, fonts), out.source);
+      svg = stampProvenance(
+        outlineSvgText(svg, fonts),
+        out.source,
+        !!out.derive,
+      );
     }
     const target = publicPath(out.target);
     ensureDir(target);

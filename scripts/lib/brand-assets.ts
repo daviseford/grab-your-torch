@@ -263,8 +263,15 @@ export function findForbiddenEffects(svg: string): string[] {
  * Stamp an outlined SVG with its provenance so nobody edits the generated
  * file by hand. Placed after the XML/SVG opening so `<svg` stays first.
  */
-export function stampProvenance(svg: string, sourceName: string): string {
-  const comment = `<!-- Generated from docs/brand/source/${sourceName} by scripts/generate-web-assets.ts (wordmark outlined). Do not edit by hand. -->`;
+export function stampProvenance(
+  svg: string,
+  sourceName: string,
+  derived = false,
+): string {
+  const how = derived
+    ? "derived dark variant, wordmark outlined"
+    : "wordmark outlined";
+  const comment = `<!-- Generated from docs/brand/source/${sourceName} by scripts/generate-web-assets.ts (${how}). Do not edit by hand. -->`;
   return svg.replace(/(<svg\b[^>]*>)/, `$1\n  ${comment}`);
 }
 
@@ -283,6 +290,29 @@ export interface SvgOutput {
   target: string;
   /** Whether the source contains wordmark text that must be outlined. */
   outline: boolean;
+  /** Optional transform applied to the source before outlining (derived variants). */
+  derive?: (svg: string) => string;
+}
+
+/**
+ * The package ships the stacked lockup for light backgrounds only. The
+ * standby slates (auth, reset, not found, access denied) sit on Night Navy,
+ * so a dark variant is derived with the same color mapping the supplied
+ * primary-dark lockup uses: navy wordmark and handle become Ice White, the
+ * blue "Torch" and handle highlight become Signal Cyan, the bowl stays blue.
+ */
+export function deriveStackedDark(svg: string): string {
+  return svg
+    .replace(
+      /aria-label="Grab Your Torch stacked logo"/,
+      'aria-label="Grab Your Torch stacked logo, dark background"',
+    )
+    .replace(/fill="#071D3A"/g, 'fill="#EAF8FF"')
+    .replace(
+      /<path fill="#1177FF" d="M76 168/,
+      '<path fill="#18D5F2" d="M76 168',
+    )
+    .replace(/(<text[^>]*)fill="#1177FF"/g, '$1fill="#18D5F2"');
 }
 
 export interface RasterOutput {
@@ -317,6 +347,12 @@ export const SVG_OUTPUTS: SvgOutput[] = [
     source: "grab-your-torch-stacked.svg",
     target: "brand/grab-your-torch-stacked.svg",
     outline: true,
+  },
+  {
+    source: "grab-your-torch-stacked.svg",
+    target: "brand/grab-your-torch-stacked-dark.svg",
+    outline: true,
+    derive: deriveStackedDark,
   },
   {
     source: "grab-your-torch-emblem-color.svg",
@@ -374,6 +410,12 @@ export const RASTER_OUTPUTS: RasterOutput[] = [
   {
     from: { public: "brand/grab-your-torch-stacked.svg" },
     target: "brand/grab-your-torch-stacked.png",
+    width: 1024,
+    height: 1024,
+  },
+  {
+    from: { public: "brand/grab-your-torch-stacked-dark.svg" },
+    target: "brand/grab-your-torch-stacked-dark.png",
     width: 1024,
     height: 1024,
   },

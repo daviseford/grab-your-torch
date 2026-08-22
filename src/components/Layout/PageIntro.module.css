@@ -1,0 +1,90 @@
+/*
+ * Lower-third: the page intro. An eyebrow tag, the title, one line of
+ * description, optional meta (badges) and actions, closed by a hairline rule.
+ */
+.root {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--mantine-spacing-lg);
+  padding: var(--mantine-spacing-md) 0 var(--mantine-spacing-lg);
+  margin-bottom: var(--mantine-spacing-lg);
+  border-bottom: 1px solid var(--gyt-rule);
+
+  @media (max-width: $mantine-breakpoint-sm) {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--mantine-spacing-md);
+    padding-top: var(--mantine-spacing-xs);
+  }
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-xs);
+  min-width: 0;
+}
+
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-sm);
+}
+
+.tag {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 3px;
+  background: var(--mantine-color-signal-5);
+  color: var(--mantine-color-navy-9);
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 0.6875rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+
+.context {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: 0.6875rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--gyt-signal-text);
+}
+
+.title {
+  font-size: clamp(1.75rem, 1.3rem + 2vw, 2.5rem);
+  line-height: 1.08;
+}
+
+.description {
+  max-width: 62ch;
+  color: var(--mantine-color-dimmed);
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--mantine-spacing-xs);
+  margin-top: 2px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--mantine-spacing-sm);
+  flex-shrink: 0;
+
+  @media (max-width: $mantine-breakpoint-sm) {
+    justify-content: stretch;
+
+    & > * {
+      flex: 1 1 auto;
+    }
+  }
+}

@@ -244,7 +244,12 @@ describe("brand package inventory", () => {
       path.join(BRAND_DOCS_DIR, "README.md"),
       "utf8",
     );
-    const files = listBrandDocsFiles().filter((f) => f !== "README.md");
+    // Only the supplied package is inventoried; repo-authored docs are not.
+    const files = listBrandDocsFiles().filter(
+      (f) =>
+        /^(source|reference|provenance|archive)\//.test(f) ||
+        f === "brand-guidelines.md",
+    );
     expect(files.length).toBeGreaterThan(25);
     for (const file of files) {
       const occurrences = readme.split("`" + file + "`").length - 1;

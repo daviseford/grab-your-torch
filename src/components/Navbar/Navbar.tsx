@@ -1,28 +1,13 @@
 import {
-  Box,
-  Divider,
-  Group,
-  NavLink,
-  Stack,
+  ActionIcon,
+  Button,
   Text,
+  Tooltip,
   useComputedColorScheme,
   useMantineColorScheme,
 } from "@mantine/core";
 import { modals } from "@mantine/modals";
-import {
-  IconHome,
-  IconKarate,
-  IconLayoutBoard,
-  IconLogin,
-  IconLogout,
-  IconMail,
-  IconMoon,
-  IconSettings,
-  IconStarFilled,
-  IconSun,
-  IconUser,
-  IconUserPlus,
-} from "@tabler/icons-react";
+import { IconMoon, IconSun } from "@tabler/icons-react";
 import { Link, useLocation } from "react-router-dom";
 import { auth } from "../../firebase";
 import { useUser } from "../../hooks/useUser";
@@ -32,49 +17,41 @@ import classes from "./Navbar.module.css";
 type NavItem = {
   link: string;
   label: string;
-  icon: React.FC<{ className?: string; stroke?: number }>;
   adminOnly?: boolean;
 };
 
 const data: NavItem[] = [
-  { link: "/", label: "Home", icon: IconHome },
-  { link: "/admin", label: "Admin", icon: IconSettings, adminOnly: true },
-  { link: "/seasons", label: "Seasons", icon: IconLayoutBoard },
-  { link: "/competitions", label: "Competitions", icon: IconKarate },
-  { link: "/scoring", label: "Scoring", icon: IconStarFilled },
+  { link: "/", label: "Home" },
+  { link: "/seasons", label: "Seasons" },
+  { link: "/competitions", label: "Competitions" },
+  { link: "/scoring", label: "Scoring" },
+  { link: "/admin", label: "Admin", adminOnly: true },
 ];
 
-export const Navbar = ({ onNavigate }: { onNavigate?: () => void }) => {
+const isItemActive = (pathname: string, link: string) =>
+  (pathname.startsWith("/seasons") && link === "/seasons") ||
+  (pathname.startsWith("/competitions") && link === "/competitions") ||
+  (pathname.startsWith("/admin") && link === "/admin") ||
+  (pathname === "/scoring" && link === "/scoring") ||
+  link === pathname;
+
+type NavbarProps = {
+  /** Id the burger's aria-controls points at. */
+  id: string;
+  /** Whether the narrow-screen panel is open. Ignored on desktop. */
+  opened: boolean;
+  /** Close the narrow-screen panel (after navigating, on Escape). */
+  onClose: () => void;
+};
+
+/**
+ * The main navigation: inline links and account controls on desktop, a
+ * panel under the header on narrow screens. It is the only navigation
+ * landmark in the shell.
+ */
+export const Navbar = ({ id, opened, onClose }: NavbarProps) => {
   const { pathname } = useLocation();
-
   const { slimUser } = useUser();
-
-  const links = data.map((item) => {
-    // Hide admin-only routes
-    if (!slimUser?.isAdmin && item.adminOnly) return null;
-
-    const isActive =
-      (pathname.startsWith("/seasons") && item.link === "/seasons") ||
-      (pathname.startsWith("/competitions") && item.link === "/competitions") ||
-      (pathname.startsWith("/admin") && item.link === "/admin") ||
-      (pathname === "/scoring" && item.link === "/scoring") ||
-      item.link === pathname ||
-      undefined;
-
-    return (
-      <NavLink
-        key={item.label}
-        component={Link}
-        to={item.link}
-        className={classes.link}
-        active={Boolean(isActive)}
-        label={item.label}
-        leftSection={<item.icon className={classes.linkIcon} stroke={1.5} />}
-        onClick={onNavigate}
-      />
-    );
-  });
-
   const { toggleColorScheme } = useMantineColorScheme();
   const computedColorScheme = useComputedColorScheme("light");
   const isDark = computedColorScheme === "dark";
@@ -86,96 +63,112 @@ export const Navbar = ({ onNavigate }: { onNavigate?: () => void }) => {
     auth.signOut();
   };
 
+  // The panel stays open behind the auth modal so the other entry point is
+  // still one tap away after a dismissal (the auth e2e suite relies on it).
+  const openAuth = (initialMode: "login" | "register") => {
+    modals.openContextModal({
+      modal: "AuthModal",
+      innerProps: { initialMode },
+    });
+  };
+
+  const initial = (slimUser?.displayName ?? "?").trim().charAt(0) || "?";
+
   return (
-    <Stack className={classes.navbar} gap="md" justify="space-between">
-      <Stack gap={4}>{links}</Stack>
+    <nav
+      id={id}
+      className={classes.nav}
+      aria-label="Main navigation"
+      data-opened={opened}
+    >
+      <ul className={classes.links}>
+        {data.map((item) => {
+          if (item.adminOnly && !slimUser?.isAdmin) return null;
+          const active = isItemActive(pathname, item.link);
+          return (
+            <li key={item.label}>
+              <Link
+                to={item.link}
+                className={classes.link}
+                aria-current={active ? "page" : undefined}
+                onClick={onClose}
+              >
+                {item.label}
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
 
-      <Stack gap="xs">
-        <Divider />
-
-        <NavLink
-          component="button"
-          type="button"
-          className={classes.link}
-          label={isDark ? "Light mode" : "Dark mode"}
-          leftSection={
-            isDark ? (
-              <IconSun className={classes.linkIcon} stroke={1.5} />
+      <div className={classes.controls}>
+        <Tooltip label={isDark ? "Light mode" : "Dark mode"} withArrow>
+          <ActionIcon
+            variant="subtle"
+            size="lg"
+            className={classes.iconButton}
+            onClick={toggleColorScheme}
+            aria-label="Toggle color scheme"
+          >
+            {isDark ? (
+              <IconSun size={18} stroke={1.75} />
             ) : (
-              <IconMoon className={classes.linkIcon} stroke={1.5} />
-            )
-          }
-          onClick={toggleColorScheme}
-          aria-label="Toggle color scheme"
-        />
+              <IconMoon size={18} stroke={1.75} />
+            )}
+          </ActionIcon>
+        </Tooltip>
 
         {!slimUser && (
           <>
-            <NavLink
-              component="button"
-              type="button"
-              className={classes.link}
-              label="Sign in"
-              leftSection={
-                <IconLogin className={classes.linkIcon} stroke={1.5} />
-              }
-              onClick={() =>
-                modals.openContextModal({
-                  modal: "AuthModal",
-                  innerProps: { initialMode: "login" },
-                })
-              }
-            />
-            <NavLink
-              component="button"
-              type="button"
-              className={classes.link}
-              label="Create account"
-              leftSection={
-                <IconUserPlus className={classes.linkIcon} stroke={1.5} />
-              }
-              onClick={() =>
-                modals.openContextModal({
-                  modal: "AuthModal",
-                  innerProps: { initialMode: "register" },
-                })
-              }
-            />
+            <Button
+              variant="subtle"
+              color="dark.0"
+              size="sm"
+              onClick={() => openAuth("login")}
+            >
+              Sign in
+            </Button>
+            <Button
+              variant="outline"
+              color="dark.0"
+              size="sm"
+              onClick={() => openAuth("register")}
+            >
+              Create account
+            </Button>
           </>
         )}
 
         {slimUser && (
           <>
-            <Box className={classes.userCard}>
-              <Group align="flex-start" gap="sm" wrap="nowrap">
-                <IconUser className={classes.linkIcon} stroke={1.5} />
-                <Stack gap={2}>
-                  <Text size="sm" fw={600} truncate>
-                    {slimUser.displayName}
-                  </Text>
-                  <Group gap={6} wrap="nowrap">
-                    <IconMail className={classes.metaIcon} stroke={1.5} />
-                    <Text size="xs" c="dimmed" truncate>
-                      {slimUser.email}
-                    </Text>
-                  </Group>
-                </Stack>
-              </Group>
-            </Box>
-
-            <NavLink
-              component="button"
-              type="button"
-              className={classes.link}
-              label="Logout"
-              leftSection={
-                <IconLogout className={classes.linkIcon} stroke={1.5} />
-              }
+            <div className={classes.account}>
+              <span className={classes.avatar} aria-hidden="true">
+                {initial}
+              </span>
+              <div style={{ minWidth: 0 }}>
+                <Text
+                  component="div"
+                  className={classes.accountName}
+                  size="sm"
+                  truncate
+                >
+                  {slimUser.displayName}
+                </Text>
+                <Text component="div" className={classes.accountEmail} truncate>
+                  {slimUser.email}
+                </Text>
+              </div>
+            </div>
+            <Button
+              variant="subtle"
+              color="dark.0"
+              size="sm"
               onClick={handleLogout}
-            />
+            >
+              Logout
+            </Button>
           </>
         )}
-      </Stack>
-    </Stack>
+      </div>
+    </nav>
   );
 };

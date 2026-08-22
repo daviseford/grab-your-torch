@@ -1,5 +1,5 @@
-import { Anchor, Container, Group, Text, VisuallyHidden } from "@mantine/core";
-
+import { Anchor, Container, Text, VisuallyHidden } from "@mantine/core";
+import { BrandLockup } from "../Brand";
 import classes from "./Footer.module.css";
 
 const links = [
@@ -14,19 +14,19 @@ export const Footer = () => {
   return (
     <footer className={classes.footer}>
       <Container className={classes.inner}>
-        <Group gap="xs" wrap="nowrap">
-          <img src="/icons/probst.svg" alt="" className={classes.icon} />
+        <div className={classes.brand}>
+          <BrandLockup width={160} className={classes.lockup} decorative />
           <Text c="dimmed" size="sm">
             Built for draft night chaos by Davis Ford
           </Text>
-        </Group>
-        <Group gap="sm">
+        </div>
+        <div className={classes.links}>
           {links.map((link) => (
             <Anchor
               c="dimmed"
               key={link.label}
               href={link.link}
-              size="sm"
+              className={classes.link}
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -34,7 +34,7 @@ export const Footer = () => {
               <VisuallyHidden> (opens in a new tab)</VisuallyHidden>
             </Anchor>
           ))}
-        </Group>
+        </div>
       </Container>
       <Container className={classes.disclaimer}>
         <Text c="dimmed" size="xs" ta="center">

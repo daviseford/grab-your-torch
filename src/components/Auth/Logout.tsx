@@ -1,9 +1,9 @@
-import { Button, Center, Stack, Text, Title } from "@mantine/core";
+import { Button, Text, Title } from "@mantine/core";
 import { modals } from "@mantine/modals";
-import { IconHome, IconLogin } from "@tabler/icons-react";
 import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { auth } from "../../firebase";
+import { StandbySlate } from "../Layout/StandbySlate";
 import { clearAuthIntents } from "./authIntent";
 
 /**
@@ -18,36 +18,38 @@ export const Logout = () => {
   }, []);
 
   return (
-    <Center py="xl">
-      <Stack align="center" gap="md" maw={420}>
-        <Title order={2} ta="center">
-          You're signed out
-        </Title>
-        <Text c="dimmed" ta="center" size="sm">
-          Thanks for playing. Sign back in to pick up your drafts and
-          competitions, or keep browsing seasons and castaways for free.
-        </Text>
-        <Button
-          leftSection={<IconLogin size={18} />}
-          onClick={() =>
-            modals.openContextModal({
-              modal: "AuthModal",
-              innerProps: { initialMode: "login" },
-            })
-          }
-        >
-          Sign in
-        </Button>
-        <Button
-          component={Link}
-          to="/"
-          variant="subtle"
-          size="sm"
-          leftSection={<IconHome size={16} />}
-        >
-          Back to home
-        </Button>
-      </Stack>
-    </Center>
+    <StandbySlate
+      code="Signed out"
+      actions={
+        <>
+          <Button
+            size="md"
+            onClick={() =>
+              modals.openContextModal({
+                modal: "AuthModal",
+                innerProps: { initialMode: "login" },
+              })
+            }
+          >
+            Sign in
+          </Button>
+          <Button
+            component={Link}
+            to="/"
+            variant="outline"
+            size="md"
+            color="dark.0"
+          >
+            Back to home
+          </Button>
+        </>
+      }
+    >
+      <Title order={2}>You're signed out</Title>
+      <Text c="dimmed" size="sm" maw={420}>
+        Thanks for playing. Sign back in to pick up your drafts and
+        competitions, or keep browsing seasons and castaways for free.
+      </Text>
+    </StandbySlate>
   );
 };
