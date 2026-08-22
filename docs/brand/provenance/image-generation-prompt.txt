@@ -1,0 +1,17 @@
+Built-in image generation prompt used for the concept exploration:
+
+Use case: logo-brand
+Asset type: professional three-concept logo exploration board for a fantasy sports web product
+Primary request: Present three genuinely different logo concept directions for a website called “Grab Your Torch.” Show each as a clean vector-style emblem plus a simple horizontal lockup, labeled Concept A, Concept B, Concept C.
+Brand/product: free spoiler-free Survivor fantasy league; competitive, adventurous, social, clever, energetic, welcoming; modern polished fantasy sports with restrained tropical adventure.
+Concept A: bold compact torch; warm flame wraps around crisp negative space shaped subtly like a trophy cup; blue/cyan torch body.
+Concept B: three simple geometric flame lobes or figures converging upward around a central draft-pick marker; sense of teamwork and selection.
+Concept C: angular torch whose flame and handle create an upward scoring chevron and subtle GYT monogram logic; fast and competitive.
+Style/medium: original clean vector identity exploration, flat geometric construction, bold silhouettes, crisp edges, excellent negative space, no texture.
+Composition: white professional design sheet, three equal columns, generous whitespace; emblem large above lockup in each column; minimal short rationale beneath each.
+Color palette: deep navy #071D3A, electric blue #1177FF, cyan #18D5F2, ember orange #FF5A36, golden yellow #FFC83D.
+Text (verbatim): “Grab Your Torch”; labels only “CONCEPT A”, “CONCEPT B”, “CONCEPT C”.
+Constraints: exact spelling and capitalization; modern confident sans-serif wordmark; “Torch” slightly more energetic/emphasized; all three concepts must be visibly different; logos must read at small size.
+Avoid: official Survivor logo or typography, tribal council imagery, immunity idols, CBS branding, tiki masks, pseudo-tribal imagery, distressed novelty type, esports crest, jungle detail, photorealism, 3D, bevels, shadows, mockups, gradients, clip-art torch, tiny details, watermarks.
+
+The selected Victory Flame direction was then redrawn as deterministic SVG geometry for the production asset set.
