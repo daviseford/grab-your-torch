@@ -10,12 +10,17 @@ type CompetitionSignals = Pick<
   "season_num" | "current_episode" | "finished"
 >;
 
-/** The header bug context: season, then the revealed episode or Live. */
+/**
+ * The header bug context: season, then the revealed episode or the live
+ * state. A finished live competition is complete, not live.
+ */
 export const competitionBugContext = (competition: CompetitionSignals) => {
-  const { season_num, current_episode } = competition;
+  const { season_num, current_episode, finished } = competition;
   const mode =
     current_episode == null
-      ? "Live"
+      ? finished
+        ? "Complete"
+        : "Live"
       : current_episode > 0
         ? `Ep ${current_episode} · Watch-along`
         : "Watch-along";

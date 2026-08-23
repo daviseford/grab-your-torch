@@ -17,6 +17,11 @@ describe("competitionBugContext", () => {
     expect(competitionBugContext(fresh)).toBe("S47 · Watch-along");
     expect(competitionBugContext(midway)).toBe("S47 · Ep 6 · Watch-along");
   });
+
+  it("calls a finished live competition complete, not live", () => {
+    expect(competitionBugContext(liveDone)).toBe("S50 · Complete");
+    expect(competitionBugContext(watchedOut)).toBe("S47 · Ep 13 · Watch-along");
+  });
 });
 
 describe("competitionModeBadge", () => {
