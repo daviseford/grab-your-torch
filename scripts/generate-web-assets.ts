@@ -23,17 +23,15 @@ import path from "path";
 import sharp from "sharp";
 import {
   BRAND_SOURCE_DIR,
-  compactSvg,
   expectedPublicOutputs,
   findForbiddenEffects,
   findLiveText,
   loadBrandFonts,
-  outlineSvgText,
   PUBLIC_DIR,
   RASTER_OUTPUTS,
   referencedHeadAssets,
+  renderSvgOutput,
   REPO_ROOT,
-  stampProvenance,
   SVG_OUTPUTS,
   WEB_MANIFEST,
   type RasterOutput,
@@ -59,21 +57,9 @@ function viewBoxOf(svg: string): { width: number; height: number } {
 async function generateSvgs(): Promise<void> {
   const fonts = await loadBrandFonts();
   for (const out of SVG_OUTPUTS) {
-    const source = fs.readFileSync(
-      path.join(BRAND_SOURCE_DIR, out.source),
-      "utf8",
-    );
-    let svg = out.derive ? out.derive(source) : source;
-    if (out.outline) {
-      svg = stampProvenance(
-        outlineSvgText(svg, fonts),
-        out.source,
-        !!out.derive,
-      );
-    }
     const target = publicPath(out.target);
     ensureDir(target);
-    fs.writeFileSync(target, compactSvg(svg) + "\n");
+    fs.writeFileSync(target, renderSvgOutput(out, fonts));
     console.log(`✓ ${out.target}${out.outline ? " (outlined)" : ""}`);
   }
 }

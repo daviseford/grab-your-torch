@@ -16,6 +16,8 @@ import { BASE_PLAYER_SCORING } from "../../data/scoring";
 import { db } from "../../firebase";
 import { useEliminations } from "../../hooks/useEliminations";
 import { useSeason } from "../../hooks/useSeason";
+import { CastawayId, GameEvent, GameEventActions } from "../../types";
+import { EmptySlate } from "../Layout";
 import {
   CreatePanel,
   FormActions,
@@ -23,9 +25,7 @@ import {
   FormStack,
   LoadingRow,
   PanelAside,
-} from "../../pages/SeasonAdminParts";
-import { CastawayId, GameEvent, GameEventActions } from "../../types";
-import { EmptySlate } from "../Layout";
+} from "../SeasonAdmin/SeasonAdminParts";
 
 export const CreateGameEvent = () => {
   const { data: season, isLoading } = useSeason();

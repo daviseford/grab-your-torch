@@ -147,9 +147,11 @@ export const SingleCompetition = () => {
 
   const bugContext = competition
     ? `S${competition.season_num} · ${
-        competition.current_episode != null
-          ? `Ep ${competition.current_episode} · Watch-along`
-          : "Live"
+        competition.current_episode == null
+          ? "Live"
+          : competition.current_episode > 0
+            ? `Ep ${competition.current_episode} · Watch-along`
+            : "Watch-along"
       }`
     : null;
   useBugContext(bugContext);

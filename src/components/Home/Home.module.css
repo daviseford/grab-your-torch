@@ -339,23 +339,6 @@
   }
 }
 
-.facts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 20px;
-  font-family: var(--mantine-headings-font-family);
-  font-weight: 600;
-  font-size: 0.6875rem;
-  letter-spacing: var(--gyt-label-tracking);
-  text-transform: uppercase;
-  color: var(--mantine-color-dimmed);
-}
-
-.facts b {
-  color: var(--mantine-color-text);
-  font-weight: 700;
-}
-
 /* ---------- Scoring ---------- */
 .cats {
   display: flex;

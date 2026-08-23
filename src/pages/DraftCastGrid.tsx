@@ -3,6 +3,7 @@ import { useMediaQuery } from "@mantine/hooks";
 import { CastawayCard, StatusBadge } from "../components/Layout";
 import type { DraftPick, Player } from "../types";
 import classes from "./Draft.module.css";
+import { firstNameOf } from "./DraftNames";
 
 type DraftCastGridProps = {
   players: Player[];
@@ -63,7 +64,7 @@ export const DraftCastGrid = ({
             color="gray"
             onClick={() => onDetails(player)}
           >
-            About {player.full_name.split(/\s+/)[0]}
+            About {firstNameOf(player.full_name)}
           </Button>
         ) : null;
         return (

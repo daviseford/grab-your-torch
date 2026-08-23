@@ -22,6 +22,7 @@ import {
   PUBLIC_DIR,
   RASTER_OUTPUTS,
   referencedHeadAssets,
+  renderSvgOutput,
   REPO_ROOT,
   SVG_OUTPUTS,
   textRunToPathData,
@@ -156,6 +157,13 @@ describe("shipping brand assets", () => {
       expect(findLiveText(svg), out.target).toEqual([]);
       expect(findForbiddenEffects(svg), out.target).toEqual([]);
       expect(svg.startsWith("<svg"), out.target).toBe(true);
+    }
+  });
+
+  it("are exactly what a fresh render of docs/brand/source produces", async () => {
+    const fonts = await loadBrandFonts();
+    for (const out of SVG_OUTPUTS) {
+      expect(read(out.target), out.target).toBe(renderSvgOutput(out, fonts));
     }
   });
 

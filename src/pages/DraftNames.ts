@@ -7,3 +7,7 @@ export const participantName = (user: SlimUser) =>
 /** One uppercase initial for avatar plates. */
 export const initialOf = (name: string) =>
   (name.trim().charAt(0) || "?").toUpperCase();
+
+/** The given name, for the tight "About" and board cells. */
+export const firstNameOf = (fullName: string) =>
+  fullName.trim().split(/\s+/)[0];

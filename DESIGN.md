@@ -332,4 +332,4 @@ Mantine inputs at the 4 px radius with the rule-strong border on white (light) o
 - **Don't** add gradients, glows, drop shadows, tinted alert cards, icon tiles, or illustrations beyond the emblem.
 - **Don't** draw thick single-edge accent bars on cards or rows; use a mark, a rank block, or a full outline.
 - **Don't** place the primary lockup below 160 px wide or the emblem below 40 px tall; use the favicon artwork below that.
-- **Don't** reveal anything past a competition's current episode in any board, strip, or copy, and never name a trade's episode.
+- **Don't** reveal anything past a competition's current episode in any board, strip, or copy, and never name a trade's episode past the next reveal.

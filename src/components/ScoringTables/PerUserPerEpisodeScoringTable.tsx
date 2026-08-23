@@ -42,12 +42,13 @@ export const PerUserPerEpisodeScoringTable = () => {
   // way the scoreboard strip above the tabs ranks them.
   const rankOf = (total: number) =>
     1 + sortedEntries.filter(([, v]) => v.total > total).length;
+  const hasPoints = sortedEntries.some(([, v]) => v.total > 0);
 
   const rows = sortedEntries.map(([uid, values]) => {
     const user = competition?.participants.find((x) => x.uid === uid);
     const isCurrentUser = uid === slimUser?.uid;
     const rank = rankOf(values.total);
-    const isLeader = rank === 1;
+    const isLeader = rank === 1 && hasPoints;
     const name =
       competition?.team_names?.[uid] || user?.displayName || user?.email;
 

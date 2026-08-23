@@ -7,14 +7,14 @@ import { v4 } from "uuid";
 import { SURVIVOR_SWATCHES } from "../../constants/colors";
 import { db } from "../../firebase";
 import { useSeason } from "../../hooks/useSeason";
+import { Team } from "../../types";
 import {
   CreatePanel,
   FormActions,
   FormStack,
   LoadingRow,
   PanelAside,
-} from "../../pages/SeasonAdminParts";
-import { Team } from "../../types";
+} from "../SeasonAdmin/SeasonAdminParts";
 
 export const CreateTeam = () => {
   const { data: season, isLoading } = useSeason();

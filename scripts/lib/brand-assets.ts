@@ -315,6 +315,24 @@ export function deriveStackedDark(svg: string): string {
     .replace(/(<text[^>]*)fill="#1177FF"/g, '$1fill="#18D5F2"');
 }
 
+/**
+ * The exact bytes `generate-web-assets.ts` writes for one SVG output: the
+ * source (derived if declared), outlined and provenance-stamped when the
+ * source carries live text, then compacted. The test suite renders through
+ * the same function, so a source edit without regeneration fails CI.
+ */
+export function renderSvgOutput(out: SvgOutput, fonts: BrandFonts): string {
+  const source = fs.readFileSync(
+    path.join(BRAND_SOURCE_DIR, out.source),
+    "utf8",
+  );
+  let svg = out.derive ? out.derive(source) : source;
+  if (out.outline) {
+    svg = stampProvenance(outlineSvgText(svg, fonts), out.source, !!out.derive);
+  }
+  return compactSvg(svg) + "\n";
+}
+
 export interface RasterOutput {
   /** Source SVG: a public/ path produced by `SVG_OUTPUTS` or a docs source. */
   from: { public: string } | { source: string };

@@ -9,18 +9,18 @@ import { useEliminations } from "../../hooks/useEliminations";
 import { useSeason } from "../../hooks/useSeason";
 import { useUser } from "../../hooks/useUser";
 import {
-  BoardEmpty,
-  EditRowActions,
-  RowActions,
-} from "../../pages/SeasonAdminParts";
-import adminParts from "../../pages/SeasonAdminParts.module.css";
-import {
   CastawayId,
   Elimination,
   EliminationVariant,
   EliminationVariants,
 } from "../../types";
 import { Board, EmptySlate } from "../Layout";
+import {
+  BoardEmpty,
+  EditRowActions,
+  RowActions,
+} from "../SeasonAdmin/SeasonAdminParts";
+import adminParts from "../SeasonAdmin/SeasonAdminParts.module.css";
 
 type EditValues = {
   order: number;

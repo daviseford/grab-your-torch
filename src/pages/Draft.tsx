@@ -14,7 +14,7 @@ import {
 import { isNotEmpty, useForm } from "@mantine/form";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
-import { IconAlertCircle, IconCheck, IconX } from "@tabler/icons-react";
+import { IconCheck, IconX } from "@tabler/icons-react";
 import { ref, runTransaction, set, update } from "firebase/database";
 import { doc, setDoc } from "firebase/firestore";
 import { shuffle } from "lodash-es";
@@ -24,7 +24,12 @@ import { v4 } from "uuid";
 import { saveAuthIntent, type AuthIntent } from "../components/Auth/authIntent";
 import { DraftOrderReveal } from "../components/DraftOrderReveal";
 import { DraftTable } from "../components/DraftTable";
-import { Board, StatusBadge, useBugContext } from "../components/Layout";
+import {
+  Board,
+  Notice,
+  StatusBadge,
+  useBugContext,
+} from "../components/Layout";
 import { PostDraftPropBetTable } from "../components/PropBetTables/PostDraftPropBetTable";
 import {
   PropBetQuestionKey,
@@ -136,6 +141,8 @@ export const DraftComponent = () => {
         color: "red",
         icon: <IconX size={16} />,
       });
+    } finally {
+      startingDraft.current = false;
     }
   };
 
@@ -319,8 +326,10 @@ export const DraftComponent = () => {
     execute: executeJoinIntent,
   });
 
+  const startingDraft = useRef(false);
   const startDraft = async () => {
-    if (!draft || !slimUser?.uid) return;
+    if (!draft || !slimUser?.uid || startingDraft.current) return;
+    startingDraft.current = true;
 
     const draftOrder = shuffle(draft.participants);
     const turns = buildTurnsMap(draftOrder, draft.total_players);
@@ -342,14 +351,22 @@ export const DraftComponent = () => {
         color: "red",
         icon: <IconX size={16} />,
       });
+    } finally {
+      startingDraft.current = false;
     }
   };
+
+  // One RTDB write at a time: the snapshot that advances the pick arrives
+  // after the update resolves, so a second click in that window would
+  // overwrite the pick just made with a different castaway.
+  const [submittingPick, setSubmittingPick] = useState(false);
 
   const draftPlayer = async (player: {
     castaway_id: CastawayId;
     full_name: string;
   }) => {
-    if (!season || !draft || !slimUser?.uid) return;
+    if (!season || !draft || !slimUser?.uid || submittingPick) return;
+    setSubmittingPick(true);
 
     const isFinalPick = draft.current_pick_number >= draft.total_players;
     const nextPickNumber = draft.current_pick_number + 1;
@@ -383,6 +400,8 @@ export const DraftComponent = () => {
         color: "red",
         icon: <IconX size={16} />,
       });
+    } finally {
+      setSubmittingPick(false);
     }
   };
 
@@ -548,49 +567,46 @@ export const DraftComponent = () => {
         continuation.status === "invalid") && (
         <div className={classes.alerts}>
           {continuation.status === "executing" && (
-            <Alert color="league" variant="light">
+            <Notice label="Joining" role="status">
               Adding you to the draft...
-            </Alert>
+            </Notice>
           )}
           {continuation.status === "failed" && (
-            <Alert
-              color="red"
-              variant="light"
-              icon={<IconAlertCircle size={18} />}
-            >
-              <Stack gap="xs">
-                <Text size="sm">{continuation.error}</Text>
+            <Notice
+              label="Failed"
+              tone="danger"
+              role="alert"
+              actions={
                 <Button
                   size="xs"
-                  variant="light"
+                  variant="default"
                   onClick={continuation.retry}
-                  w="fit-content"
                 >
                   Try again
                 </Button>
-              </Stack>
-            </Alert>
+              }
+            >
+              {continuation.error}
+            </Notice>
           )}
           {continuation.status === "invalid" && (
-            <Alert
-              color="orange"
-              variant="light"
-              icon={<IconAlertCircle size={18} />}
-              title="This draft can no longer be joined"
-            >
-              <Stack gap="xs">
-                <Text size="sm">{continuation.error}</Text>
+            <Notice
+              label="Closed"
+              tone="warning"
+              role="alert"
+              actions={
                 <Button
                   size="xs"
-                  variant="light"
+                  variant="default"
                   component={Link}
                   to="/competitions"
-                  w="fit-content"
                 >
                   Browse competitions
                 </Button>
-              </Stack>
-            </Alert>
+              }
+            >
+              This draft can no longer be joined. {continuation.error}
+            </Notice>
           )}
         </div>
       )}
@@ -790,7 +806,10 @@ export const DraftComponent = () => {
             picks={draft!.draft_picks}
             viewerUid={slimUser?.uid}
             canDraft={Boolean(
-              draft?.started && !draft.finished && isCurrentDrafter,
+              draft?.started &&
+              !draft.finished &&
+              isCurrentDrafter &&
+              !submittingPick,
             )}
             freshOrder={freshOrder}
             onDraft={draftPlayer}

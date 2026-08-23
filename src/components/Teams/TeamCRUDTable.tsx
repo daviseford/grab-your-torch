@@ -11,14 +11,14 @@ import { useSeason } from "../../hooks/useSeason";
 import { useTeamAssignments } from "../../hooks/useTeamAssignments";
 import { useTeams } from "../../hooks/useTeams";
 import { useUser } from "../../hooks/useUser";
+import { CastawayId, Team } from "../../types";
+import { Board, EmptySlate } from "../Layout";
 import {
   BoardEmpty,
   EditRowActions,
   RowActions,
-} from "../../pages/SeasonAdminParts";
-import adminParts from "../../pages/SeasonAdminParts.module.css";
-import { CastawayId, Team } from "../../types";
-import { Board, EmptySlate } from "../Layout";
+} from "../SeasonAdmin/SeasonAdminParts";
+import adminParts from "../SeasonAdmin/SeasonAdminParts.module.css";
 import classes from "./Teams.module.css";
 
 export const TeamCRUDTable = () => {

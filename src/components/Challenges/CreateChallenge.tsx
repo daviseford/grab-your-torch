@@ -20,6 +20,9 @@ import { useEliminations } from "../../hooks/useEliminations";
 import { useSeason } from "../../hooks/useSeason";
 import { useTeamAssignments } from "../../hooks/useTeamAssignments";
 import { useTeams } from "../../hooks/useTeams";
+import { Challenge, ChallengeWinActions, Team } from "../../types";
+import { getPlayersOnTeam } from "../../utils/teamUtils";
+import { EmptySlate } from "../Layout";
 import {
   CreatePanel,
   FormActions,
@@ -27,10 +30,7 @@ import {
   FormStack,
   LoadingRow,
   PanelAside,
-} from "../../pages/SeasonAdminParts";
-import { Challenge, ChallengeWinActions, Team } from "../../types";
-import { getPlayersOnTeam } from "../../utils/teamUtils";
-import { EmptySlate } from "../Layout";
+} from "../SeasonAdmin/SeasonAdminParts";
 
 export const CreateChallenge = () => {
   const { data: season, isLoading } = useSeason();

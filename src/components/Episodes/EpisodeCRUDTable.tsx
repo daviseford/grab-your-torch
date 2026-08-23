@@ -7,14 +7,14 @@ import { useState } from "react";
 import { db } from "../../firebase";
 import { useSeason } from "../../hooks/useSeason";
 import { useUser } from "../../hooks/useUser";
+import { Episode } from "../../types";
+import { Board, EmptySlate } from "../Layout";
 import {
   BoardEmpty,
   EditRowActions,
   RowActions,
-} from "../../pages/SeasonAdminParts";
-import adminParts from "../../pages/SeasonAdminParts.module.css";
-import { Episode } from "../../types";
-import { Board, EmptySlate } from "../Layout";
+} from "../SeasonAdmin/SeasonAdminParts";
+import adminParts from "../SeasonAdmin/SeasonAdminParts.module.css";
 
 export const EpisodeCRUDTable = () => {
   const { data: season } = useSeason();

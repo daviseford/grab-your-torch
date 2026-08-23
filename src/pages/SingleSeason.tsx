@@ -1,4 +1,4 @@
-import { Alert, Button, Stack, Text } from "@mantine/core";
+import { Button } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { IconAlertCircle } from "@tabler/icons-react";
@@ -7,6 +7,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { saveAuthIntent, type AuthIntent } from "../components/Auth/authIntent";
 import {
   EmptySlate,
+  Notice,
   PageIntro,
   RouteLoading,
   StatusBadge,
@@ -153,44 +154,37 @@ export const SingleSeason = () => {
   return (
     <div className={classes.page}>
       {continuation.status === "executing" && (
-        <Alert color="blue" variant="light">
+        <Notice label="Setting up" role="status">
           Setting up your draft...
-        </Alert>
+        </Notice>
       )}
       {continuation.status === "failed" && (
-        <Alert color="red" variant="light" icon={<IconAlertCircle size={18} />}>
-          <Stack gap="xs">
-            <Text size="sm">{continuation.error}</Text>
-            <Button
-              size="xs"
-              variant="light"
-              onClick={continuation.retry}
-              w="fit-content"
-            >
+        <Notice
+          label="Failed"
+          tone="danger"
+          role="alert"
+          actions={
+            <Button size="xs" variant="default" onClick={continuation.retry}>
               Try again
             </Button>
-          </Stack>
-        </Alert>
+          }
+        >
+          {continuation.error}
+        </Notice>
       )}
       {continuation.status === "invalid" && (
-        <Alert
-          color="orange"
-          variant="light"
-          icon={<IconAlertCircle size={18} />}
-        >
-          <Stack gap="xs">
-            <Text size="sm">{continuation.error}</Text>
-            <Button
-              size="xs"
-              variant="light"
-              component={Link}
-              to="/seasons"
-              w="fit-content"
-            >
+        <Notice
+          label="Unavailable"
+          tone="warning"
+          role="alert"
+          actions={
+            <Button size="xs" variant="default" component={Link} to="/seasons">
               Back to Seasons
             </Button>
-          </Stack>
-        </Alert>
+          }
+        >
+          {continuation.error}
+        </Notice>
       )}
 
       <PageIntro

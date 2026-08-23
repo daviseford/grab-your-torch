@@ -17,20 +17,20 @@ import { db } from "../../firebase";
 import { useEliminations } from "../../hooks/useEliminations";
 import { useSeason } from "../../hooks/useSeason";
 import {
-  CreatePanel,
-  FormActions,
-  FormRow,
-  FormStack,
-  LoadingRow,
-  PanelAside,
-} from "../../pages/SeasonAdminParts";
-import {
   CastawayId,
   Elimination,
   EliminationVariants,
   TeamAssignments,
 } from "../../types";
 import { EmptySlate } from "../Layout";
+import {
+  CreatePanel,
+  FormActions,
+  FormRow,
+  FormStack,
+  LoadingRow,
+  PanelAside,
+} from "../SeasonAdmin/SeasonAdminParts";
 
 const dropdownOptions = EliminationVariants.slice().reverse();
 

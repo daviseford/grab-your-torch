@@ -12,6 +12,7 @@ import { IconCheck, IconX } from "@tabler/icons-react";
 import { arrayUnion, doc, updateDoc } from "firebase/firestore";
 import { db } from "../../firebase";
 import { useSeason } from "../../hooks/useSeason";
+import { Episode } from "../../types";
 import {
   CreatePanel,
   FormActions,
@@ -19,9 +20,8 @@ import {
   FormStack,
   LoadingRow,
   PanelAside,
-} from "../../pages/SeasonAdminParts";
-import adminParts from "../../pages/SeasonAdminParts.module.css";
-import { Episode } from "../../types";
+} from "../SeasonAdmin/SeasonAdminParts";
+import adminParts from "../SeasonAdmin/SeasonAdminParts.module.css";
 
 export const CreateEpisode = () => {
   const { data: season, isLoading } = useSeason();

@@ -2,9 +2,7 @@ import { useReducedMotion } from "@mantine/hooks";
 import { useEffect, useRef } from "react";
 import type { DraftPick, Player, SlimUser } from "../types";
 import classes from "./Draft.module.css";
-import { initialOf, participantName } from "./DraftNames";
-
-const firstName = (fullName: string) => fullName.trim().split(/\s+/)[0];
+import { firstNameOf, initialOf, participantName } from "./DraftNames";
 
 type DraftBoardProps = {
   /** Participants in column order (the pick order once the draft starts). */
@@ -187,7 +185,7 @@ export const DraftBoard = ({
                       )}
                       <span className={classes.cellText}>
                         <span className={classes.cellName}>
-                          {firstName(pick.player_name)}
+                          {firstNameOf(pick.player_name)}
                         </span>
                         <small className={classes.cellNum}>{order}</small>
                       </span>

@@ -16,14 +16,14 @@ import { useChallenges } from "../../hooks/useChallenges";
 import { useEliminations } from "../../hooks/useEliminations";
 import { useSeason } from "../../hooks/useSeason";
 import { useUser } from "../../hooks/useUser";
+import { CastawayId, Challenge, ChallengeWinActions } from "../../types";
+import { Board, EmptySlate } from "../Layout";
 import {
   BoardEmpty,
   EditRowActions,
   RowActions,
-} from "../../pages/SeasonAdminParts";
-import adminParts from "../../pages/SeasonAdminParts.module.css";
-import { CastawayId, Challenge, ChallengeWinActions } from "../../types";
-import { Board, EmptySlate } from "../Layout";
+} from "../SeasonAdmin/SeasonAdminParts";
+import adminParts from "../SeasonAdmin/SeasonAdminParts.module.css";
 
 export const ChallengeCRUDTable = () => {
   const { data: season } = useSeason();

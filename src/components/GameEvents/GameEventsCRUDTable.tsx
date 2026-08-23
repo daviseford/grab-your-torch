@@ -10,14 +10,14 @@ import { useEliminations } from "../../hooks/useEliminations";
 import { useEvents } from "../../hooks/useEvents";
 import { useSeason } from "../../hooks/useSeason";
 import { useUser } from "../../hooks/useUser";
+import { CastawayId, GameEvent, GameEventActions } from "../../types";
+import { Board, EmptySlate } from "../Layout";
 import {
   BoardEmpty,
   EditRowActions,
   RowActions,
-} from "../../pages/SeasonAdminParts";
-import adminParts from "../../pages/SeasonAdminParts.module.css";
-import { CastawayId, GameEvent, GameEventActions } from "../../types";
-import { Board, EmptySlate } from "../Layout";
+} from "../SeasonAdmin/SeasonAdminParts";
+import adminParts from "../SeasonAdmin/SeasonAdminParts.module.css";
 
 export const GameEventsCRUDTable = () => {
   const { data: season } = useSeason();
