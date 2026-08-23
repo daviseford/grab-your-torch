@@ -44,14 +44,15 @@ async function loginAs(
 ): Promise<void> {
   await page.goto("/");
   await page.waitForLoadState("networkidle");
-  await page.locator("nav button", { hasText: "Login" }).click();
+  const mainNav = page.getByRole("navigation", { name: "Main navigation" });
+  await mainNav.getByRole("button", { name: "Sign in", exact: true }).click();
 
-  const loginPanel = page.locator('[role="tabpanel"]').first();
-  await loginPanel.getByPlaceholder("hello@gmail.com").fill(email);
-  await loginPanel.getByPlaceholder("Your password").fill(password);
-  await loginPanel.getByRole("button", { name: "Sign in" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Email").fill(email);
+  await dialog.getByRole("textbox", { name: "Password" }).fill(password);
+  await dialog.getByRole("button", { name: "Sign in" }).click();
 
-  await expect(page.locator("nav button", { hasText: "Logout" })).toBeVisible({
+  await expect(mainNav.getByRole("button", { name: "Logout" })).toBeVisible({
     timeout: 15_000,
   });
 }

@@ -17,3 +17,12 @@ coverage
 
 # Firebase security rules — formatting can silently break rule semantics
 database.rules.json
+
+# Impeccable design artifacts (comps, briefs, hook cache) are not source code
+.impeccable/
+
+# Supplied brand package: keep byte-identical to the delivery
+docs/brand/brand-guidelines.md
+docs/brand/source/
+docs/brand/reference/
+docs/brand/provenance/

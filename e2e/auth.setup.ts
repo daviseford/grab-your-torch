@@ -21,26 +21,19 @@ setup("authenticate as admin", async ({ page }) => {
   await page.goto("/");
   await page.waitForLoadState("networkidle");
 
-  // Click the Login button in the navbar to open the AuthModal
-  await page.locator("nav button", { hasText: "Login" }).click();
+  // Open the AuthModal from the main navigation (a panel behind the burger
+  // on narrow screens; the setup project runs at desktop width).
+  const mainNav = page.getByRole("navigation", { name: "Main navigation" });
+  await mainNav.getByRole("button", { name: "Sign in", exact: true }).click();
 
-  // The AuthModal has Login and Register tabs with identical placeholders.
-  // Target the first (Login) tab panel to avoid strict-mode violations.
-  const loginPanel = page.locator('[role="tabpanel"]').first();
-  await loginPanel
-    .getByPlaceholder("hello@gmail.com")
-    .waitFor({ timeout: 10_000 });
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Email").waitFor({ timeout: 10_000 });
+  await dialog.getByLabel("Email").fill(username);
+  await dialog.getByRole("textbox", { name: "Password" }).fill(password);
+  await dialog.getByRole("button", { name: "Sign in" }).click();
 
-  // Fill in the login form
-  await loginPanel.getByPlaceholder("hello@gmail.com").fill(username);
-  await loginPanel.getByPlaceholder("Your password").fill(password);
-
-  // Submit the form
-  await loginPanel.getByRole("button", { name: "Sign in" }).click();
-
-  // Wait for auth to settle — the Login button should disappear and be
-  // replaced by user info (displayName or email) and a Logout button
-  await expect(page.locator("nav button", { hasText: "Logout" })).toBeVisible({
+  // Wait for auth to settle: the navigation swaps Sign in for Logout.
+  await expect(mainNav.getByRole("button", { name: "Logout" })).toBeVisible({
     timeout: 15_000,
   });
 
