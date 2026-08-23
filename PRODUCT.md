@@ -42,7 +42,7 @@ Players browse seasons and casts, create or join a competition, gather for a liv
 
 ## Evidence on Hand
 
-- The generated Victory Flame brand board and coordinated SVG/PNG assets are stored outside the repository under `C:/Users/davis/Documents/Codex/2026-08-22/grab-your-torch-logo-design-prompt/outputs/` and are the source assets to inventory before implementation.
+- The Victory Flame brand package (lockup and emblem SVGs, reference PNGs, provenance, guidelines) lives in `docs/brand/` with its inventory in `docs/brand/README.md`; `scripts/generate-web-assets.ts` renders the shipping assets in `public/brand/` from `docs/brand/source/`.
 - Existing product copy and feature demonstrations are present in the application, especially the homepage, season browsing, competition, draft, scoring, and administration surfaces.
 - The repository contains real season and castaway data that can support realistic interface states without inventing product claims.
 - Grab Your Torch is not affiliated with, endorsed by, or connected to CBS or Survivor.
