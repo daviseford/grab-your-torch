@@ -1,0 +1,204 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-22T00:00:00Z",
+  "title": "Design System: Grab Your Torch",
+  "extensions": {
+    "colorMeta": {
+      "night-navy": {
+        "role": "primary",
+        "displayName": "Night Navy",
+        "canonical": "#071d3a",
+        "tonalRamp": ["#02080f", "#040f1f", "#051428", "#071d3a", "#0e3262", "#174888", "#225eac", "#2f74ce"]
+      },
+      "league-blue": {
+        "role": "primary",
+        "displayName": "League Blue",
+        "canonical": "#1177ff",
+        "tonalRamp": ["#001f47", "#003b8a", "#0058cd", "#1177ff", "#3d8df7", "#66a2f3", "#8cb7f0", "#d1e0f4"]
+      },
+      "signal-cyan": {
+        "role": "secondary",
+        "displayName": "Signal Cyan",
+        "canonical": "#18d5f2",
+        "tonalRamp": ["#03333a", "#065d6a", "#09879b", "#0bb2cb", "#18d5f2", "#49d7ec", "#77dbea", "#c9ebf0"]
+      },
+      "ember-orange": {
+        "role": "tertiary",
+        "displayName": "Ember Orange",
+        "canonical": "#ff5a36",
+        "tonalRamp": ["#470d00", "#971b00", "#e62900", "#ff5a36", "#f9775b", "#f4927d", "#f3ac9d", "#f6dcd6"]
+      },
+      "victory-gold": {
+        "role": "tertiary",
+        "displayName": "Victory Gold",
+        "canonical": "#ffc83d",
+        "tonalRamp": ["#5c4200", "#896200", "#b58200", "#e2a200", "#ffbb10", "#ffc83d", "#f7d172", "#f5eacd"]
+      },
+      "ice-white": { "role": "neutral", "displayName": "Ice White", "canonical": "#eaf8ff" },
+      "mist-blue": { "role": "neutral", "displayName": "Mist Blue", "canonical": "#b8d9ee" },
+      "studio-ground": { "role": "neutral", "displayName": "Studio Ground", "canonical": "#f3f8fc" },
+      "studio-panel": { "role": "neutral", "displayName": "Studio Panel", "canonical": "#ffffff" },
+      "studio-panel-2": { "role": "neutral", "displayName": "Studio Panel 2", "canonical": "#e9f2f9" },
+      "studio-rule": { "role": "neutral", "displayName": "Studio Rule", "canonical": "#cfdde9" },
+      "studio-rule-strong": { "role": "neutral", "displayName": "Studio Rule Strong", "canonical": "#9fb8cc" },
+      "signal-text-light": { "role": "secondary", "displayName": "Signal Cyan as text on light", "canonical": "#0a9fbf" },
+      "glass-ground": { "role": "neutral", "displayName": "Glass Ground (dark scheme)", "canonical": "#051428" },
+      "glass-panel": { "role": "neutral", "displayName": "Glass Panel (dark scheme)", "canonical": "#0b2344" },
+      "glass-panel-2": { "role": "neutral", "displayName": "Glass Panel 2 (dark scheme)", "canonical": "#0e2b52" },
+      "glass-rule": { "role": "neutral", "displayName": "Glass Rule (dark scheme)", "canonical": "#1e3d66" },
+      "glass-rule-strong": { "role": "neutral", "displayName": "Glass Rule Strong (dark scheme)", "canonical": "#35588a" },
+      "glass-dimmed": { "role": "neutral", "displayName": "Glass Dimmed (dark scheme)", "canonical": "#8fa9c4" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "The homepage headline only." },
+      "headline": { "displayName": "Headline", "purpose": "The page h1 inside a lower-third." },
+      "title": { "displayName": "Title", "purpose": "Section headings and the standby slate title." },
+      "body": { "displayName": "Body", "purpose": "Copy, forms, and table cells." },
+      "label": { "displayName": "Label", "purpose": "Eyebrows, table headers, badges, the bug context, strip labels; tracked caps." },
+      "numeral": { "displayName": "Numeral", "purpose": "Points, ranks, and pick numbers; tabular figures." }
+    },
+    "shadows": [
+      {
+        "name": "board-hairline",
+        "value": "0 1px 0 rgba(7, 29, 58, 0.06)",
+        "purpose": "The only shadow: a hairline bottom edge under boards in the light scheme; none in dark."
+      }
+    ],
+    "motion": [
+      {
+        "name": "breathe",
+        "value": "opacity 0.55 to 1, 1.6s ease-in-out infinite",
+        "purpose": "The route-loading emblem. Collapses under prefers-reduced-motion."
+      },
+      {
+        "name": "state-change",
+        "value": "300ms ease-out, once",
+        "purpose": "Draft order locking in and a pick landing; keyed to the state change, never replayed on snapshot refreshes."
+      }
+    ],
+    "breakpoints": [
+      { "name": "xs", "value": "36em" },
+      { "name": "sm", "value": "48em" },
+      { "name": "md", "value": "62em" },
+      { "name": "lg", "value": "75em" },
+      { "name": "xl", "value": "88em" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary slate",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The one primary action on a surface: Pick a season, Start a draft, Reveal episode, Save.",
+      "html": "<button class=\"ds-slate-primary\">Pick a season to get started</button>",
+      "css": ".ds-slate-primary { font-family: Inter, system-ui, sans-serif; font-weight: 600; font-size: 14px; height: 36px; padding: 0 18px; border: 1px solid transparent; border-radius: 4px; background: #1177ff; color: #fff; cursor: pointer; } .ds-slate-primary:hover { background: #0058cd; } .ds-slate-primary:focus-visible { outline: 2px solid #1177ff; outline-offset: 2px; }"
+    },
+    {
+      "name": "Secondary slate",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "The outlined companion action: How scoring works, Back, Cancel.",
+      "html": "<button class=\"ds-slate-secondary\">How scoring works</button>",
+      "css": ".ds-slate-secondary { font-family: Inter, system-ui, sans-serif; font-weight: 600; font-size: 14px; height: 36px; padding: 0 18px; border: 1px solid #9fb8cc; border-radius: 4px; background: transparent; color: #071d3a; cursor: pointer; } .ds-slate-secondary:hover { background: #e9f2f9; } .ds-slate-secondary:focus-visible { outline: 2px solid #1177ff; outline-offset: 2px; }"
+    },
+    {
+      "name": "Status badges",
+      "kind": "chip",
+      "refersTo": "badge-live",
+      "description": "Live (cyan with a dot), Watch-along (gold), In progress and Complete (outlined), Season (navy plate), Admin (ember).",
+      "html": "<span class=\"ds-badge ds-badge-live\"><i></i>Live</span> <span class=\"ds-badge ds-badge-watch\">Watch-along</span> <span class=\"ds-badge ds-badge-outline\">Complete</span> <span class=\"ds-badge ds-badge-season\">Season 50</span> <span class=\"ds-badge ds-badge-admin\">Admin</span>",
+      "css": ".ds-badge { display: inline-flex; align-items: center; gap: 6px; font-family: 'Space Grotesk', system-ui, sans-serif; font-weight: 700; font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; padding: 4px 8px; border-radius: 2px; border: 1px solid transparent; margin-right: 6px; } .ds-badge-live { background: #18d5f2; color: #071d3a; } .ds-badge-live i { width: 6px; height: 6px; border-radius: 50%; background: #071d3a; } .ds-badge-watch { background: #ffc83d; color: #071d3a; } .ds-badge-outline { border-color: #9fb8cc; color: #6f8498; } .ds-badge-season { background: #071d3a; color: #eaf8ff; } .ds-badge-admin { background: #ff5a36; color: #071d3a; }"
+    },
+    {
+      "name": "Lower-third",
+      "kind": "custom",
+      "refersTo": "intro-tag",
+      "description": "The page intro: navy eyebrow tag, optional cyan live context, h1, description, actions, hairline rule.",
+      "html": "<header class=\"ds-lower-third\"><div><div class=\"ds-eyebrow\"><span class=\"ds-tag\">Seasons</span><span class=\"ds-context\">On air · Survivor 50</span></div><h1>Pick a season</h1><p>Choose a season, scout the castaways, and get a draft going with your friends.</p></div><button class=\"ds-slate-secondary\">How scoring works</button></header>",
+      "css": ".ds-lower-third { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; padding: 16px 0 20px; border-bottom: 1px solid #cfdde9; font-family: Inter, system-ui, sans-serif; color: #071d3a; } .ds-lower-third h1 { font-family: 'Space Grotesk', system-ui, sans-serif; font-weight: 700; font-size: 40px; line-height: 1.08; letter-spacing: -0.015em; margin: 8px 0; } .ds-lower-third p { margin: 0; color: #3d5670; max-width: 62ch; } .ds-eyebrow { display: flex; gap: 12px; align-items: center; } .ds-tag { font-family: 'Space Grotesk', system-ui, sans-serif; font-weight: 700; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; padding: 4px 8px; border-radius: 3px; background: #071d3a; color: #eaf8ff; } .ds-context { font-family: 'Space Grotesk', system-ui, sans-serif; font-weight: 600; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #0a9fbf; } .ds-slate-secondary { font-family: Inter, system-ui, sans-serif; font-weight: 600; font-size: 14px; height: 36px; padding: 0 18px; border: 1px solid #9fb8cc; border-radius: 4px; background: transparent; color: #071d3a; }"
+    },
+    {
+      "name": "Board",
+      "kind": "card",
+      "refersTo": "board",
+      "description": "The data panel: caps title row with a muted qualifier, then a table with caps headers, rank blocks, and tabular points.",
+      "html": "<section class=\"ds-board\"><div class=\"ds-board-head\"><span class=\"ds-board-title\">Standings <em>· Through episode 6</em></span></div><table><thead><tr><th>#</th><th>Participant</th><th class=\"ds-num\">Points</th></tr></thead><tbody><tr><td><span class=\"ds-rank ds-rank-first\">1</span></td><td>Amanda</td><td class=\"ds-num ds-points\">184</td></tr><tr><td><span class=\"ds-rank\">2</span></td><td>Davis</td><td class=\"ds-num ds-points\">171</td></tr></tbody></table></section>",
+      "css": ".ds-board { background: #fff; border: 1px solid #cfdde9; border-radius: 8px; overflow: clip; box-shadow: 0 1px 0 rgba(7,29,58,0.06); font-family: Inter, system-ui, sans-serif; color: #071d3a; } .ds-board-head { padding: 10px 16px; border-bottom: 1px solid #cfdde9; } .ds-board-title { font-family: 'Space Grotesk', system-ui, sans-serif; font-weight: 700; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; } .ds-board-title em { font-style: normal; font-weight: 500; color: #6f8498; } .ds-board table { width: 100%; border-collapse: collapse; } .ds-board th { text-align: left; font-family: 'Space Grotesk', system-ui, sans-serif; font-weight: 600; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #6f8498; background: #e9f2f9; padding: 8px 14px; } .ds-board td { padding: 10px 14px; border-top: 1px solid #cfdde9; font-size: 14px; } .ds-num { text-align: right; } .ds-rank { display: inline-grid; place-items: center; min-width: 32px; height: 32px; border-radius: 4px; background: #1177ff; color: #fff; font-family: 'Space Grotesk', system-ui, sans-serif; font-weight: 700; } .ds-rank-first { background: #ffc83d; color: #071d3a; } .ds-points { font-family: 'Space Grotesk', system-ui, sans-serif; font-weight: 700; font-size: 24px; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }"
+    },
+    {
+      "name": "Reveal strip",
+      "kind": "custom",
+      "refersTo": "badge-live",
+      "description": "One cell per episode: revealed cyan with a punched dot, the next episode gold with a folded flag, hidden dashed, the finale ringed in ember.",
+      "html": "<div class=\"ds-strip\"><span class=\"ds-cell ds-on\">1</span><span class=\"ds-cell ds-on\">2</span><span class=\"ds-cell ds-on\">3</span><span class=\"ds-cell ds-next\">4</span><span class=\"ds-cell ds-off\">5</span><span class=\"ds-cell ds-off\">6</span><span class=\"ds-cell ds-off ds-finale\">7</span></div>",
+      "css": ".ds-strip { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0,1fr); gap: 4px; max-width: 420px; } .ds-cell { position: relative; display: grid; place-items: center; height: 32px; border-radius: 3px; border: 1px solid transparent; font-family: 'Space Grotesk', system-ui, sans-serif; font-weight: 700; font-size: 13px; color: #6f8498; } .ds-on { background: #18d5f2; color: #071d3a; } .ds-on::after { content: ''; position: absolute; top: 3px; right: 3px; width: 5px; height: 5px; border-radius: 50%; background: #071d3a; opacity: .45; } .ds-next { background: #ffc83d; color: #071d3a; } .ds-next::before { content: ''; position: absolute; top: -7px; left: 50%; margin-left: -6px; border: 6px solid transparent; border-top: 7px solid #ffc83d; border-bottom: 0; } .ds-off { border: 1px dashed #9fb8cc; } .ds-finale { box-shadow: inset 0 0 0 2px #ff5a36; }"
+    },
+    {
+      "name": "Castaway slate",
+      "kind": "card",
+      "refersTo": "board",
+      "description": "Portrait on a navy plate, name and one meta line; out castaways are desaturated and struck in ember.",
+      "html": "<article class=\"ds-castaway\"><div class=\"ds-portrait\"><span>JL</span></div><div class=\"ds-castaway-body\"><div class=\"ds-castaway-name\">Jenna Lewis-Dougherty</div><div class=\"ds-castaway-meta\">47 · Woodland, California</div></div></article>",
+      "css": ".ds-castaway { width: 180px; background: #fff; border: 1px solid #cfdde9; border-radius: 8px; overflow: hidden; font-family: Inter, system-ui, sans-serif; color: #071d3a; } .ds-portrait { aspect-ratio: 3/4; background: #071d3a; display: grid; place-items: center; color: #b8d9ee; font-family: 'Space Grotesk', system-ui, sans-serif; font-weight: 700; font-size: 32px; } .ds-castaway-body { padding: 10px 12px 12px; } .ds-castaway-name { font-family: 'Space Grotesk', system-ui, sans-serif; font-weight: 700; font-size: 15px; line-height: 1.15; } .ds-castaway-meta { font-size: 12px; color: #6f8498; margin-top: 2px; }"
+    },
+    {
+      "name": "Standby slate",
+      "kind": "card",
+      "refersTo": "plate",
+      "description": "A navy plate with a caps cyan code, a title, copy, and one action row; hosts not found, errors, sign-out, and password reset.",
+      "html": "<section class=\"ds-standby\"><span class=\"ds-code\">404</span><h2>Page not found</h2><p>The page you're looking for doesn't exist or has been moved.</p><button class=\"ds-slate-primary\">Go home</button></section>",
+      "css": ".ds-standby { max-width: 520px; padding: 32px 20px; border-radius: 8px; background: #071d3a; color: #eaf8ff; text-align: center; font-family: Inter, system-ui, sans-serif; display: grid; gap: 12px; justify-items: center; } .ds-code { font-family: 'Space Grotesk', system-ui, sans-serif; font-weight: 700; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #18d5f2; } .ds-standby h2 { font-family: 'Space Grotesk', system-ui, sans-serif; font-weight: 700; font-size: 28px; margin: 0; } .ds-standby p { margin: 0; color: #b8d9ee; max-width: 42ch; } .ds-slate-primary { font-family: Inter, system-ui, sans-serif; font-weight: 600; font-size: 14px; height: 36px; padding: 0 18px; border: 1px solid transparent; border-radius: 4px; background: #1177ff; color: #fff; }"
+    },
+    {
+      "name": "Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Find bars and form fields: white, hairline border, 4 px corners, the global focus outline.",
+      "html": "<label class=\"ds-field\"><span>Search seasons</span><input class=\"ds-input\" placeholder=\"Search by name, number, or location\"></label>",
+      "css": ".ds-field { display: grid; gap: 6px; font-family: Inter, system-ui, sans-serif; } .ds-field span { font-family: 'Space Grotesk', system-ui, sans-serif; font-weight: 600; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #3d5670; } .ds-input { font: inherit; font-size: 14px; height: 36px; padding: 0 12px; border: 1px solid #9fb8cc; border-radius: 4px; background: #fff; color: #071d3a; min-width: 280px; } .ds-input:focus-visible { outline: 2px solid #1177ff; outline-offset: 2px; }"
+    },
+    {
+      "name": "Navigation",
+      "kind": "nav",
+      "refersTo": "slate-on-plate",
+      "description": "Caps links on the navy header plate with a cyan underline on the current section.",
+      "html": "<nav class=\"ds-nav\"><a href=\"#\">Home</a><a href=\"#\" aria-current=\"page\">Seasons</a><a href=\"#\">Competitions</a><a href=\"#\">Scoring</a><button class=\"ds-nav-outline\">Create account</button></nav>",
+      "css": ".ds-nav { display: flex; align-items: center; gap: 20px; padding: 12px 24px; background: #071d3a; } .ds-nav a { font-family: 'Space Grotesk', system-ui, sans-serif; font-weight: 600; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #b8d9ee; text-decoration: none; padding: 6px 0; border-bottom: 2px solid transparent; } .ds-nav a:hover { color: #eaf8ff; } .ds-nav a[aria-current='page'] { color: #eaf8ff; border-bottom-color: #18d5f2; } .ds-nav-outline { margin-left: auto; font-family: Inter, system-ui, sans-serif; font-weight: 600; font-size: 14px; height: 36px; padding: 0 18px; border: 1px solid #eaf8ff; border-radius: 4px; background: transparent; color: #eaf8ff; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "On Air",
+    "overview": "Grab Your Torch is the broadcast of your league. Every surface is a graphics package laid over the game rather than a dashboard about it: a corner bug with the lockup and where you are, a lower-third that introduces each page, boards that carry the data, slates for every control, and the reveal strip that shows exactly which episodes a group has watched. Two expressions of one package: dark is Night Navy broadcast glass; light is the studio, an Ice White ground with navy plates and white boards. The world is flat ink: no gradients, no glow, no shadows beyond a hairline, and the emblem is the only illustration. State is a mark as well as a hue, so color never carries meaning alone.",
+    "keyCharacteristics": [
+      "Navy plates on a studio ground (light) or glass (dark); white boards hold data.",
+      "League Blue owns primary actions and rank blocks; Signal Cyan is reserved for live and current state.",
+      "Space Grotesk for titles, caps labels, and every number that matters; Inter for everything operated.",
+      "Six components carry the package: bug, lower-third, board, slate, reveal strip, standby slate.",
+      "Density is Operate-mode plain on product and admin surfaces; the homepage is calm and literal."
+    ],
+    "rules": [
+      { "name": "The Signal Rule", "body": "Signal Cyan means live, current, or yours. It never decorates a static label, heading, or section; a cyan element is always telling you where the action is now.", "section": "colors" },
+      { "name": "The Flame Rule", "body": "Ember and Gold are spent only on flame moments: first place, the winner, a fresh pick, an elimination strike, the next episode, the admin mark. Destructive controls use semantic red, never Ember.", "section": "colors" },
+      { "name": "The Plate Rule", "body": "Navy plates stay navy in both schemes and re-point Mantine's text tokens inside them, so anything placed on a plate reads without per-element color.", "section": "colors" },
+      { "name": "The Tabular Rule", "body": "Every number that lines up sets font-variant-numeric: tabular-nums; the body sets it globally.", "section": "typography" },
+      { "name": "The One Display Face Rule", "body": "Space Grotesk is the only display voice; it never gets an italic or a second face beside it. The wordmark's italic Torch lives in the outlined logo assets, not in page type.", "section": "typography" },
+      { "name": "The Flat Ink Rule", "body": "No gradients anywhere in the product; color commits as flat fields that own whole regions.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do open every page with a PageIntro and exactly one h1, and keep sections as boards with caps title rows.",
+      "Do encode state with a mark as well as a hue: punched, flagged, dashed, struck, outlined.",
+      "Do keep wide tables inside Board scroll; the document never scrolls horizontally at 375 px.",
+      "Do put standby states (errors, auth, not found) on the StandbySlate with the dark stacked lockup.",
+      "Do use StatusBadge kinds for Live, Watch-along, In progress, Complete, Season, and Admin instead of ad hoc badges.",
+      "Do keep the homepage free of real competition results; examples use fictional names and points with no season or castaways."
+    ],
+    "donts": [
+      "Don't use Signal Cyan for static labels, headings, or decoration; it means live, current, or yours.",
+      "Don't spend Ember or Gold outside flame moments, and don't use Ember for destructive controls.",
+      "Don't add gradients, glows, drop shadows, tinted alert cards, icon tiles, or illustrations beyond the emblem.",
+      "Don't draw thick single-edge accent bars on cards or rows; use a mark, a rank block, or a full outline.",
+      "Don't place the primary lockup below 160 px wide or the emblem below 40 px tall; use the favicon artwork below that.",
+      "Don't reveal anything past a competition's current episode in any board, strip, or copy, and never name a trade's episode."
+    ]
+  }
+}
