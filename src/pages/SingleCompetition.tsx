@@ -52,6 +52,11 @@ import {
   getCompetitionAwaitingDataEpisode,
   getLatestDataEpisode,
 } from "../utils/episodeAirDate";
+import {
+  competitionBugContext,
+  competitionContextLine,
+  competitionModeBadge,
+} from "./competitionSignals";
 import classes from "./SingleCompetition.module.css";
 
 const VALID_TABS = ["overview", "team", "trades", "stats"] as const;
@@ -145,16 +150,7 @@ export const SingleCompetition = () => {
     return () => modals.close(modalId);
   }, [requiresSignIn]);
 
-  const bugContext = competition
-    ? `S${competition.season_num} · ${
-        competition.current_episode == null
-          ? "Live"
-          : competition.current_episode > 0
-            ? `Ep ${competition.current_episode} · Watch-along`
-            : "Watch-along"
-      }`
-    : null;
-  useBugContext(bugContext);
+  useBugContext(competition ? competitionBugContext(competition) : null);
 
   if (requiresSignIn) {
     return (
@@ -230,6 +226,7 @@ export const SingleCompetition = () => {
   const episodeCount = season.episodes?.length ?? 0;
   const isCreator = slimUser?.uid === competition.creator_uid;
   const isWatchAlong = competition.current_episode != null;
+  const modeBadge = competitionModeBadge(competition);
   const showEpisodeControl = isWatchAlong || isCreator;
   const hasWinner = Object.values(unfilteredEvents).some(
     (e) => e.action === "win_survivor",
@@ -325,22 +322,14 @@ export const SingleCompetition = () => {
         // The cyan context is a signal: it names the mode only while the
         // competition is still running; a finished one carries the facts in
         // its badges instead.
-        context={
-          competition.finished
-            ? undefined
-            : `Season ${competition.season_num} · ${isWatchAlong ? "Watch-along" : "Live"}`
-        }
+        context={competitionContextLine(competition)}
         title={competition.competition_name}
         meta={
           <>
             <StatusBadge kind="season">
               Season {competition.season_num}
             </StatusBadge>
-            {/* "Live" is a signal, so it only shows while the competition
-                is unfinished; watch-along is a mode and always applies. */}
-            {(isWatchAlong || !competition.finished) && (
-              <StatusBadge kind={isWatchAlong ? "watch-along" : "live"} />
-            )}
+            {modeBadge && <StatusBadge kind={modeBadge} />}
             <StatusBadge
               kind={competition.finished ? "complete" : "in-progress"}
             />
@@ -441,12 +430,7 @@ export const SingleCompetition = () => {
                         : "Points by participant"
                     }
                     aside={
-                      isWatchAlong || !competition.finished ? (
-                        <StatusBadge
-                          kind={isWatchAlong ? "watch-along" : "live"}
-                          size="sm"
-                        />
-                      ) : undefined
+                      modeBadge && <StatusBadge kind={modeBadge} size="sm" />
                     }
                     dense
                     flush
