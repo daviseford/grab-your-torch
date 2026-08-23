@@ -439,10 +439,12 @@ export const SingleCompetition = () => {
                         : "Points by participant"
                     }
                     aside={
-                      <StatusBadge
-                        kind={isWatchAlong ? "watch-along" : "live"}
-                        size="sm"
-                      />
+                      isWatchAlong || !competition.finished ? (
+                        <StatusBadge
+                          kind={isWatchAlong ? "watch-along" : "live"}
+                          size="sm"
+                        />
+                      ) : undefined
                     }
                     dense
                     flush

@@ -128,36 +128,6 @@ const seedSeason = async () => {
   });
 };
 
-/** Mirrors startDraft() in src/pages/Draft.tsx (minus the rejected write). */
-const startDraftAsOwner = async (draftId: string) => {
-  const read = await fetch(rtdbUrl(`drafts/${draftId}/participants`), {
-    headers: RTDB_HEADERS,
-  });
-  if (!read.ok) throw new Error(`participants read failed: ${read.status}`);
-  const participants = Object.keys(
-    ((await read.json()) as Record<string, unknown> | null) ?? {},
-  );
-  const order = [...participants].sort(() => Math.random() - 0.5);
-  const res = await fetch(rtdbUrl(`drafts/${draftId}`), {
-    method: "PATCH",
-    headers: RTDB_HEADERS,
-    body: JSON.stringify({
-      pick_order_uids: Object.fromEntries(
-        order.map((uid, i) => [String(i), uid]),
-      ),
-      turns: Object.fromEntries(
-        Array.from({ length: CAST_SIZE }, (_, i) => [
-          String(i + 1),
-          order[i % order.length],
-        ]),
-      ),
-      "state/started": true,
-      "state/current_pick_number": 1,
-    }),
-  });
-  if (!res.ok) throw new Error(`draft start failed: ${res.status}`);
-};
-
 // ---------------------------------------------------------------------------
 // Network guard: fail on any production-bound Firebase request
 // ---------------------------------------------------------------------------
@@ -398,16 +368,10 @@ test("two users draft a season end to end on the board spine", async ({
   await capture(page, "lobby-host", { fullPage: true });
 
   // ---- The host starts the draft: order reveal, then the live board ----
-  // KNOWN DEFECT (pre-existing, outside this spec's reach): Draft.tsx's
-  // startDraft() rewrites `state/finished: false` in its multi-path update,
-  // and database.rules.json only allows `state/finished` to go false -> true,
-  // so the emulator (and production rules) reject the whole update with
-  // permission_denied. Until that one line is dropped from startDraft (or the
-  // rule accepts an unchanged false), the draft is started here through the
-  // emulator's owner endpoint with the exact payload the Start slate sends.
-  // Both clients still observe started: false -> true, so the reveal runs.
-  const draftId = new URL(draftUrl).pathname.split("/").pop()!;
-  await startDraftAsOwner(draftId);
+  // The host clicks Start Draft. This is the write that database.rules.json
+  // used to reject (startDraft re-wrote `state/finished: false`), so starting
+  // through the UI is deliberately part of this walk.
+  await page.getByRole("button", { name: "Start Draft" }).click();
   await expect(
     page.getByRole("heading", { name: "Shuffling draft order..." }),
   ).toBeVisible(SLOW);
