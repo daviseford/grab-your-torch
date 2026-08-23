@@ -1,44 +1,152 @@
-.navbar {
-  flex: 1;
-}
+/*
+ * One navigation landmark for every width. On desktop it sits inline in the
+ * header; under the md breakpoint it becomes a panel below the header that
+ * the burger opens. A single element keeps one "Main navigation" landmark
+ * in the tree, which the auth e2e suite scopes its queries to.
+ */
+.nav {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-lg);
+  margin-left: auto;
+  min-width: 0;
 
-.link {
-  &:focus-visible {
-    outline: 2px solid var(--mantine-color-blue-6);
-    outline-offset: -2px;
+  @media (max-width: $mantine-breakpoint-md) {
+    display: none;
+    position: fixed;
+    top: var(--gyt-header-height);
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 200;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--mantine-spacing-md);
+    margin: 0;
+    padding: var(--mantine-spacing-md);
+    overflow-y: auto;
+    background: var(--gyt-plate);
+    border-top: 1px solid var(--gyt-plate-rule);
+
+    &[data-opened="true"] {
+      display: flex;
+    }
   }
 }
 
-.userCard {
-  padding: var(--mantine-spacing-sm);
-  border-radius: var(--mantine-radius-md);
-  background: light-dark(
-    color-mix(in srgb, var(--mantine-color-blue-0) 40%, transparent),
-    color-mix(
-      in srgb,
-      var(--mantine-color-dark-6) 85%,
-      var(--mantine-color-blue-9)
-    )
-  );
+.links {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-lg);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  @media (max-width: $mantine-breakpoint-md) {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+  }
 }
 
-.linkIcon {
-  width: rem(18px);
-  height: rem(18px);
+.link {
+  display: block;
+  padding: 6px 0;
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: 0.75rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dark-1);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+
+  &:hover {
+    color: var(--mantine-color-dark-0);
+  }
+
+  &[aria-current="page"] {
+    color: var(--mantine-color-dark-0);
+    border-bottom-color: var(--mantine-color-signal-5);
+  }
+
+  @media (max-width: $mantine-breakpoint-md) {
+    padding: 12px 12px;
+    font-size: 0.875rem;
+    border-bottom: 0;
+    border-left: 3px solid transparent;
+    border-radius: var(--mantine-radius-sm);
+
+    &[aria-current="page"] {
+      border-left-color: var(--mantine-color-signal-5);
+      background: rgba(184, 217, 238, 0.08);
+    }
+  }
 }
 
-.childLink {
+.controls {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-sm);
+
+  @media (max-width: $mantine-breakpoint-md) {
+    flex-direction: column;
+    align-items: stretch;
+    padding-top: var(--mantine-spacing-md);
+    border-top: 1px solid var(--gyt-plate-rule);
+  }
+}
+
+.account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: var(--mantine-color-dark-1);
   font-size: var(--mantine-font-size-sm);
-  min-height: rem(36px);
+
+  @media (max-width: $mantine-breakpoint-md) {
+    padding: 4px 0;
+  }
 }
 
-.childLinkIcon {
-  width: rem(14px);
-  height: rem(14px);
+.accountName {
+  color: var(--mantine-color-dark-0);
+  font-weight: 600;
+  max-width: 160px;
 }
 
-.metaIcon {
-  width: rem(14px);
-  height: rem(14px);
-  color: light-dark(var(--mantine-color-gray-6), var(--mantine-color-dark-2));
+.accountEmail {
+  display: none;
+  color: var(--mantine-color-dark-1);
+  font-size: var(--mantine-font-size-xs);
+
+  @media (max-width: $mantine-breakpoint-md) {
+    display: block;
+  }
+}
+
+.avatar {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--mantine-color-league-6);
+  color: var(--mantine-color-white);
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+}
+
+.iconButton {
+  color: var(--mantine-color-dark-1);
+
+  &:hover {
+    color: var(--mantine-color-dark-0);
+    background: rgba(184, 217, 238, 0.1);
+  }
 }

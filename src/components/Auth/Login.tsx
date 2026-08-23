@@ -63,7 +63,7 @@ export const Login = ({
   };
 
   return (
-    <Paper withBorder shadow="md" p={30} mt="md" radius="md">
+    <Paper p={0} mt="md">
       <form onSubmit={onLogin}>
         <TextInput
           label="Email"

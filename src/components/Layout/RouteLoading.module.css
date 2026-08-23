@@ -1,0 +1,31 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--mantine-spacing-sm);
+  min-height: 60vh;
+}
+
+.emblem {
+  animation: breathe 1.6s ease-in-out infinite;
+}
+
+.label {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: 0.75rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}

@@ -1,0 +1,228 @@
+/*
+ * Team assignment by episode: tribe columns with a color bar, draggable
+ * castaway chips, and the manual (touch and keyboard) assignment list.
+ */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-md);
+  padding: var(--mantine-spacing-md);
+  background: var(--gyt-panel);
+  border: 1px solid var(--gyt-rule);
+  border-radius: var(--mantine-radius-md);
+}
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.headTitle {
+  font-size: 1rem;
+  line-height: 1.3;
+}
+
+.sub {
+  font-size: var(--mantine-font-size-sm);
+  color: var(--mantine-color-dimmed);
+}
+
+.tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--mantine-spacing-sm);
+}
+
+.episodeInput {
+  width: 110px;
+}
+
+/* ---------- Tribe columns ---------- */
+.columns {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--mantine-spacing-sm);
+
+  @media (max-width: $mantine-breakpoint-md) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.col {
+  min-height: 160px;
+  border: 1px solid var(--gyt-rule);
+  border-radius: var(--mantine-radius-md);
+  background: var(--gyt-panel);
+  overflow: hidden;
+}
+
+.colTribe .colHead {
+  box-shadow: inset 0 3px 0 var(--tribe);
+}
+
+.colNone {
+  border-style: dashed;
+  border-color: var(--gyt-rule-strong);
+}
+
+.colOver {
+  outline: 2px solid var(--mantine-color-league-6);
+  outline-offset: -2px;
+  background: color-mix(
+    in srgb,
+    var(--mantine-color-league-6) 6%,
+    var(--gyt-panel)
+  );
+}
+
+.colHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--gyt-rule);
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.colCount {
+  margin-left: auto;
+  font-weight: 600;
+  font-size: 0.6875rem;
+  letter-spacing: var(--gyt-label-tracking);
+  color: var(--mantine-color-dimmed);
+  font-variant-numeric: tabular-nums;
+}
+
+.swatch {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  border: 1px solid rgba(7, 29, 58, 0.2);
+}
+
+.colList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+}
+
+.colEmpty {
+  padding: 24px 8px;
+  text-align: center;
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+}
+
+/* ---------- Castaway chip ---------- */
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px 5px 6px;
+  border: 1px solid var(--gyt-rule);
+  border-radius: var(--mantine-radius-sm);
+  background: var(--gyt-panel);
+  font-size: var(--mantine-font-size-sm);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.chip:focus-visible {
+  outline: 2px solid var(--mantine-color-league-6);
+  outline-offset: 2px;
+}
+
+.chipDragging {
+  opacity: 0.4;
+}
+
+.chipOverlay {
+  cursor: grabbing;
+  border-color: var(--mantine-color-league-6);
+  font-weight: 600;
+}
+
+.chipName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chipImg {
+  flex-shrink: 0;
+  width: 24px;
+  height: 30px;
+  border-radius: 2px;
+  object-fit: cover;
+  object-position: top;
+  background: var(--gyt-plate);
+}
+
+.grip {
+  position: relative;
+  flex-shrink: 0;
+  width: 10px;
+  height: 16px;
+}
+
+.grip::before {
+  content: "";
+  position: absolute;
+  left: 1px;
+  top: 1px;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--gyt-rule-strong);
+  box-shadow:
+    5px 0 0 var(--gyt-rule-strong),
+    0 5px 0 var(--gyt-rule-strong),
+    5px 5px 0 var(--gyt-rule-strong),
+    0 10px 0 var(--gyt-rule-strong),
+    5px 10px 0 var(--gyt-rule-strong);
+}
+
+/* ---------- Manual assignment ---------- */
+.manual {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-sm);
+  padding: var(--mantine-spacing-md);
+  border: 1px solid var(--gyt-rule);
+  border-radius: var(--mantine-radius-md);
+  background: var(--gyt-panel-2);
+}
+
+.manualGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--mantine-spacing-xs) var(--mantine-spacing-lg);
+
+  @media (max-width: $mantine-breakpoint-sm) {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Board color cell in the teams table. */
+.colorCell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}

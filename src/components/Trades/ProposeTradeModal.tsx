@@ -1,5 +1,4 @@
 import {
-  Avatar,
   Badge,
   Box,
   Button,
@@ -12,11 +11,6 @@ import {
   Text,
   Title,
 } from "@mantine/core";
-import {
-  IconArrowsExchange,
-  IconChevronRight,
-  IconSend,
-} from "@tabler/icons-react";
 import { useState } from "react";
 import { proposeTrade } from "../../hooks/useTradeActions";
 import {
@@ -28,6 +22,14 @@ import {
   Trade,
 } from "../../types";
 import styles from "./ProposeTradeModal.module.css";
+
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part.charAt(0))
+    .join("")
+    .toUpperCase();
 
 export const ProposeTradeModal = ({
   opened,
@@ -127,7 +129,21 @@ export const ProposeTradeModal = ({
         data-checked={checked || undefined}
         label={
           <Group gap="sm" wrap="nowrap">
-            <Avatar src={player.img || undefined} alt="" size={36} />
+            {player.img ? (
+              <img
+                src={player.img}
+                alt=""
+                width={30}
+                height={38}
+                loading="lazy"
+                decoding="async"
+                className={styles.face}
+              />
+            ) : (
+              <span className={styles.facePlaceholder} aria-hidden="true">
+                {initials(player.full_name)}
+              </span>
+            )}
             <Text size="sm" fw={600} lh={1.25}>
               {player.full_name}
             </Text>
@@ -148,21 +164,15 @@ export const ProposeTradeModal = ({
       opened={opened}
       onClose={close}
       title={
-        <Group gap="sm" wrap="nowrap">
-          <div className={styles.titleIcon} aria-hidden="true">
-            <IconArrowsExchange size={20} />
-          </div>
-          <div>
-            <Title order={3}>Propose a trade</Title>
-            <Text size="sm" c="dimmed" fw={400}>
-              Build an offer for another participant
-            </Text>
-          </div>
-        </Group>
+        <div>
+          <Title order={3}>Propose a trade</Title>
+          <Text size="sm" c="dimmed" fw={400}>
+            Build an offer for another participant
+          </Text>
+        </div>
       }
       centered
       size="lg"
-      radius="lg"
     >
       <Stack gap="lg">
         <Select
@@ -183,7 +193,6 @@ export const ProposeTradeModal = ({
             setTheirSelection([]);
           }}
           size="md"
-          leftSection={<IconChevronRight size={16} />}
           allowDeselect={false}
         />
 
@@ -191,12 +200,15 @@ export const ProposeTradeModal = ({
           <Box className={styles.selectionPanel}>
             <Group justify="space-between" mb="sm">
               <div>
-                <Text fw={700}>You send</Text>
+                <Text className={styles.panelTitle}>You send</Text>
                 <Text size="xs" c="dimmed">
                   From your active roster
                 </Text>
               </div>
-              <Badge color={mySelection.length > 0 ? "blue" : "gray"}>
+              <Badge
+                variant={mySelection.length > 0 ? "filled" : "outline"}
+                color={mySelection.length > 0 ? "league" : "gray"}
+              >
                 {mySelection.length} selected
               </Badge>
             </Group>
@@ -215,7 +227,7 @@ export const ProposeTradeModal = ({
           <Box className={styles.selectionPanel}>
             <Group justify="space-between" mb="sm">
               <div>
-                <Text fw={700}>You receive</Text>
+                <Text className={styles.panelTitle}>You receive</Text>
                 <Text size="xs" c="dimmed">
                   {partner
                     ? `From ${
@@ -226,14 +238,16 @@ export const ProposeTradeModal = ({
                     : "Choose a partner first"}
                 </Text>
               </div>
-              <Badge color={theirSelection.length > 0 ? "grape" : "gray"}>
+              <Badge
+                variant={theirSelection.length > 0 ? "filled" : "outline"}
+                color={theirSelection.length > 0 ? "league" : "gray"}
+              >
                 {theirSelection.length} selected
               </Badge>
             </Group>
             <Stack gap="xs" className={styles.rosterList}>
               {!partnerUid && (
                 <Box className={styles.placeholder}>
-                  <IconArrowsExchange size={24} aria-hidden="true" />
                   <Text size="sm" c="dimmed" ta="center">
                     Select a participant to see their active roster.
                   </Text>
@@ -259,12 +273,7 @@ export const ProposeTradeModal = ({
             <Button variant="subtle" color="gray" onClick={close}>
               Cancel
             </Button>
-            <Button
-              onClick={submit}
-              disabled={!canSubmit}
-              loading={submitting}
-              leftSection={<IconSend size={16} />}
-            >
+            <Button onClick={submit} disabled={!canSubmit} loading={submitting}>
               Send offer
             </Button>
           </Group>

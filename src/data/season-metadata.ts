@@ -569,7 +569,7 @@ export const SEASON_METADATA: Record<Season["id"], SeasonMeta> = {
     location: "Mamanuca Islands, Fiji",
     year: 2025,
     contestantCount: 18,
-    img: "/images/season_50/season-50-logo.webp",
+    img: "/images/season_50/season-50-logo.png",
     complete: false,
   },
 };

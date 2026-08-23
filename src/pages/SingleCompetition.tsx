@@ -1,7 +1,6 @@
 import {
   Accordion,
   Alert,
-  Badge,
   Box,
   Button,
   Center,
@@ -11,32 +10,28 @@ import {
   Stack,
   Tabs,
   Text,
-  ThemeIcon,
   Title,
 } from "@mantine/core";
 import { modals } from "@mantine/modals";
-import {
-  IconArrowLeft,
-  IconArrowsExchange,
-  IconChartLine,
-  IconClipboardList,
-  IconCrystalBall,
-  IconFlame,
-  IconLayoutDashboard,
-  IconLogin,
-  IconShirtSport,
-  IconTrophy,
-  IconUserPlus,
-  IconUsers,
-} from "@tabler/icons-react";
+import { IconArrowLeft, IconLogin, IconUserPlus } from "@tabler/icons-react";
 import { useEffect, useRef } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { AwaitingDataBanner } from "../components/AwaitingDataBanner";
 import { EpisodeAdvanceControl } from "../components/EpisodeAdvanceControl";
+import {
+  Board,
+  EmptySlate,
+  PageIntro,
+  RevealStrip,
+  StandbySlate,
+  StatusBadge,
+  useBugContext,
+} from "../components/Layout";
 import { PlayerGroupGrid } from "../components/MyPlayers";
 import { MyTeamSection } from "../components/MyTeam";
 import { PropBetScoring } from "../components/PropBetTables";
 import {
+  ParticipantScoreboard,
   PerSurvivorPerEpisodeDetailedScoringTable,
   PerUserPerEpisodeScoringTable,
   ScoringLegendTable,
@@ -57,38 +52,32 @@ import {
   getCompetitionAwaitingDataEpisode,
   getLatestDataEpisode,
 } from "../utils/episodeAirDate";
+import {
+  competitionBugContext,
+  competitionContextLine,
+  competitionModeBadge,
+} from "./competitionSignals";
 import classes from "./SingleCompetition.module.css";
 
 const VALID_TABS = ["overview", "team", "trades", "stats"] as const;
 type TabValue = (typeof VALID_TABS)[number];
 const DEFAULT_TAB: TabValue = "overview";
 
-const Section = ({
+const SectionHead = ({
+  id,
   title,
-  subtitle,
-  icon,
-  children,
-}: React.PropsWithChildren<{
+  note,
+}: {
+  id?: string;
   title: string;
-  subtitle?: string;
-  icon?: React.ReactNode;
-}>) => (
-  <Paper p={{ base: "sm", sm: "lg" }} radius="md" withBorder>
-    <Stack gap="md">
-      <Group gap="sm" align="center">
-        {icon}
-        <div>
-          <Title order={3}>{title}</Title>
-          {subtitle && (
-            <Text size="sm" c="dimmed">
-              {subtitle}
-            </Text>
-          )}
-        </div>
-      </Group>
-      {children}
-    </Stack>
-  </Paper>
+  note?: string;
+}) => (
+  <div className={classes.sectionHead}>
+    <Title order={3} id={id}>
+      {title}
+    </Title>
+    {note && <span className={classes.sectionNote}>{note}</span>}
+  </div>
 );
 
 export const SingleCompetition = () => {
@@ -161,6 +150,8 @@ export const SingleCompetition = () => {
     return () => modals.close(modalId);
   }, [requiresSignIn]);
 
+  useBugContext(competition ? competitionBugContext(competition) : null);
+
   if (requiresSignIn) {
     return (
       <Center py="xl">
@@ -208,21 +199,19 @@ export const SingleCompetition = () => {
 
   if (!competition && !isCompetitionLoading) {
     return (
-      <Center py="xl">
-        <Stack align="center" gap="md">
-          <Alert color="yellow" title="Competition not found">
-            This competition doesn't exist or may have been removed.
-          </Alert>
-          <Button
-            component={Link}
-            to="/competitions"
-            variant="default"
-            leftSection={<IconArrowLeft size={18} />}
-          >
+      <StandbySlate
+        code="Not found"
+        actions={
+          <Button component={Link} to="/competitions">
             Back to competitions
           </Button>
-        </Stack>
-      </Center>
+        }
+      >
+        <Title order={1}>Competition not found</Title>
+        <Text c="dimmed" maw={420}>
+          This competition doesn't exist or may have been removed.
+        </Text>
+      </StandbySlate>
     );
   }
 
@@ -237,6 +226,7 @@ export const SingleCompetition = () => {
   const episodeCount = season.episodes?.length ?? 0;
   const isCreator = slimUser?.uid === competition.creator_uid;
   const isWatchAlong = competition.current_episode != null;
+  const modeBadge = competitionModeBadge(competition);
   const showEpisodeControl = isWatchAlong || isCreator;
   const hasWinner = Object.values(unfilteredEvents).some(
     (e) => e.action === "win_survivor",
@@ -276,248 +266,271 @@ export const SingleCompetition = () => {
       ? `Trades, ${incomingTradeCount} pending ${incomingTradeCount === 1 ? "offer" : "offers"}`
       : "Trades";
 
+  // The reveal strip keys off the competition's own episode boundary. A live
+  // competition has no boundary, so it shows how far results have been
+  // entered instead, which is exactly what a live competition displays.
+  const revealedThrough = isWatchAlong
+    ? (competition.current_episode ?? 0)
+    : Math.min(latestVisibleDataEpisode, episodeCount);
+  const revealedEpisode = season.episodes?.find(
+    (e) => e.order === revealedThrough,
+  );
+  const stripStatus = isWatchAlong
+    ? revealedThrough === 0
+      ? "Nothing revealed yet"
+      : `Through episode ${revealedThrough}${revealedEpisode ? ` · ${revealedEpisode.name}` : ""}`
+    : revealedThrough === 0
+      ? "No results yet"
+      : `Results through episode ${revealedThrough}`;
+  const participantCount = competition.participants.length;
+  const participantLabel = `${participantCount} ${participantCount === 1 ? "participant" : "participants"}`;
+
+  const episodeContext = isWatchAlong ? (
+    revealedThrough === 0 ? (
+      <span className={classes.episodeContext}>
+        Nothing revealed yet
+        {episodeCount > 0 && <span> · {episodeCount} episodes</span>}
+      </span>
+    ) : (
+      <span className={classes.episodeContext}>
+        Episode {revealedThrough} of {episodeCount}
+        {revealedEpisode && <span> · {revealedEpisode.name}</span>}
+      </span>
+    )
+  ) : episodeCount > 0 ? (
+    <span className={classes.episodeContext}>
+      {episodeCount} {episodeCount === 1 ? "episode" : "episodes"}
+    </span>
+  ) : null;
+
   return (
-    <Stack gap="xl" p={{ base: "sm", sm: "lg" }}>
+    <div className={classes.page}>
       <Button
         component={Link}
         to="/competitions"
         variant="subtle"
-        leftSection={<IconArrowLeft size={16} />}
-        w="fit-content"
+        size="compact-sm"
+        color="gray"
+        leftSection={<IconArrowLeft size={14} />}
+        className={classes.back}
       >
         Back to competitions
       </Button>
-      <Box
-        className={classes.competitionHeader}
-        data-has-episode-control={showEpisodeControl || undefined}
-      >
-        <Box className={classes.competitionIdentity}>
-          <Group gap="xs" mb={4}>
-            <Badge variant="light" size="sm">
-              Season {competition.season_num}
-            </Badge>
-            <Badge variant="light" color="gray" size="sm">
-              {competition.participants.length} players
-            </Badge>
-            {episodeCount > 0 && !isWatchAlong && (
-              <Badge variant="light" color="gray" size="sm">
-                {episodeCount} {episodeCount === 1 ? "episode" : "episodes"}
-              </Badge>
-            )}
-          </Group>
-          <Title order={2}>{competition.competition_name}</Title>
-        </Box>
 
-        {showEpisodeControl && (
-          <Box className={classes.episodeControl}>
-            <EpisodeAdvanceControl
-              competition={competition}
-              season={season}
-              isCreator={isCreator}
-              hasWinner={hasWinner}
+      <PageIntro
+        eyebrow="Competition"
+        // The cyan context is a signal: it names the mode only while the
+        // competition is still running; a finished one carries the facts in
+        // its badges instead.
+        context={competitionContextLine(competition)}
+        title={competition.competition_name}
+        meta={
+          <>
+            <StatusBadge kind="season">
+              Season {competition.season_num}
+            </StatusBadge>
+            {modeBadge && <StatusBadge kind={modeBadge} />}
+            <StatusBadge
+              kind={competition.finished ? "complete" : "in-progress"}
             />
-          </Box>
-        )}
-      </Box>
+            <span className={classes.metaSep} aria-hidden="true" />
+            <span className={classes.metaFact}>{participantLabel}</span>
+            {episodeContext && (
+              <>
+                <span className={classes.metaSep} aria-hidden="true" />
+                {episodeContext}
+              </>
+            )}
+          </>
+        }
+        actions={
+          <div className={classes.headerSide}>
+            {episodeCount > 0 && (
+              <RevealStrip
+                total={episodeCount}
+                revealedThrough={revealedThrough}
+                label={isWatchAlong ? "Episode reveal" : "Results entered"}
+                status={stripStatus}
+                size="sm"
+              />
+            )}
+            {showEpisodeControl && (
+              <EpisodeAdvanceControl
+                competition={competition}
+                season={season}
+                isCreator={isCreator}
+                hasWinner={hasWinner}
+              />
+            )}
+          </div>
+        }
+      />
 
       {awaitingDataEpisode && (
         <AwaitingDataBanner episode={awaitingDataEpisode} />
       )}
 
+      <ParticipantScoreboard />
+
       <Box ref={tabsRef} className={classes.tabsAnchor}>
-        <Tabs value={activeTab} onChange={handleTabChange}>
+        <Tabs
+          value={activeTab}
+          onChange={handleTabChange}
+          className={classes.tabs}
+        >
           <Tabs.List
-            grow
             aria-label="Competition sections"
             className={classes.tabsList}
           >
-            <Tabs.Tab
-              value="overview"
-              leftSection={<IconLayoutDashboard size={17} />}
-              className={classes.tab}
-            >
+            <Tabs.Tab value="overview" className={classes.tab}>
               Overview
             </Tabs.Tab>
             {isParticipant && (
-              <Tabs.Tab
-                value="team"
-                leftSection={<IconShirtSport size={17} />}
-                className={classes.tab}
-              >
+              <Tabs.Tab value="team" className={classes.tab}>
                 My Team
               </Tabs.Tab>
             )}
             <Tabs.Tab
               value="trades"
-              leftSection={<IconArrowsExchange size={17} />}
               className={classes.tab}
               aria-label={tradesTabLabel}
             >
               <span className={classes.tabLabel}>
                 Trades
                 {incomingTradeCount > 0 && (
-                  <Badge
-                    size="xs"
-                    variant="filled"
-                    color="grape"
-                    circle={incomingTradeCount < 10}
-                    className={classes.tabBadge}
-                    aria-hidden="true"
-                  >
+                  <span className={classes.tabCount} aria-hidden="true">
                     {incomingTradeCount > 99 ? "99+" : incomingTradeCount}
-                  </Badge>
+                  </span>
                 )}
               </span>
             </Tabs.Tab>
-            <Tabs.Tab
-              value="stats"
-              leftSection={<IconFlame size={17} />}
-              className={classes.tab}
-            >
+            <Tabs.Tab value="stats" className={classes.tab}>
               Stats
             </Tabs.Tab>
           </Tabs.List>
 
-          <Tabs.Panel value="overview" pt="lg">
-            <Stack gap="xl">
-              <Section
-                title="Rosters"
-                subtitle="Castaways by participant. Accepted trades land at the next episode reveal"
-                icon={
-                  <IconUsers size={22} color="var(--mantine-color-blue-6)" />
-                }
-              >
+          <Tabs.Panel value="overview" className={classes.panel}>
+            <div className={classes.overview}>
+              <section className={classes.rosters} aria-labelledby="rosters-h">
+                <SectionHead
+                  id="rosters-h"
+                  title="Rosters"
+                  note="Castaways by participant. Accepted trades land at the next episode reveal"
+                />
                 <PlayerGroupGrid />
-              </Section>
+              </section>
 
-              <Section
-                title="Standings"
-                subtitle="Points by player across all episodes"
-                icon={
-                  <IconTrophy size={22} color="var(--mantine-color-yellow-6)" />
-                }
-              >
-                <PerUserPerEpisodeScoringTable />
-              </Section>
+              <div className={classes.rail}>
+                <Paper className={classes.boardHost}>
+                  <Board
+                    title="Standings"
+                    subtitle={
+                      revealedThrough > 0
+                        ? `Through episode ${revealedThrough}`
+                        : "Points by participant"
+                    }
+                    aside={
+                      modeBadge && <StatusBadge kind={modeBadge} size="sm" />
+                    }
+                    dense
+                    flush
+                  >
+                    <PerUserPerEpisodeScoringTable />
+                  </Board>
+                </Paper>
 
-              {activePropBetKeys.length > 0 && (
-                <Section
-                  title="Prop Bets"
-                  subtitle="Pre-season predictions and results"
-                  icon={
-                    <IconCrystalBall
-                      size={22}
-                      color="var(--mantine-color-violet-6)"
-                    />
-                  }
-                >
-                  <PropBetScoring />
-                </Section>
-              )}
+                {activePropBetKeys.length > 0 && (
+                  <Board
+                    title="Prop Bets"
+                    subtitle="Pre-season predictions and results"
+                    dense
+                    flush
+                  >
+                    <PropBetScoring />
+                  </Board>
+                )}
+              </div>
 
-              <Section
-                title="Player Scores"
-                subtitle="Detailed scoring for each contestant by episode"
-                icon={
-                  <IconChartLine
-                    size={22}
-                    color="var(--mantine-color-teal-6)"
-                  />
-                }
-              >
+              <div className={classes.scores}>
                 <PerSurvivorPerEpisodeDetailedScoringTable />
-              </Section>
+              </div>
 
-              <Accordion variant="subtle" radius="md">
+              <Accordion
+                variant="separated"
+                radius="md"
+                className={classes.reference}
+                classNames={{
+                  item: classes.referenceItem,
+                  control: classes.referenceControl,
+                  panel: classes.referencePanel,
+                  content: classes.referenceContent,
+                }}
+              >
                 <Accordion.Item value="scoring-values">
                   <Accordion.Control>
-                    <Group gap="sm">
-                      <IconClipboardList
-                        size={18}
-                        color="var(--mantine-color-dimmed)"
-                      />
-                      <Title order={4} c="dimmed">
-                        Scoring Reference
-                      </Title>
-                    </Group>
+                    <Title order={4} className={classes.referenceTitle}>
+                      Scoring Reference
+                    </Title>
                   </Accordion.Control>
                   <Accordion.Panel>
                     <ScoringLegendTable />
                   </Accordion.Panel>
                 </Accordion.Item>
               </Accordion>
-            </Stack>
+            </div>
           </Tabs.Panel>
 
           {isParticipant && (
-            <Tabs.Panel value="team" pt="lg">
+            <Tabs.Panel value="team" className={classes.panel}>
               <MyTeamSection trades={tradeState.data} />
             </Tabs.Panel>
           )}
 
-          <Tabs.Panel value="trades" pt="lg">
-            <Section
-              title="Trades"
-              subtitle="Trade active players with other participants"
-              icon={
-                <IconArrowsExchange
-                  size={22}
-                  color="var(--mantine-color-grape-6)"
-                />
-              }
-            >
+          <Tabs.Panel value="trades" className={classes.panel}>
+            <section className={classes.tabSection} aria-labelledby="trades-h">
+              <SectionHead
+                id="trades-h"
+                title="Trades"
+                note="Trade active castaways with other participants"
+              />
               <TradesSection
                 trades={tradeState.data}
                 tradesLoaded={tradeState.loaded}
                 tradesError={tradeState.error}
               />
-            </Section>
+            </section>
           </Tabs.Panel>
 
-          <Tabs.Panel value="stats" pt="lg">
-            <Section
-              title="Season Stats"
-              subtitle="Key storylines and standout performances"
-              icon={
-                <IconFlame size={22} color="var(--mantine-color-orange-6)" />
-              }
-            >
+          <Tabs.Panel value="stats" className={classes.panel}>
+            <section className={classes.tabSection} aria-labelledby="stats-h">
+              <SectionHead
+                id="stats-h"
+                title="Season Stats"
+                note={`Key storylines and standout performances${
+                  revealedThrough > 0
+                    ? ` · Through episode ${revealedThrough}`
+                    : ""
+                }`}
+              />
               {!isScoringDataReady ? (
-                <Center py="xl">
-                  <Stack align="center" gap="xs">
-                    <Loader size="sm" aria-label="Loading season stats" />
-                    <Text size="sm" c="dimmed">
-                      Loading season stats…
-                    </Text>
-                  </Stack>
-                </Center>
+                <div className={classes.loading} role="status">
+                  <Loader size="sm" aria-label="Loading season stats" />
+                  <Text size="sm" c="dimmed">
+                    Loading season stats…
+                  </Text>
+                </div>
               ) : hasSeasonStats ? (
                 <SeasonStatsSection stats={seasonStats} />
               ) : (
-                <Center py={{ base: "xl", sm: 48 }}>
-                  <Stack align="center" gap="xs" maw={520}>
-                    <ThemeIcon
-                      variant="light"
-                      color="orange"
-                      size="xl"
-                      radius="xl"
-                    >
-                      <IconFlame size={22} />
-                    </ThemeIcon>
-                    <Title order={4} ta="center">
-                      Season stats are just getting started
-                    </Title>
-                    <Text size="sm" c="dimmed" ta="center">
-                      Highlights and roster trends will appear after the first
-                      episode's scoring data is available.
-                    </Text>
-                  </Stack>
-                </Center>
+                <EmptySlate title="Season stats are just getting started">
+                  Highlights and roster trends will appear after the first
+                  episode's scoring data is available.
+                </EmptySlate>
               )}
-            </Section>
+            </section>
           </Tabs.Panel>
         </Tabs>
       </Box>
-    </Stack>
+    </div>
   );
 };

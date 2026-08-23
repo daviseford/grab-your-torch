@@ -1,8 +1,13 @@
-import { Divider, SimpleGrid, Stack, Table, Text } from "@mantine/core";
+import { Table } from "@mantine/core";
+import { useMemo } from "react";
+import { useCompetition } from "../../hooks/useCompetition";
+import { useSeason } from "../../hooks/useSeason";
 import { RosterStat, SeasonStatsResult } from "../../utils/seasonStats";
+import { Board } from "../Layout";
 import { SeasonStatsCard } from "./SeasonStatsCard";
+import classes from "./SeasonStatsSection.module.css";
 
-function getCellColor(
+function getCellClass(
   value: number,
   best: number,
   worst: number,
@@ -11,8 +16,8 @@ function getCellColor(
   if (best === worst) return undefined;
   const isBest = direction === "high" ? value === best : value === worst;
   const isWorst = direction === "high" ? value === worst : value === best;
-  if (isBest) return "var(--mantine-color-green-light)";
-  if (isWorst) return "var(--mantine-color-red-light)";
+  if (isBest) return classes.cellBest;
+  if (isWorst) return classes.cellWorst;
   return undefined;
 }
 
@@ -41,34 +46,21 @@ const RosterStatRow = ({
 
   return (
     <Table.Tr>
-      <Table.Td style={{ minWidth: 140 }}>
-        <Text size="xs" fw={600}>
-          {stat.title}
-        </Text>
-        <Text size="xs" c="dimmed">
-          {stat.description}
-        </Text>
+      <Table.Td className={classes.rosterLabel}>
+        <div className={classes.rosterTitle}>{stat.title}</div>
+        <div className={classes.rosterDescription}>{stat.description}</div>
       </Table.Td>
       {stat.rows.map((row) => {
-        const bg = getCellColor(row.value, best, worst, stat.direction);
+        const mark = getCellClass(row.value, best, worst, stat.direction);
         const rank = showRank ? getRank(rankByValue(row.value) - 1) : null;
         return (
-          <Table.Td key={row.uid} ta="center" bg={bg}>
-            {rank && (
-              <Text size="xs" c="dimmed" fw={500}>
-                {rank}
-              </Text>
-            )}
-            <Text size="sm" fw={700}>
-              {row.value}{" "}
-              <Text span size="xs" c="dimmed" fw={400}>
-                {stat.unit}
-              </Text>
-            </Text>
+          <Table.Td key={row.uid} className={`${classes.cell} ${mark ?? ""}`}>
+            {rank && <div className={classes.rank}>{rank}</div>}
+            <div className={classes.cellValue}>
+              {row.value} <span>{stat.unit}</span>
+            </div>
             {row.detail && (
-              <Text size="xs" c="dimmed">
-                {row.detail}
-              </Text>
+              <div className={classes.cellDetail}>{row.detail}</div>
             )}
           </Table.Td>
         );
@@ -78,6 +70,17 @@ const RosterStatRow = ({
 };
 
 export const SeasonStatsSection = ({ stats }: { stats: SeasonStatsResult }) => {
+  const { data: competition } = useCompetition();
+  const { data: season } = useSeason(competition?.season_id);
+
+  const portraits = useMemo(
+    () =>
+      Object.fromEntries(
+        (season?.players ?? []).map((p) => [p.castaway_id, p.img]),
+      ) as Record<string, string | undefined>,
+    [season?.players],
+  );
+
   const hasCastaway = stats.castawayCards.length > 0;
   const hasRoster = stats.rosterStats.length > 0;
 
@@ -87,58 +90,48 @@ export const SeasonStatsSection = ({ stats }: { stats: SeasonStatsResult }) => {
   const showRank = participants.length > 2;
 
   return (
-    <Stack gap="md">
+    <div className={classes.root}>
       {hasCastaway && (
         <div>
-          <Text size="sm" fw={600} c="dimmed" mb="xs">
-            Castaway Stats
-          </Text>
-          <SimpleGrid
-            cols={{ base: 2, md: 3 }}
-            spacing="xs"
-            style={{ alignItems: "start" }}
-          >
+          <h4 className={classes.groupLabel}>Castaway Stats</h4>
+          <div className={classes.grid}>
             {stats.castawayCards.map((card) => (
-              <SeasonStatsCard key={card.key} card={card} />
+              <SeasonStatsCard
+                key={card.key}
+                card={card}
+                portraits={portraits}
+              />
             ))}
-          </SimpleGrid>
+          </div>
         </div>
       )}
       {hasRoster && (
-        <>
-          {hasCastaway && <Divider />}
-          <div>
-            <Text size="sm" fw={600} c="dimmed">
-              Roster Stats
-            </Text>
-            <Table.ScrollContainer minWidth={500}>
-              <Table verticalSpacing="xs" horizontalSpacing="sm">
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th />
-                    {participants.map((p) => (
-                      <Table.Th key={p.uid} ta="center">
-                        <Text size="sm" fw={600}>
-                          {p.label}
-                        </Text>
-                      </Table.Th>
-                    ))}
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {stats.rosterStats.map((stat) => (
-                    <RosterStatRow
-                      key={stat.key}
-                      stat={stat}
-                      showRank={showRank}
-                    />
+        <Board title="Roster Stats" titleAs="h4" dense flush>
+          <Table.ScrollContainer minWidth={500}>
+            <Table verticalSpacing="xs" horizontalSpacing="sm">
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th scope="col">Stat</Table.Th>
+                  {participants.map((p) => (
+                    <Table.Th key={p.uid} scope="col" ta="center">
+                      {p.label}
+                    </Table.Th>
                   ))}
-                </Table.Tbody>
-              </Table>
-            </Table.ScrollContainer>
-          </div>
-        </>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {stats.rosterStats.map((stat) => (
+                  <RosterStatRow
+                    key={stat.key}
+                    stat={stat}
+                    showRank={showRank}
+                  />
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Table.ScrollContainer>
+        </Board>
       )}
-    </Stack>
+    </div>
   );
 };

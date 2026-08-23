@@ -1,17 +1,4 @@
-import {
-  Accordion,
-  Box,
-  Button,
-  Center,
-  ColorInput,
-  Group,
-  Loader,
-  Paper,
-  SimpleGrid,
-  Text,
-  TextInput,
-  Title,
-} from "@mantine/core";
+import { Button, ColorInput, Text, TextInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
 import { IconCheck, IconX } from "@tabler/icons-react";
@@ -21,6 +8,13 @@ import { SURVIVOR_SWATCHES } from "../../constants/colors";
 import { db } from "../../firebase";
 import { useSeason } from "../../hooks/useSeason";
 import { Team } from "../../types";
+import {
+  CreatePanel,
+  FormActions,
+  FormStack,
+  LoadingRow,
+  PanelAside,
+} from "../SeasonAdmin/SeasonAdminParts";
 
 export const CreateTeam = () => {
   const { data: season, isLoading } = useSeason();
@@ -42,11 +36,7 @@ export const CreateTeam = () => {
   });
 
   if (isLoading) {
-    return (
-      <Center>
-        <Loader size="xl" />
-      </Center>
-    );
+    return <LoadingRow label="Loading season" />;
   }
 
   if (!season) return null;
@@ -84,56 +74,51 @@ export const CreateTeam = () => {
   };
 
   return (
-    <Accordion>
-      <Accordion.Item value="create-team">
-        <Accordion.Control>
-          <Title order={4}>Add Team</Title>
-        </Accordion.Control>
-        <Accordion.Panel>
-          <SimpleGrid cols={{ base: 1, md: 2 }}>
-            <Box maw={420} mx="auto">
-              <form onSubmit={form.onSubmit((values) => handleSubmit(values))}>
-                <TextInput
-                  withAsterisk
-                  readOnly
-                  label="Season"
-                  value={`${season.name} (${season.id})`}
-                />
+    <CreatePanel
+      id="create-team"
+      title="Add Team"
+      defaultOpen={false}
+      aside={
+        <PanelAside title="Team setup">
+          <Text size="sm" c="dimmed">
+            Create tribe or team records here first, then assign players by
+            episode below.
+          </Text>
+        </PanelAside>
+      }
+    >
+      <form
+        onSubmit={form.onSubmit((values) => handleSubmit(values))}
+        aria-label="Add team"
+      >
+        <FormStack>
+          <TextInput
+            withAsterisk
+            readOnly
+            label="Season"
+            value={`${season.name} (${season.id})`}
+          />
 
-                <TextInput
-                  withAsterisk
-                  label="Team Name"
-                  placeholder="e.g. Luvu"
-                  {...form.getInputProps("name")}
-                />
+          <TextInput
+            withAsterisk
+            label="Team Name"
+            placeholder="e.g. Luvu"
+            {...form.getInputProps("name")}
+          />
 
-                <ColorInput
-                  withAsterisk
-                  label="Team Color"
-                  format="hex"
-                  swatches={SURVIVOR_SWATCHES}
-                  {...form.getInputProps("color")}
-                />
+          <ColorInput
+            withAsterisk
+            label="Team Color"
+            format="hex"
+            swatches={SURVIVOR_SWATCHES}
+            {...form.getInputProps("color")}
+          />
 
-                <Group justify="flex-end" mt="md">
-                  <Button type="submit">Save Team</Button>
-                </Group>
-              </form>
-            </Box>
-            <Box>
-              <Paper withBorder p="md" radius="md">
-                <Title order={5} mb="xs">
-                  Team setup
-                </Title>
-                <Text size="sm" c="dimmed">
-                  Create tribe or team records here first, then assign players
-                  by episode below.
-                </Text>
-              </Paper>
-            </Box>
-          </SimpleGrid>
-        </Accordion.Panel>
-      </Accordion.Item>
-    </Accordion>
+          <FormActions>
+            <Button type="submit">Save Team</Button>
+          </FormActions>
+        </FormStack>
+      </form>
+    </CreatePanel>
   );
 };

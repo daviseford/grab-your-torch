@@ -1,0 +1,177 @@
+/*
+ * Rosters: one board per participant, each a grid of compact castaway slates
+ * (portrait left, name and one meta line right). State is a mark: eliminated
+ * castaways are desaturated and struck in Ember, a castaway leaving in a
+ * trade is ringed in gold, an arriving one is dashed.
+ */
+.groups {
+  display: grid;
+  gap: var(--mantine-spacing-md);
+  min-width: 0;
+}
+
+.group {
+  background: var(--gyt-panel);
+  border-color: var(--gyt-rule);
+  overflow: hidden;
+}
+
+.groupHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--mantine-spacing-sm);
+  padding: 10px var(--mantine-spacing-md);
+  border-bottom: 1px solid var(--gyt-rule);
+}
+
+.groupTitle {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.groupName {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.groupSub {
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+}
+
+.groupAside {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-xs);
+  flex-shrink: 0;
+}
+
+.cast {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+
+  @media (min-width: $mantine-breakpoint-md) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  @media (max-width: 22em) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.castaway {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--gyt-rule);
+  border-radius: var(--mantine-radius-md);
+  background: var(--gyt-panel);
+}
+
+.portrait,
+.portraitInitials {
+  display: block;
+  width: 44px;
+  height: 56px;
+  border-radius: 3px;
+  object-fit: cover;
+  object-position: top;
+}
+
+.portraitInitials {
+  display: grid;
+  place-items: center;
+  background: var(--gyt-plate);
+  color: var(--mantine-color-dark-1);
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 0.875rem;
+}
+
+.castawayBody {
+  min-width: 0;
+}
+
+.castawayName {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 0.875rem;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.castawayMeta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  margin-top: 3px;
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+}
+
+.castawayOut .portrait,
+.castawayOut .portraitInitials {
+  filter: grayscale(1) brightness(0.55);
+}
+
+.castawayOut .castawayName {
+  color: var(--mantine-color-dimmed);
+  text-decoration: line-through;
+  text-decoration-color: var(--mantine-color-ember-6);
+  text-decoration-thickness: 2px;
+}
+
+.castawayLeaving .portrait,
+.castawayLeaving .portraitInitials {
+  outline: 2px solid var(--mantine-color-gold-5);
+  outline-offset: -2px;
+}
+
+.castawayArriving {
+  border-style: dashed;
+  border-color: var(--gyt-rule-strong);
+  background: transparent;
+}
+
+.castawayArriving .portrait,
+.castawayArriving .portraitInitials {
+  opacity: 0.6;
+}
+
+.tradeMark {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--mantine-color-signal-5);
+  color: var(--mantine-color-navy-9);
+  flex-shrink: 0;
+}
+
+.winnerTag {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: var(--mantine-color-gold-4);
+  color: var(--mantine-color-navy-9);
+  font-family: var(--mantine-headings-font-family);
+  font-size: 0.5625rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}

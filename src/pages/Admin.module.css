@@ -1,0 +1,318 @@
+/*
+ * Admin dashboard (the control room): lower-third, a three-cell status row,
+ * the seasons board with its find bar, the competitions board, and Data
+ * Tools collapsed. Operate mode: dense, flat, scannable.
+ */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-lg);
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding-bottom: var(--mantine-spacing-xl);
+}
+
+/* ---------- Status row: one panel, three cells ---------- */
+.status {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  background: var(--gyt-panel);
+  border: 1px solid var(--gyt-rule);
+  border-radius: var(--mantine-radius-md);
+  overflow: hidden;
+
+  @media (max-width: $mantine-breakpoint-sm) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.statusCell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 12px var(--mantine-spacing-md);
+  border-right: 1px solid var(--gyt-rule);
+
+  &:last-child {
+    border-right: 0;
+  }
+
+  @media (max-width: $mantine-breakpoint-sm) {
+    border-right: 0;
+    border-bottom: 1px solid var(--gyt-rule);
+
+    &:last-child {
+      border-bottom: 0;
+    }
+  }
+}
+
+.statusLabel {
+  margin-bottom: 2px;
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: 0.6875rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+
+.statusValue {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 1.25rem;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.statusLink {
+  font-family: var(--mantine-font-family);
+  font-weight: 600;
+  font-size: var(--mantine-font-size-sm);
+}
+
+.statusSub {
+  font-size: var(--mantine-font-size-sm);
+  color: var(--mantine-color-dimmed);
+}
+
+/* ---------- Board head tools (find bar) ---------- */
+.tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.sortNote {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: 0.6875rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+  white-space: nowrap;
+}
+
+.find {
+  width: 320px;
+}
+
+/* Under sm the find bar takes the whole head row. Board's head is its
+   first child (a flex row) and the aside is that row's last child; the
+   primitive's own classes are hashed, so the structure is targeted here. */
+@media (max-width: $mantine-breakpoint-sm) {
+  .seasonsBoard > :first-child {
+    flex-wrap: wrap;
+  }
+
+  .seasonsBoard > :first-child > :last-child {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .tools {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  .find {
+    flex: 1;
+    width: auto;
+  }
+
+  .sortNote {
+    display: none;
+  }
+}
+
+/* ---------- Board cells ---------- */
+.seasonCell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.logoChip {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 40px;
+  height: 24px;
+  border-radius: 3px;
+  background: var(--gyt-plate);
+  overflow: hidden;
+}
+
+.logoChip img {
+  max-width: 34px;
+  max-height: 18px;
+  object-fit: contain;
+  display: block;
+}
+
+.logoChipText {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 0.625rem;
+  color: var(--mantine-color-dark-0);
+}
+
+.seasonName {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.num {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.numHead {
+  text-align: right;
+}
+
+.actionsHead {
+  text-align: right;
+}
+
+.actionsCell {
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* The latest season row carries the signal: a cyan tint and an inset bar. */
+.latestRow td {
+  background: color-mix(
+    in srgb,
+    var(--mantine-color-signal-5) 10%,
+    var(--gyt-panel)
+  );
+}
+
+.latestRow td:first-child {
+  box-shadow: inset 3px 0 0 var(--mantine-color-signal-5);
+}
+
+.tableMid {
+  min-width: 520px;
+}
+
+.boardNote {
+  padding: 10px var(--mantine-spacing-md);
+  border-bottom: 1px solid var(--gyt-rule);
+  font-size: var(--mantine-font-size-sm);
+  color: var(--mantine-color-dimmed);
+}
+
+.participants {
+  display: block;
+  max-width: 380px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--mantine-color-dimmed);
+}
+
+.boardEmpty {
+  padding: var(--mantine-spacing-sm);
+}
+
+.loadingRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px var(--mantine-spacing-md);
+  font-size: var(--mantine-font-size-sm);
+  color: var(--mantine-color-dimmed);
+}
+
+/* Phones: the destructive control keeps a 40 px target. */
+@media (max-width: $mantine-breakpoint-sm) {
+  .deleteBtn {
+    min-height: 40px;
+    min-width: 40px;
+    padding-inline: 12px;
+  }
+}
+
+/* ---------- Data Tools: collapsed panel ---------- */
+.collapse {
+  background: var(--gyt-panel);
+  border: 1px solid var(--gyt-rule);
+  border-radius: var(--mantine-radius-md);
+  overflow: hidden;
+}
+
+.collapseItem {
+  border: 0;
+  background: transparent;
+}
+
+.collapseControl {
+  padding: 10px var(--mantine-spacing-md);
+  min-height: 44px;
+
+  &:hover {
+    background: var(--gyt-panel-2);
+  }
+}
+
+.collapseLabel {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  padding: 0;
+}
+
+.collapseTitle {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-text);
+}
+
+.collapseHint {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 500;
+  font-size: 0.6875rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+
+.collapseChevron {
+  color: var(--mantine-color-dimmed);
+}
+
+.collapsePanel {
+  border-top: 1px solid var(--gyt-rule);
+}
+
+.collapseContent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-sm);
+  padding: var(--mantine-spacing-md);
+}
+
+.toolRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mantine-spacing-xs);
+}

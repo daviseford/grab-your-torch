@@ -1,0 +1,59 @@
+/*
+ * Global rules the Mantine theme cannot express. Everything else belongs in
+ * src/theme.ts (tokens, component defaults) or a component's CSS module.
+ */
+
+:root {
+  /* Tracked caps used by labels, eyebrows, and board headers. */
+  --gyt-label-tracking: 0.12em;
+  --gyt-header-height: 60px;
+}
+
+@media (max-width: 48em) {
+  :root {
+    --gyt-header-height: 56px;
+  }
+}
+
+h1,
+h2,
+h3,
+.mantine-Title-root {
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+
+/* Numbers line up in boards and scoreboards everywhere. */
+body {
+  font-variant-numeric: tabular-nums;
+}
+
+/* One visible focus style for everything keyboard-reachable. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--mantine-color-league-6);
+  outline-offset: 2px;
+}
+
+[data-mantine-color-scheme="dark"]
+  :where(
+    a,
+    button,
+    input,
+    select,
+    textarea,
+    summary,
+    [tabindex]
+  ):focus-visible {
+  outline-color: var(--mantine-color-signal-5);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

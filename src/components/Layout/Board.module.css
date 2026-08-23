@@ -1,0 +1,100 @@
+/*
+ * Board: the package's data panel. A caps title row, then content; tables
+ * inside scroll locally so the document never scrolls sideways.
+ */
+.root {
+  background: var(--gyt-panel);
+  border: 1px solid var(--gyt-rule);
+  border-radius: var(--mantine-radius-md);
+  /* clip, not hidden: a sticky table header inside must stick to the page. */
+  overflow: clip;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mantine-spacing-sm);
+  padding: 10px var(--mantine-spacing-md);
+  border-bottom: 1px solid var(--gyt-rule);
+
+  @media (max-width: $mantine-breakpoint-sm) {
+    flex-wrap: wrap;
+  }
+}
+
+.titleGroup {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-text);
+  line-height: 1.3;
+}
+
+.subtitle {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 500;
+  font-size: 0.75rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+
+.aside {
+  display: flex;
+  align-items: center;
+  gap: var(--mantine-spacing-xs);
+  flex-shrink: 0;
+
+  /* Find bars and controls in the head take the full width on phones. */
+  @media (max-width: $mantine-breakpoint-sm) {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+}
+
+.body {
+  padding: var(--mantine-spacing-md);
+}
+
+.flush {
+  padding: 0;
+}
+
+.scroll {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+/* Table styling for boards built on Mantine Table. */
+.root :global(.mantine-Table-table) {
+  --table-border-color: var(--gyt-rule);
+}
+
+.root :global(.mantine-Table-th) {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: 0.6875rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+  background: var(--gyt-panel-2);
+  white-space: nowrap;
+}
+
+.dense :global(.mantine-Table-td),
+.dense :global(.mantine-Table-th) {
+  padding-block: 6px;
+  font-size: var(--mantine-font-size-sm);
+}

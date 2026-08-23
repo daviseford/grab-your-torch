@@ -1,27 +1,119 @@
-.competitionHeader {
-  display: grid;
-  gap: var(--mantine-spacing-md);
+/*
+ * Competition detail: the command center. Lower-third header with the reveal
+ * strip and creator actions on its right, a scoreboard strip of participant
+ * scorebugs, the rundown tabs, then a two-column overview on wide screens
+ * (sticky standings and prop bets on the left, rosters and player scores on
+ * the right). Everything stacks in section order on phones.
+ */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-lg);
 }
 
-.competitionIdentity,
-.episodeControl {
+.back {
+  align-self: flex-start;
+  padding-inline: 0;
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: 0.75rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+
+  &:hover {
+    background: transparent;
+    color: var(--mantine-color-text);
+  }
+}
+
+/* Header meta line: status slates, then facts separated by hairlines. */
+.metaSep {
+  width: 1px;
+  height: 16px;
+  background: var(--gyt-rule-strong);
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    display: none;
+  }
+}
+
+.metaFact {
+  font-size: var(--mantine-font-size-sm);
+  color: var(--mantine-color-dimmed);
+}
+
+.episodeContext {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: var(--mantine-font-size-sm);
+  color: var(--mantine-color-text);
+}
+
+.episodeContext span {
+  color: var(--mantine-color-dimmed);
+  font-weight: 500;
+}
+
+/* Right side of the lower-third: the reveal strip over the creator actions. */
+.headerSide {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-sm);
+  /* A fixed width: the intro's actions slot shrink-wraps its content, so a
+     percentage here would collapse to the strip's intrinsic size. */
+  width: 480px;
   min-width: 0;
+
+  @media (max-width: $mantine-breakpoint-md) {
+    width: 400px;
+  }
+
+  @media (max-width: $mantine-breakpoint-sm) {
+    width: 100%;
+  }
 }
 
 .tabsAnchor {
-  scroll-margin-top: var(--mantine-spacing-md);
+  scroll-margin-top: calc(var(--gyt-header-height) + var(--mantine-spacing-sm));
+}
+
+/* The rundown: caps tabs on a hairline, the current one underlined in cyan. */
+.tabs {
+  --tabs-color: var(--mantine-color-signal-5);
 }
 
 .tabsList {
   flex-wrap: nowrap;
   overflow-x: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--mantine-color-gray-5) transparent;
+  scrollbar-width: none;
+
+  &::before {
+    border-color: var(--gyt-rule);
+  }
 }
 
 .tab {
   min-width: max-content;
   white-space: nowrap;
+  padding-block: 12px;
+  color: var(--mantine-color-dimmed);
+  border-bottom-width: 3px;
+
+  &[data-active] {
+    color: var(--mantine-color-text);
+  }
+
+  &:hover {
+    background: transparent;
+    color: var(--mantine-color-text);
+  }
+
+  @media (max-width: 30em) {
+    padding-inline: var(--mantine-spacing-xs);
+    font-size: 0.6875rem;
+    letter-spacing: 0.08em;
+  }
 }
 
 .tabLabel {
@@ -30,26 +122,150 @@
   gap: 6px;
 }
 
-.tabBadge {
+.tabCount {
+  display: inline-grid;
+  place-items: center;
   min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: var(--mantine-color-league-6);
+  color: var(--mantine-color-white);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0;
   font-variant-numeric: tabular-nums;
 }
 
-@media (min-width: 62em) {
-  .competitionHeader[data-has-episode-control] {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--mantine-spacing-xl);
-    align-items: center;
+.panel {
+  padding-top: var(--mantine-spacing-lg);
+}
+
+/* Overview grid. Placement is by area so the phone order (rosters,
+   standings, prop bets, player scores, reference) is the DOM order while the
+   sticky rail sits left on wide screens. */
+.overview {
+  display: grid;
+  gap: var(--mantine-spacing-lg);
+  min-width: 0;
+}
+
+.rail,
+.rosters,
+.scores,
+.reference {
+  min-width: 0;
+}
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-lg);
+}
+
+@media (min-width: $mantine-breakpoint-md) {
+  .overview {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    grid-template-rows: auto auto auto;
+    align-items: start;
+  }
+
+  .rail {
+    grid-column: 1;
+    grid-row: 1 / span 3;
+    position: sticky;
+    top: calc(var(--gyt-header-height) + var(--mantine-spacing-md));
+    align-self: start;
+  }
+
+  .rosters {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .scores {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .reference {
+    grid-column: 2;
+    grid-row: 3;
   }
 }
 
-@media (max-width: 30em) {
-  .tab {
-    padding-inline: var(--mantine-spacing-xs);
-    font-size: var(--mantine-font-size-xs);
-  }
+/* A Paper host only so tests can scope the Standings board by
+   `div.mantine-Paper-root`; it draws nothing itself. */
+.boardHost {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
+}
 
-  .tabLabel {
-    gap: 4px;
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--mantine-spacing-sm);
+  flex-wrap: wrap;
+  margin-bottom: var(--mantine-spacing-sm);
+}
+
+.sectionHead h3 {
+  font-size: 1.25rem;
+}
+
+.sectionNote {
+  font-size: var(--mantine-font-size-sm);
+  color: var(--mantine-color-dimmed);
+}
+
+/* Scoring reference: a collapsed board. */
+.referenceItem {
+  background: var(--gyt-panel);
+  border: 1px solid var(--gyt-rule);
+  border-radius: var(--mantine-radius-md);
+  overflow: hidden;
+}
+
+.referenceControl {
+  padding-inline: var(--mantine-spacing-md);
+
+  &:hover {
+    background: var(--gyt-panel-2);
   }
+}
+
+.referenceTitle {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+
+.referencePanel {
+  border-top: 1px solid var(--gyt-rule);
+}
+
+.referenceContent {
+  padding: 0;
+}
+
+/* Tab panels that are a single section. */
+.tabSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-sm);
+}
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--mantine-spacing-xs);
+  padding: var(--mantine-spacing-xl) 0;
 }

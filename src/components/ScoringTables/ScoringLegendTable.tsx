@@ -1,14 +1,22 @@
-import { Badge, Table, Text } from "@mantine/core";
+import { Table, Text } from "@mantine/core";
+import type { CSSProperties } from "react";
 import { BASE_PLAYER_SCORING } from "../../data/scoring";
 import classes from "./ScoringLegendTable.module.css";
 
+/**
+ * Table groups with the semantic scoring-category color each one carries
+ * (blue challenges, teal milestones, yellow idols, grape advantages, gray
+ * for everything else), matching the category colors used app-wide.
+ */
 const SCORING_CATEGORIES = [
   {
     label: "Challenges",
+    color: "blue",
     actions: ["reward", "team_reward", "immunity", "team_immunity", "duel"],
   },
   {
     label: "Milestones",
+    color: "teal",
     actions: [
       "make_merge",
       "make_final_tribal_council",
@@ -20,6 +28,7 @@ const SCORING_CATEGORIES = [
   },
   {
     label: "Idols",
+    color: "yellow",
     actions: [
       "find_idol",
       "find_idol_nullifier",
@@ -30,6 +39,7 @@ const SCORING_CATEGORIES = [
   },
   {
     label: "Advantages Found",
+    color: "grape",
     actions: [
       "find_extra_vote",
       "find_steal_a_vote",
@@ -45,6 +55,7 @@ const SCORING_CATEGORIES = [
   },
   {
     label: "Advantages Used",
+    color: "grape",
     actions: [
       "use_extra_vote",
       "use_steal_a_vote",
@@ -60,6 +71,7 @@ const SCORING_CATEGORIES = [
   },
   {
     label: "Advantages Won",
+    color: "grape",
     actions: [
       "win_extra_vote",
       "win_steal_a_vote",
@@ -69,6 +81,7 @@ const SCORING_CATEGORIES = [
   },
   {
     label: "Tribal Council and Risk",
+    color: "gray",
     actions: [
       "votes_negated_by_idol",
       "eliminated",
@@ -81,6 +94,7 @@ const SCORING_CATEGORIES = [
   },
   {
     label: "Journeys",
+    color: "gray",
     actions: [
       "go_on_journey",
       "journey_risked_vote",
@@ -90,6 +104,7 @@ const SCORING_CATEGORIES = [
   },
   {
     label: "Beware Advantages",
+    color: "gray",
     actions: [
       "find_beware_advantage",
       "accept_beware_advantage",
@@ -115,25 +130,20 @@ export const ScoringLegendTable = () => {
       .map((x) => (
         <Table.Tr key={x.action}>
           <Table.Td>
-            <Badge variant="light" color="gray" size="sm">
-              {toTitleCase(x.action)}
-            </Badge>
+            <span className={classes.action}>{toTitleCase(x.action)}</span>
           </Table.Td>
           <Table.Td className={classes.descriptionCell}>
             <Text size="sm">{x.description}</Text>
           </Table.Td>
           <Table.Td ta="center">
             {x.fixed_value != null ? (
-              <Text
-                span
-                fw={600}
-                size="sm"
-                c={x.fixed_value > 0 ? "teal" : "red"}
+              <span
+                className={`${classes.points} ${x.fixed_value > 0 ? "" : classes.negative}`}
                 aria-label={`${x.fixed_value > 0 ? "positive" : "negative"} ${Math.abs(x.fixed_value)} points`}
               >
                 {x.fixed_value > 0 ? "+" : ""}
                 {x.fixed_value}
-              </Text>
+              </span>
             ) : (
               <Text span size="sm" c="dimmed" aria-label="variable points">
                 varies
@@ -152,10 +162,20 @@ export const ScoringLegendTable = () => {
         key={`category-${category.label}`}
         className={classes.categoryRow}
       >
-        <Table.Th colSpan={3} scope="colgroup" className={classes.categoryCell}>
-          <Text fw={700} size="sm">
+        <Table.Th
+          colSpan={3}
+          scope="colgroup"
+          className={classes.categoryCell}
+          style={
+            {
+              "--category-color": `var(--mantine-color-${category.color}-5)`,
+            } as CSSProperties
+          }
+        >
+          <span className={classes.categoryLabel}>
+            <span className={classes.categoryDot} aria-hidden="true" />
             {category.label}
-          </Text>
+          </span>
         </Table.Th>
       </Table.Tr>,
       ...categoryRows,
@@ -167,10 +187,11 @@ export const ScoringLegendTable = () => {
       <Table
         verticalSpacing="xs"
         highlightOnHover
-        highlightOnHoverColor="light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6))"
+        highlightOnHoverColor="var(--gyt-panel-2)"
         stickyHeader
-        stickyHeaderOffset="var(--app-shell-header-height, 0)"
+        stickyHeaderOffset="var(--gyt-header-height, 0)"
         aria-label="Scoring reference: actions and point values"
+        className={classes.table}
       >
         <Table.Thead className={classes.stickyHead}>
           <Table.Tr>

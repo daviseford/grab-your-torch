@@ -1,5 +1,5 @@
-import { Anchor, Container, Group, Text, VisuallyHidden } from "@mantine/core";
-
+import { Anchor, Container, Text, VisuallyHidden } from "@mantine/core";
+import { BrandLockup } from "../Brand";
 import classes from "./Footer.module.css";
 
 const links = [
@@ -14,19 +14,20 @@ export const Footer = () => {
   return (
     <footer className={classes.footer}>
       <Container className={classes.inner}>
-        <Group gap="xs" wrap="nowrap">
-          <img src="/icons/probst.svg" alt="" className={classes.icon} />
-          <Text c="dimmed" size="sm">
+        <div className={classes.brand}>
+          <BrandLockup width={150} className={classes.lockup} decorative />
+          <span className={classes.divider} aria-hidden="true" />
+          <Text c="dimmed" size="sm" className={classes.tagline}>
             Built for draft night chaos by Davis Ford
           </Text>
-        </Group>
-        <Group gap="sm">
+        </div>
+        <nav aria-label="Footer" className={classes.links}>
           {links.map((link) => (
             <Anchor
               c="dimmed"
               key={link.label}
               href={link.link}
-              size="sm"
+              className={classes.link}
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -34,14 +35,7 @@ export const Footer = () => {
               <VisuallyHidden> (opens in a new tab)</VisuallyHidden>
             </Anchor>
           ))}
-        </Group>
-      </Container>
-      <Container className={classes.disclaimer}>
-        <Text c="dimmed" size="xs" ta="center">
-          Grab Your Torch is not affiliated with, endorsed by, or connected to
-          CBS, SEG, or the Survivor TV show. Survivor® is a registered trademark
-          of CBS Broadcasting Inc.
-        </Text>
+        </nav>
       </Container>
     </footer>
   );

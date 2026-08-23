@@ -1,0 +1,133 @@
+/*
+ * Reveal strip: one cell per episode. State is a mark, not a hue alone:
+ * revealed cells are punched (a small dot), the next episode carries a
+ * folded flag, off-air cells are dashed, and the finale is ringed in Ember.
+ */
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.labelRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--mantine-spacing-sm);
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: 0.6875rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+
+.labelRow b {
+  color: var(--gyt-signal-text);
+  font-weight: 700;
+}
+
+.cells {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 4px;
+
+  /* Seasons run to 16 episodes; on phones the strip wraps into rows of 7
+     so each cell keeps room for its digit and its mark. */
+  @media (max-width: 30em) {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 6px 4px;
+  }
+}
+
+.cell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 32px;
+  min-width: 0;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 0.8125rem;
+  line-height: 1;
+  color: var(--mantine-color-dimmed);
+  background: transparent;
+  cursor: default;
+}
+
+.sm .cell {
+  height: 22px;
+  font-size: 0.6875rem;
+}
+
+.interactive .cell {
+  cursor: pointer;
+}
+
+.revealed {
+  background: var(--mantine-color-signal-5);
+  color: var(--mantine-color-navy-9);
+}
+
+.revealed::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--mantine-color-navy-9);
+  opacity: 0.45;
+}
+
+.next {
+  background: var(--mantine-color-gold-4);
+  color: var(--mantine-color-navy-9);
+}
+
+.next::before {
+  content: "";
+  position: absolute;
+  top: -7px;
+  left: 50%;
+  margin-left: -6px;
+  border: 6px solid transparent;
+  border-top: 7px solid var(--mantine-color-gold-4);
+  border-bottom: 0;
+}
+
+.off {
+  border-color: var(--gyt-rule-strong);
+  border-style: dashed;
+}
+
+.finale {
+  box-shadow: inset 0 0 0 2px var(--mantine-color-ember-6);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mantine-spacing-xs) var(--mantine-spacing-md);
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+}
+
+.legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}

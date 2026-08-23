@@ -1,0 +1,81 @@
+/*
+ * Standby slate: the stacked lockup on a Night Navy plate with one block of
+ * content (auth, reset, logout, not found, route errors, access denied).
+ * Mantine's text tokens are re-pointed inside the plate so Title, Text, and
+ * dimmed copy read on navy in both color schemes.
+ */
+.wrapper {
+  display: flex;
+  justify-content: center;
+  padding: var(--mantine-spacing-xl) 0;
+}
+
+.root {
+  --mantine-color-text: var(--mantine-color-dark-0);
+  --mantine-color-dimmed: var(--mantine-color-dark-1);
+  --mantine-color-anchor: var(--mantine-color-signal-5);
+
+  width: 100%;
+  max-width: 520px;
+  padding: var(--mantine-spacing-xl) var(--mantine-spacing-lg);
+  border-radius: var(--mantine-radius-md);
+  background: var(--gyt-plate);
+  color: var(--mantine-color-dark-0);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--mantine-spacing-md);
+  text-align: center;
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    padding: var(--mantine-spacing-lg) var(--mantine-spacing-md);
+  }
+}
+
+.lockup {
+  display: block;
+  width: 132px;
+  height: 132px;
+  margin-bottom: var(--mantine-spacing-xs);
+}
+
+.code {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-signal-5);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--mantine-spacing-md);
+  width: 100%;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--mantine-spacing-sm);
+  width: 100%;
+}
+
+/* Form fields on the plate: studio-white inputs so they read as controls. */
+.root :global(.mantine-Input-input) {
+  background: var(--mantine-color-white);
+  color: var(--mantine-color-navy-9);
+  border-color: transparent;
+}
+
+.root :global(.mantine-InputWrapper-label),
+.root :global(.mantine-InputWrapper-description) {
+  color: var(--mantine-color-dark-1);
+}
+
+.root :global(.mantine-PasswordInput-visibilityToggle) {
+  color: var(--mantine-color-navy-6);
+}

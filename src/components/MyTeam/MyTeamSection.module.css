@@ -1,9 +1,24 @@
+/*
+ * My Team: a team head panel (name, rename, standing at display scale), the
+ * roster board, and two small boards of highlights and trade activity.
+ */
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-lg);
+  min-width: 0;
+}
+
 .header {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
   align-items: flex-start;
   gap: var(--mantine-spacing-md) var(--mantine-spacing-xl);
+  padding: var(--mantine-spacing-md) var(--mantine-spacing-lg);
+  background: var(--gyt-panel);
+  border: 1px solid var(--gyt-rule);
+  border-radius: var(--mantine-radius-md);
 }
 
 .identity {
@@ -14,6 +29,7 @@
 .teamName {
   overflow-wrap: anywhere;
   text-wrap: balance;
+  font-size: 1.5rem;
 }
 
 .nameForm {
@@ -37,39 +53,164 @@
   display: flex;
   align-items: baseline;
   justify-content: flex-end;
-  gap: 6px;
+  gap: 8px;
 }
 
 .standingRank {
-  font-variant-numeric: tabular-nums;
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 2.5rem;
   line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+.standingOf {
+  font-size: var(--mantine-font-size-sm);
+  color: var(--mantine-color-dimmed);
+}
+
+.standingPts {
+  margin-top: 6px;
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: var(--mantine-font-size-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.standingPts span {
+  color: var(--mantine-color-dimmed);
+  font-weight: 500;
+}
+
+.standingDetail {
+  margin-top: 2px;
+  font-size: var(--mantine-font-size-sm);
+  color: var(--mantine-color-dimmed);
+}
+
+.leading {
+  display: inline-block;
+  align-self: center;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: var(--mantine-color-gold-4);
+  color: var(--mantine-color-navy-9);
+  font-family: var(--mantine-headings-font-family);
+  font-size: 0.5625rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 .numeric {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.total {
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.dim {
+  color: var(--mantine-color-dimmed);
+  font-weight: 500;
+}
+
+.castawayCell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.castawayName {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: var(--mantine-font-size-sm);
+}
+
+.face,
+.facePlaceholder {
+  display: block;
+  width: 26px;
+  height: 32px;
+  border-radius: 3px;
+  object-fit: cover;
+  object-position: top;
+  flex-shrink: 0;
+}
+
+.facePlaceholder {
+  display: grid;
+  place-items: center;
+  background: var(--gyt-plate);
+  color: var(--mantine-color-dark-1);
+  font-family: var(--mantine-headings-font-family);
+  font-size: 0.625rem;
+  font-weight: 700;
 }
 
 .eliminated {
   color: var(--mantine-color-dimmed);
 }
 
+.struck {
+  text-decoration: line-through;
+  text-decoration-color: var(--mantine-color-ember-6);
+  text-decoration-thickness: 2px;
+  color: var(--mantine-color-dimmed);
+}
+
+.faceOut {
+  filter: grayscale(1) brightness(0.55);
+  outline: 2px solid var(--mantine-color-ember-6);
+  outline-offset: -2px;
+}
+
 .arriving {
   opacity: 0.7;
 }
 
-.arrivingAvatar {
-  outline: 2px dashed var(--mantine-color-yellow-8);
+.faceArriving {
+  outline: 2px dashed var(--mantine-color-gold-5);
   outline-offset: -2px;
 }
 
-.eliminatedAvatar {
-  filter: grayscale(1);
+.winnerTag {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: var(--mantine-color-gold-4);
+  color: var(--mantine-color-navy-9);
+  font-family: var(--mantine-headings-font-family);
+  font-size: 0.5625rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.note {
+  padding: var(--mantine-spacing-md);
+  font-size: var(--mantine-font-size-sm);
+  color: var(--mantine-color-dimmed);
+}
+
+.footnote {
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-md);
+  border-top: 1px solid var(--gyt-rule);
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
 }
 
 .insights {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: var(--mantine-spacing-lg) var(--mantine-spacing-xl);
+  gap: var(--mantine-spacing-md);
 }
 
 .statList {
@@ -89,12 +230,24 @@
 .statList dd {
   margin: 0;
   min-width: 0;
+  font-family: var(--mantine-headings-font-family);
   font-size: var(--mantine-font-size-sm);
   font-weight: 600;
   overflow-wrap: anywhere;
 }
 
+.stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--mantine-spacing-xs);
+}
+
 @media (max-width: 36em) {
+  .header {
+    padding: var(--mantine-spacing-md);
+  }
+
   .standing {
     text-align: left;
   }

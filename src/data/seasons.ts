@@ -285,7 +285,7 @@ export const SEASONS = {
     id: "season_50",
     order: 50,
     name: "Survivor 50",
-    img: "/images/season_50/season-50-logo.webp",
+    img: "/images/season_50/season-50-logo.png",
     players: SEASON_50_PLAYERS,
     episodes: SEASON_50_EPISODES,
     castawayLookup: SEASON_50_CASTAWAY_LOOKUP,

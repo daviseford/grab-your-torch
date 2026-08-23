@@ -1,16 +1,23 @@
-import { Table, Text, Tooltip } from "@mantine/core";
-import { IconTrophy } from "@tabler/icons-react";
+import { Table, Tooltip, VisuallyHidden } from "@mantine/core";
 import { useRef } from "react";
 import { PropBetQuestionKey, PropBetsQuestions } from "../../data/propbets";
 import { useCompetition } from "../../hooks/useCompetition";
+import { useCompetitionMeta } from "../../hooks/useCompetitionMeta";
 import { useDragScroll } from "../../hooks/useDragScroll";
 import { useScoringCalculations } from "../../hooks/useScoringCalculations";
 import { useUser } from "../../hooks/useUser";
 import { PropBetScores } from "../../utils/propBetUtils";
 import classes from "./ScoringTables.module.css";
 
-const STICKY_OFFSETS = { rank: 0, total: 50, participant: 130 } as const;
+// Rank, participant, and points stay pinned while the episode columns scroll
+// beneath them (desktop only; see the stylesheet). Offsets are the summed
+// fixed widths of the columns before each one.
+const STICKY_OFFSETS = { rank: 0, participant: 44, points: 220 } as const;
 
+/**
+ * The Standings board: participants ranked by points through the current
+ * episode, with the roster summary, prop bet points, and per-episode totals.
+ */
 export const PerUserPerEpisodeScoringTable = () => {
   const { data: competition } = useCompetition();
   const { slimUser } = useUser();
@@ -21,6 +28,8 @@ export const PerUserPerEpisodeScoringTable = () => {
     pointsByUserPerEpisodeWithPropBets,
     propBetScores,
   } = useScoringCalculations();
+  const { survivorsByUserUid, eliminatedSurvivors, acquisitions } =
+    useCompetitionMeta();
 
   const scrollRef = useRef<HTMLDivElement>(null);
   useDragScroll(scrollRef);
@@ -29,71 +38,72 @@ export const PerUserPerEpisodeScoringTable = () => {
     (a, b) => b[1].total - a[1].total,
   );
 
-  const rows = sortedEntries.map(([uid, values], i) => {
+  // Ties share a rank (two participants on 27 points are both 1st), the same
+  // way the scoreboard strip above the tabs ranks them.
+  const rankOf = (total: number) =>
+    1 + sortedEntries.filter(([, v]) => v.total > total).length;
+  const hasPoints = sortedEntries.some(([, v]) => v.total !== 0);
+
+  const rows = sortedEntries.map(([uid, values]) => {
     const user = competition?.participants.find((x) => x.uid === uid);
     const isCurrentUser = uid === slimUser?.uid;
-    const isLeader = i === 0;
+    const rank = rankOf(values.total);
+    const isLeader = rank === 1 && hasPoints;
+    const name =
+      competition?.team_names?.[uid] || user?.displayName || user?.email;
 
-    const bgColor = isLeader
-      ? "var(--mantine-color-yellow-light)"
-      : isCurrentUser
-        ? "var(--mantine-color-blue-light)"
-        : undefined;
+    const roster = survivorsByUserUid[uid] ?? [];
+    const numEliminated = roster.filter((p) =>
+      eliminatedSurvivors.includes(p.castaway_id),
+    ).length;
+    const numAcquired = roster.filter(
+      (p) => acquisitions[p.castaway_id],
+    ).length;
 
     return (
       <Table.Tr
         key={uid}
-        style={{
-          backgroundColor: bgColor ?? "var(--mantine-color-body)",
-        }}
+        className={`${classes.row} ${isCurrentUser ? classes.rowMe : ""}`}
       >
         <Table.Td
-          fw={600}
-          ta="center"
-          className={classes.stickyCell}
+          className={`${classes.stickyCell} ${classes.colRank}`}
           style={{ left: STICKY_OFFSETS.rank }}
         >
           {isLeader ? (
-            <span aria-label="1st place">
-              <IconTrophy
-                size={16}
-                color="var(--mantine-color-yellow-6)"
-                style={{ verticalAlign: "middle" }}
-              />
+            <span className={`${classes.rankBlock} ${classes.rankFirst}`}>
+              <VisuallyHidden>1st place</VisuallyHidden>
+              <span aria-hidden="true">1</span>
             </span>
           ) : (
-            <Text span c="dimmed" size="sm">
-              {i + 1}
-            </Text>
+            <span className={classes.rankBlock}>{rank}</span>
           )}
         </Table.Td>
         <Table.Td
-          ta="center"
-          className={classes.stickyCell}
-          style={{ left: STICKY_OFFSETS.total }}
-        >
-          <Text span fw={700} size="sm">
-            {values.total}
-          </Text>
-        </Table.Td>
-        <Table.Td
-          fw={isLeader ? 700 : 500}
-          className={`${classes.stickyCell} ${classes.stickyDivider}`}
+          className={`${classes.stickyCell} ${classes.colParticipant}`}
           style={{ left: STICKY_OFFSETS.participant }}
         >
-          {competition?.team_names?.[uid] || user?.displayName || user?.email}
+          <div className={classes.name} title={name ?? undefined}>
+            {name}
+            {isCurrentUser && <span className={classes.youTag}>You</span>}
+          </div>
+          <div className={classes.caption}>
+            {roster.length} on roster
+            {numAcquired > 0 ? ` · ${numAcquired} via trade` : ""} ·{" "}
+            {numEliminated} eliminated
+          </div>
+        </Table.Td>
+        <Table.Td
+          className={`${classes.stickyCell} ${classes.stickyDivider} ${classes.colPoints}`}
+          style={{ left: STICKY_OFFSETS.points }}
+        >
+          <span className={classes.points}>
+            {values.total}
+            <small>pts</small>
+          </span>
         </Table.Td>
 
-        {values.episodePoints.map((x, idx) => (
-          <Table.Td key={idx} ta="center">
-            <Text span size="sm" c={x === 0 ? "dimmed" : undefined}>
-              {x}
-            </Text>
-          </Table.Td>
-        ))}
-
         {activePropBetKeys.length > 0 && (
-          <Table.Td ta="center">
+          <Table.Td className={classes.numCell}>
             <PropBetCell
               points={values.propBetPoints}
               scores={propBetScores[uid]}
@@ -101,61 +111,65 @@ export const PerUserPerEpisodeScoringTable = () => {
             />
           </Table.Td>
         )}
+
+        {values.episodePoints.map((x, idx) => (
+          <Table.Td key={idx} className={classes.numCell}>
+            <span className={`${classes.num} ${x === 0 ? classes.zero : ""}`}>
+              {x}
+            </span>
+          </Table.Td>
+        ))}
       </Table.Tr>
     );
   });
 
   if (filteredEpisodes.length === 0) {
     return (
-      <Text c="dimmed" ta="center" py="xl">
-        Advance to Episode 1 to see standings
-      </Text>
+      <p className={classes.note}>Advance to Episode 1 to see standings</p>
     );
   }
 
   return (
     <Table.ScrollContainer minWidth={300} ref={scrollRef}>
       <Table
-        withColumnBorders
         highlightOnHover
-        verticalSpacing="sm"
-        style={{ width: "auto" }}
+        verticalSpacing="xs"
+        horizontalSpacing="sm"
+        className={classes.table}
       >
         <Table.Thead>
           <Table.Tr>
             <Table.Th
-              w={50}
-              ta="center"
-              className={classes.stickyHeaderCell}
+              scope="col"
+              className={`${classes.stickyHeaderCell} ${classes.colRank}`}
               style={{ left: STICKY_OFFSETS.rank }}
             >
               #
             </Table.Th>
             <Table.Th
-              w={80}
-              ta="center"
-              className={classes.stickyHeaderCell}
-              style={{ left: STICKY_OFFSETS.total }}
-            >
-              Total
-            </Table.Th>
-            <Table.Th
-              w={150}
-              className={`${classes.stickyHeaderCell} ${classes.stickyDivider}`}
+              scope="col"
+              className={`${classes.stickyHeaderCell} ${classes.colParticipant}`}
               style={{ left: STICKY_OFFSETS.participant }}
             >
               Participant
             </Table.Th>
-            {filteredEpisodes.map((x) => (
-              <Table.Th key={x.id} w={60} ta="center">
-                Ep {x.order}
-              </Table.Th>
-            ))}
+            <Table.Th
+              scope="col"
+              className={`${classes.stickyHeaderCell} ${classes.stickyDivider} ${classes.colPoints}`}
+              style={{ left: STICKY_OFFSETS.points }}
+            >
+              Points
+            </Table.Th>
             {activePropBetKeys.length > 0 && (
-              <Table.Th w={80} ta="center">
+              <Table.Th scope="col" className={classes.colEpisode}>
                 Props
               </Table.Th>
             )}
+            {filteredEpisodes.map((x) => (
+              <Table.Th key={x.id} scope="col" className={classes.colEpisode}>
+                Ep {x.order}
+              </Table.Th>
+            ))}
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>{rows}</Table.Tbody>
@@ -188,14 +202,12 @@ function PropBetCell({
       : undefined;
 
   const content = (
-    <Text
-      span
-      size="sm"
-      c={points === 0 ? "dimmed" : undefined}
+    <span
+      className={`${classes.num} ${points === 0 ? classes.zero : ""}`}
       style={label ? { cursor: "default" } : undefined}
     >
       {points}
-    </Text>
+    </span>
   );
 
   if (!label) return content;

@@ -1,17 +1,7 @@
-import {
-  ActionIcon,
-  Alert,
-  Box,
-  ColorInput,
-  Group,
-  Table,
-  TableScrollContainer,
-  Text,
-  TextInput,
-} from "@mantine/core";
+import { ColorInput, Table, Text, TextInput } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
-import { IconCheck, IconPencil, IconTrash, IconX } from "@tabler/icons-react";
+import { IconCheck, IconX } from "@tabler/icons-react";
 import { doc, setDoc } from "firebase/firestore";
 import { useState } from "react";
 import { SURVIVOR_SWATCHES } from "../../constants/colors";
@@ -22,6 +12,14 @@ import { useTeamAssignments } from "../../hooks/useTeamAssignments";
 import { useTeams } from "../../hooks/useTeams";
 import { useUser } from "../../hooks/useUser";
 import { CastawayId, Team } from "../../types";
+import { Board, EmptySlate } from "../Layout";
+import {
+  BoardEmpty,
+  EditRowActions,
+  RowActions,
+} from "../SeasonAdmin/SeasonAdminParts";
+import adminParts from "../SeasonAdmin/SeasonAdminParts.module.css";
+import classes from "./Teams.module.css";
 
 export const TeamCRUDTable = () => {
   const { data: season } = useSeason();
@@ -193,10 +191,11 @@ export const TeamCRUDTable = () => {
 
     if (isEditing && editValues) {
       return (
-        <Table.Tr key={team.id}>
+        <Table.Tr key={team.id} className={adminParts.editingRow}>
           <Table.Td>
             <TextInput
               size="xs"
+              aria-label="Team name"
               value={editValues.name}
               onChange={(ev) =>
                 setEditValues({ ...editValues, name: ev.target.value })
@@ -206,33 +205,22 @@ export const TeamCRUDTable = () => {
           <Table.Td>
             <ColorInput
               size="xs"
+              aria-label="Team color"
               format="hex"
               swatches={SURVIVOR_SWATCHES}
               value={editValues.color}
               onChange={(color) => setEditValues({ ...editValues, color })}
             />
           </Table.Td>
-          <Table.Td>{team.id}</Table.Td>
+          <Table.Td className={adminParts.id}>{team.id}</Table.Td>
           {slimUser?.isAdmin && (
-            <Table.Td>
-              <Group gap="xs">
-                <ActionIcon
-                  size="lg"
-                  color="green"
-                  onClick={() => saveEdit(team)}
-                  aria-label="Save team"
-                >
-                  <IconCheck />
-                </ActionIcon>
-                <ActionIcon
-                  size="lg"
-                  color="gray"
-                  onClick={cancelEdit}
-                  aria-label="Cancel editing team"
-                >
-                  <IconX />
-                </ActionIcon>
-              </Group>
+            <Table.Td className={adminParts.actionsCell}>
+              <EditRowActions
+                onSave={() => saveEdit(team)}
+                onCancel={cancelEdit}
+                saveLabel="Save team"
+                cancelLabel="Cancel editing team"
+              />
             </Table.Td>
           )}
         </Table.Tr>
@@ -241,39 +229,26 @@ export const TeamCRUDTable = () => {
 
     return (
       <Table.Tr key={team.id}>
-        <Table.Td>{team.name}</Table.Td>
+        <Table.Td className={adminParts.name}>{team.name}</Table.Td>
         <Table.Td>
-          <Box
-            style={{
-              width: 24,
-              height: 24,
-              borderRadius: 4,
-              backgroundColor: team.color,
-              border: "1px solid var(--mantine-color-default-border)",
-            }}
-          />
+          <span className={classes.colorCell}>
+            <span
+              className={classes.swatch}
+              style={{ backgroundColor: team.color }}
+              aria-hidden="true"
+            />
+            <span className={adminParts.id}>{team.color}</span>
+          </span>
         </Table.Td>
-        <Table.Td>{team.id}</Table.Td>
+        <Table.Td className={adminParts.id}>{team.id}</Table.Td>
         {slimUser?.isAdmin && (
-          <Table.Td>
-            <Group gap="xs">
-              <ActionIcon
-                size="lg"
-                color="blue"
-                onClick={() => startEdit(team)}
-                aria-label={`Edit team ${team.name}`}
-              >
-                <IconPencil />
-              </ActionIcon>
-              <ActionIcon
-                size="lg"
-                color="red"
-                onClick={() => handleDelete(team)}
-                aria-label={`Delete team ${team.name}`}
-              >
-                <IconTrash />
-              </ActionIcon>
-            </Group>
+          <Table.Td className={adminParts.actionsCell}>
+            <RowActions
+              onEdit={() => startEdit(team)}
+              onDelete={() => handleDelete(team)}
+              editLabel={`Edit team ${team.name}`}
+              deleteLabel={`Delete team ${team.name}`}
+            />
           </Table.Td>
         )}
       </Table.Tr>
@@ -281,30 +256,34 @@ export const TeamCRUDTable = () => {
   });
 
   return (
-    <TableScrollContainer minWidth={300}>
-      <Table>
+    <Board
+      title="Teams"
+      subtitle={`· ${rows.length} tribes`}
+      titleAs="h2"
+      dense
+      flush
+      scroll
+    >
+      <Table highlightOnHover className={adminParts.tableNarrow}>
         <Table.Thead>
           <Table.Tr>
             <Table.Th>Name</Table.Th>
             <Table.Th>Color</Table.Th>
             <Table.Th>ID</Table.Th>
-            {slimUser?.isAdmin && <Table.Th>Actions</Table.Th>}
+            {slimUser?.isAdmin && (
+              <Table.Th className={adminParts.actionsHead}>Actions</Table.Th>
+            )}
           </Table.Tr>
         </Table.Thead>
-        <Table.Tbody>
-          {rows.length > 0 ? (
-            rows
-          ) : (
-            <Table.Tr>
-              <Table.Td colSpan={4}>
-                <Alert color="blue" variant="light">
-                  No teams yet. Add a team above before assigning players.
-                </Alert>
-              </Table.Td>
-            </Table.Tr>
-          )}
-        </Table.Tbody>
+        <Table.Tbody>{rows}</Table.Tbody>
       </Table>
-    </TableScrollContainer>
+      {rows.length === 0 && (
+        <BoardEmpty>
+          <EmptySlate title="No teams yet.">
+            Add a team above before assigning players.
+          </EmptySlate>
+        </BoardEmpty>
+      )}
+    </Board>
   );
 };

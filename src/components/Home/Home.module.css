@@ -1,496 +1,468 @@
-/* Hero */
-
-.wrapper {
-  position: relative;
-  box-sizing: border-box;
-  flex: 1;
+/*
+ * Homepage: the broadcast frame (navy hero in both schemes) over sections
+ * at half density, one idea each. The page bleeds to the shell edges so the
+ * frame continues the header plate; every section centers its own inner.
+ */
+.root {
   display: flex;
-  align-items: center;
-  background:
-    radial-gradient(
-      circle at top right,
-      light-dark(
-        color-mix(in srgb, var(--mantine-color-cyan-1) 55%, transparent),
-        color-mix(in srgb, var(--mantine-color-cyan-9) 28%, transparent)
-      ),
-      transparent 35%
-    ),
-    light-dark(var(--mantine-color-white), var(--mantine-color-dark-8));
+  flex-direction: column;
+  margin: calc(-1 * var(--app-shell-padding))
+    calc(-1 * var(--app-shell-padding)) 0;
 }
 
 .inner {
-  position: relative;
-  padding-top: clamp(1.5rem, 4vw, 2.5rem);
-  padding-bottom: clamp(1rem, 3vw, 1.5rem);
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 var(--mantine-spacing-lg);
+  box-sizing: border-box;
+
+  @media (max-width: $mantine-breakpoint-sm) {
+    padding: 0 var(--mantine-spacing-md);
+  }
+}
+
+/* ---------- Broadcast frame ---------- */
+.frame {
+  --mantine-color-text: var(--mantine-color-dark-0);
+  --mantine-color-dimmed: var(--mantine-color-dark-1);
+  --mantine-color-anchor: var(--mantine-color-signal-5);
+
+  background: var(--gyt-plate);
+  color: var(--mantine-color-dark-0);
+  border-bottom: 1px solid var(--gyt-plate-rule);
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 80px;
+  row-gap: 40px;
+  padding-top: 80px;
+  padding-bottom: 88px;
+
+  @media (max-width: $mantine-breakpoint-md) {
+    grid-template-columns: minmax(0, 1fr);
+    padding-top: 40px;
+    padding-bottom: 48px;
+    row-gap: 32px;
+  }
+}
+
+.copy {
+  display: grid;
+  gap: 24px;
+  justify-items: start;
+
+  @media (max-width: $mantine-breakpoint-md) {
+    gap: 18px;
+  }
 }
 
 .eyebrow {
-  margin-bottom: var(--mantine-spacing-md);
-  letter-spacing: 0.12em;
-  color: light-dark(var(--mantine-color-blue-7), var(--mantine-color-blue-3));
+  margin: 0;
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: 0.6875rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dark-1);
 }
 
 .title {
-  font-family: var(--mantine-font-family);
-  font-size: clamp(2rem, 5vw, 3rem);
-  font-weight: 900;
-  line-height: 1.08;
+  margin: 0;
+  font-size: clamp(2.375rem, 4.2vw, 3.375rem);
+  line-height: 1.05;
+  letter-spacing: -0.025em;
+  color: var(--mantine-color-dark-0);
+  max-width: 20ch;
+}
+
+.sub {
+  margin: 0;
+  font-size: 1.125rem;
+  line-height: 1.5;
+  color: var(--mantine-color-dark-1);
+  max-width: 50ch;
+
+  @media (max-width: $mantine-breakpoint-md) {
+    font-size: 1rem;
+  }
+}
+
+.ctas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    width: 100%;
+
+    & > * {
+      flex: 1 1 100%;
+    }
+  }
+}
+
+.emblem {
+  justify-self: end;
+  width: 192px;
+  height: auto;
+
+  @media (max-width: $mantine-breakpoint-md) {
+    justify-self: start;
+    width: 160px;
+  }
+
+  /* The header bug already carries the mark on phones. */
+  @media (max-width: $mantine-breakpoint-sm) {
+    display: none;
+  }
+}
+
+/* ---------- Sections ---------- */
+.sections {
+  display: flex;
+  flex-direction: column;
+}
+
+.section {
+  padding: 80px 0;
+  border-top: 1px solid var(--gyt-rule);
+
+  &:first-child {
+    border-top: 0;
+  }
+
+  @media (max-width: $mantine-breakpoint-md) {
+    padding: 52px 0;
+  }
+}
+
+.sectionPlate {
+  background: var(--gyt-panel-2);
+}
+
+.head {
+  display: grid;
+  gap: 14px;
+  justify-items: start;
+  max-width: 62ch;
+  margin-bottom: 36px;
+
+  @media (max-width: $mantine-breakpoint-md) {
+    margin-bottom: 28px;
+  }
+}
+
+.h2 {
+  margin: 0;
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: clamp(1.625rem, 2.6vw, 2rem);
+  line-height: 1.2;
+}
+
+.lead {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.55;
+  color: var(--mantine-color-dimmed);
+}
+
+.foot {
+  margin-top: 32px;
+
+  @media (max-width: $mantine-breakpoint-md) {
+    margin-top: 24px;
+  }
+}
+
+/* Example blocks: a caps caption above one artifact. */
+.example {
+  margin: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.exampleNarrow {
+  max-width: 680px;
+}
+
+.exampleStrip {
+  max-width: 760px;
+}
+
+/* ---------- Ranks (draft order and reveal example) ---------- */
+
+.rank {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--mantine-radius-sm);
+  background: var(--mantine-color-league-6);
+  color: var(--mantine-color-white);
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 1.0625rem;
+}
+
+.rankFirst {
+  background: var(--mantine-color-gold-4);
+  color: var(--mantine-color-navy-9);
+}
+
+/* ---------- How it works: three plain steps ---------- */
+.steps {
+  list-style: none;
   margin: 0;
   padding: 0;
-  color: light-dark(var(--mantine-color-black), var(--mantine-color-white));
-  letter-spacing: -0.04em;
-}
-
-.description {
-  margin-top: var(--mantine-spacing-sm);
-  max-width: 34rem;
-  font-size: clamp(0.95rem, 1.8vw, 1.15rem);
-}
-
-.controls {
-  margin-top: clamp(1rem, 2.5vw, 1.5rem);
-}
-
-.control {
-  height: rem(54px);
-  padding-left: rem(28px);
-  padding-right: rem(28px);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 40px;
+  counter-reset: step;
 
   @media (max-width: $mantine-breakpoint-sm) {
-    width: 100%;
-    justify-content: center;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
   }
 }
 
-.controlSecondary {
-  height: rem(54px);
-  padding-left: rem(28px);
-  padding-right: rem(28px);
+.steps li {
+  counter-increment: step;
+  border-top: 1px solid var(--gyt-rule-strong);
+  padding-top: 18px;
+
+  @media (max-width: $mantine-breakpoint-sm) {
+    padding-top: 12px;
+  }
 }
 
-/* How It Works */
-
-.howItWorksWrapper {
-  background: linear-gradient(
-    180deg,
-    light-dark(
-        color-mix(in srgb, var(--mantine-color-blue-0) 75%, transparent),
-        color-mix(
-          in srgb,
-          var(--mantine-color-dark-7) 92%,
-          var(--mantine-color-blue-9)
-        )
-      )
-      0%,
-    light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-7)) 100%
-  );
-}
-
-.howItWorks {
-  padding-top: clamp(2.5rem, 6vw, 4rem);
-  padding-bottom: clamp(2.5rem, 6vw, 4rem);
-}
-
-.step {
-  height: 100%;
-  background: light-dark(
-    color-mix(
-      in srgb,
-      var(--mantine-color-white) 88%,
-      var(--mantine-color-blue-0)
-    ),
-    color-mix(
-      in srgb,
-      var(--mantine-color-dark-6) 86%,
-      var(--mantine-color-blue-9)
-    )
-  );
-  border-color: light-dark(
-    var(--mantine-color-gray-2),
-    var(--mantine-color-dark-4)
-  );
-}
-
-/* Feature Sections — Backgrounds */
-
-.featureSectionLight {
-  background: light-dark(
-    var(--mantine-color-white),
-    var(--mantine-color-dark-8)
-  );
-}
-
-.featureSectionTinted {
-  background: light-dark(
-    color-mix(
-      in srgb,
-      var(--mantine-color-gray-0) 85%,
-      var(--mantine-color-blue-0)
-    ),
-    var(--mantine-color-dark-7)
-  );
-}
-
-.watchAlongWrapper {
-  background: light-dark(
-    color-mix(in srgb, var(--mantine-color-grape-0) 50%, white),
-    color-mix(
-      in srgb,
-      var(--mantine-color-dark-7) 82%,
-      var(--mantine-color-grape-9)
-    )
-  );
-}
-
-/* Feature Sections — Content Sizes */
-
-.featureContent {
-  padding-top: clamp(3rem, 7vw, 5rem);
-  padding-bottom: clamp(3rem, 7vw, 5rem);
-}
-
-.compactContent {
-  padding-top: clamp(2rem, 5vw, 3.5rem);
-  padding-bottom: clamp(2rem, 5vw, 3.5rem);
-}
-
-.watchAlongContent {
-  padding-top: clamp(3.5rem, 8vw, 6rem);
-  padding-bottom: clamp(3.5rem, 8vw, 6rem);
-  text-align: center;
-}
-
-/* Feature Sections — Typography */
-
-.featureEyebrow {
-  letter-spacing: 0.1em;
-}
-
-.featureTitle {
-  font-size: clamp(1.8rem, 5vw, 2.6rem);
-  font-weight: 800;
-  line-height: 1.15;
-  color: light-dark(var(--mantine-color-black), var(--mantine-color-white));
-  letter-spacing: -0.03em;
-}
-
-.featureDescription {
-  font-size: clamp(1rem, 2vw, 1.15rem);
-  line-height: 1.65;
-  max-width: 38rem;
-}
-
-.watchAlongTitle {
-  font-size: clamp(2.2rem, 6vw, 3.2rem);
-  font-weight: 900;
-  line-height: 1.1;
-  color: light-dark(var(--mantine-color-black), var(--mantine-color-white));
-  letter-spacing: -0.04em;
-}
-
-.watchAlongDescription {
-  font-size: clamp(1rem, 2vw, 1.15rem);
-  line-height: 1.7;
-  max-width: 36rem;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-/* Stat callouts */
-
-.statCard {
-  text-align: center;
-  background: light-dark(
-    color-mix(
-      in srgb,
-      var(--mantine-color-white) 85%,
-      var(--mantine-color-blue-0)
-    ),
-    color-mix(
-      in srgb,
-      var(--mantine-color-dark-6) 88%,
-      var(--mantine-color-blue-9)
-    )
-  );
-  border-color: light-dark(
-    var(--mantine-color-gray-2),
-    var(--mantine-color-dark-4)
-  );
-}
-
-.statNumber {
-  font-size: clamp(1.6rem, 4vw, 2.2rem);
-  font-weight: 900;
-  line-height: 1;
-  letter-spacing: -0.03em;
-}
-
-/* Scoring category dot */
-
-.categoryDot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-/* Scoring category badges */
-
-.categoryBadge {
-  padding: 5px 14px 5px 8px;
-  border-radius: 999px;
-  background: light-dark(
-    var(--mantine-color-gray-0),
-    var(--mantine-color-dark-5)
-  );
-  border: 1px solid
-    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-4));
-}
-
-/* Watch-along accent cards */
-
-.watchAlongCard {
-  text-align: left;
-  height: 100%;
-  background: light-dark(
-    color-mix(
-      in srgb,
-      var(--mantine-color-white) 92%,
-      var(--mantine-color-grape-0)
-    ),
-    color-mix(
-      in srgb,
-      var(--mantine-color-dark-6) 90%,
-      var(--mantine-color-grape-9)
-    )
-  );
-  border: 1px solid
-    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-4));
-  border-left: 3px solid var(--card-accent, var(--mantine-color-grape-5));
-}
-
-/* Prop bet list */
-
-.propBetItem {
-  padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
-  border-radius: var(--mantine-radius-md);
-  background: light-dark(
-    color-mix(
-      in srgb,
-      var(--mantine-color-white) 85%,
-      var(--mantine-color-orange-0)
-    ),
-    color-mix(
-      in srgb,
-      var(--mantine-color-dark-6) 88%,
-      var(--mantine-color-orange-9)
-    )
-  );
-  border: 1px solid
-    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-4));
-}
-
-/* Draft section */
-
-.draftCallout {
-  font-size: clamp(1.15rem, 2.5vw, 1.4rem);
+/* The number sits above the title in the desktop columns and runs inline
+   with it on phones, where the stacked list needs every line it can save. */
+.steps li::before {
+  content: counter(step);
+  display: block;
+  margin-bottom: 14px;
+  font-family: var(--mantine-headings-font-family);
   font-weight: 700;
-  line-height: 1.3;
-  color: light-dark(var(--mantine-color-dark-7), var(--mantine-color-gray-2));
+  font-size: 0.8125rem;
+  color: var(--mantine-color-dimmed);
+
+  @media (max-width: $mantine-breakpoint-sm) {
+    display: inline;
+    margin: 0 10px 0 0;
+  }
 }
 
-.draftHighlight {
-  padding: var(--mantine-spacing-sm) var(--mantine-spacing-md);
+.steps b {
+  display: block;
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 1.1875rem;
+  line-height: 1.2;
+
+  @media (max-width: $mantine-breakpoint-sm) {
+    display: inline;
+  }
+}
+
+.steps p {
+  margin: 8px 0 0;
+  max-width: 32ch;
+  font-size: 0.9375rem;
+  color: var(--mantine-color-dimmed);
+
+  @media (max-width: $mantine-breakpoint-sm) {
+    margin-top: 4px;
+    max-width: none;
+  }
+}
+
+/* ---------- Program guide preview ---------- */
+.guide {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 16px;
+
+  @media (max-width: $mantine-breakpoint-md) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+
+    & > :first-child {
+      grid-column: span 2;
+    }
+  }
+}
+
+/* ---------- Scoring ---------- */
+.cats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.table {
+  --table-border-color: var(--gyt-rule);
+}
+
+.action {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: 0.8125rem;
+}
+
+.scoreVal {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 1rem;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The win is a victory, not a penalty: gold, never ember, for the big points. */
+.flame {
+  color: light-dark(var(--mantine-color-gold-8), var(--mantine-color-gold-5));
+}
+
+/* ---------- Predictions: plain rows ---------- */
+.bets {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--gyt-rule);
+}
+
+.bets li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 24px;
+  padding: 14px 4px;
+  border-bottom: 1px solid var(--gyt-rule);
+  font-size: 0.9375rem;
+}
+
+.betPts {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 1.125rem;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.betPts small {
+  margin-left: 4px;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+
+/* ---------- Draft: a short pick order ---------- */
+.picks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-width: 420px;
+  display: grid;
+  gap: 4px;
+}
+
+.picks li {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--gyt-rule);
+  border-radius: var(--mantine-radius-sm);
+  background: var(--gyt-panel);
+  font-size: 0.9375rem;
+}
+
+.pickRank {
+  width: 28px;
+  height: 28px;
+  font-size: 0.8125rem;
+}
+
+/* ---------- Closing slate ---------- */
+.closing {
+  --mantine-color-text: var(--mantine-color-dark-0);
+  --mantine-color-dimmed: var(--mantine-color-dark-1);
+
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 32px;
+  padding: 40px 44px;
   border-radius: var(--mantine-radius-md);
-  background: light-dark(
-    var(--mantine-color-gray-0),
-    var(--mantine-color-dark-6)
-  );
-}
+  background: var(--gyt-plate);
+  color: var(--mantine-color-dark-0);
 
-/* Player trades */
-
-.tradeSection {
-  position: relative;
-  overflow: hidden;
-  background:
-    radial-gradient(
-      circle at 85% 15%,
-      light-dark(
-        color-mix(in srgb, var(--mantine-color-cyan-2) 52%, transparent),
-        color-mix(in srgb, var(--mantine-color-cyan-8) 18%, transparent)
-      ),
-      transparent 40%
-    ),
-    light-dark(
-      color-mix(in srgb, var(--mantine-color-teal-0) 62%, white),
-      color-mix(
-        in srgb,
-        var(--mantine-color-dark-7) 88%,
-        var(--mantine-color-teal-9)
-      )
-    );
-}
-
-.tradeContent {
-  padding-top: clamp(3.5rem, 8vw, 6rem);
-  padding-bottom: clamp(3.5rem, 8vw, 6rem);
-}
-
-.tradeLayout {
-  align-items: center;
-}
-
-.tradeCopy {
-  position: relative;
-  z-index: 1;
-}
-
-.tradeBenefits {
-  counter-reset: trade-benefit;
-}
-
-.tradeBenefit {
-  display: grid;
-  grid-template-columns: 2rem 1fr;
-  gap: var(--mantine-spacing-sm);
-  align-items: start;
-}
-
-.tradeBenefitNumber {
-  padding-top: 2px;
-  font-size: var(--mantine-font-size-xs);
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  color: light-dark(var(--mantine-color-teal-7), var(--mantine-color-teal-3));
-}
-
-.tradePreview {
-  position: relative;
-  z-index: 1;
-  background: light-dark(
-    color-mix(
-      in srgb,
-      var(--mantine-color-white) 90%,
-      var(--mantine-color-teal-0)
-    ),
-    color-mix(
-      in srgb,
-      var(--mantine-color-dark-6) 90%,
-      var(--mantine-color-teal-9)
-    )
-  );
-  border-color: light-dark(
-    color-mix(
-      in srgb,
-      var(--mantine-color-teal-3) 55%,
-      var(--mantine-color-gray-2)
-    ),
-    color-mix(
-      in srgb,
-      var(--mantine-color-teal-7) 45%,
-      var(--mantine-color-dark-4)
-    )
-  );
-  box-shadow: 0 24px 60px
-    light-dark(
-      color-mix(in srgb, var(--mantine-color-teal-9) 12%, transparent),
-      color-mix(in srgb, var(--mantine-color-black) 30%, transparent)
-    );
-}
-
-.tradeStatus {
-  flex-shrink: 0;
-  padding: 5px 10px;
-  border-radius: 999px;
-  color: light-dark(var(--mantine-color-teal-8), var(--mantine-color-teal-2));
-  background: light-dark(
-    var(--mantine-color-teal-0),
-    color-mix(in srgb, var(--mantine-color-teal-9) 38%, transparent)
-  );
-}
-
-.tradeSwap {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  gap: var(--mantine-spacing-sm);
-  align-items: center;
-  margin-top: clamp(1.75rem, 5vw, 2.5rem);
-  margin-bottom: clamp(1.75rem, 5vw, 2.5rem);
-}
-
-.tradeSide {
-  min-width: 0;
-  padding: var(--mantine-spacing-md);
-  border-radius: var(--mantine-radius-lg);
-  background: light-dark(
-    color-mix(
-      in srgb,
-      var(--mantine-color-white) 78%,
-      var(--mantine-color-cyan-0)
-    ),
-    color-mix(
-      in srgb,
-      var(--mantine-color-dark-5) 90%,
-      var(--mantine-color-cyan-9)
-    )
-  );
-  border: 1px solid
-    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-4));
-}
-
-.tradeSwapIcon {
-  box-shadow: 0 6px 18px
-    color-mix(in srgb, var(--mantine-color-teal-6) 30%, transparent);
-}
-
-.tradeTiming {
-  padding-top: var(--mantine-spacing-md);
-  border-top: 1px solid
-    light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-4));
-  color: light-dark(var(--mantine-color-teal-8), var(--mantine-color-teal-2));
-}
-
-@media (max-width: $mantine-breakpoint-xs) {
-  .tradeSwap {
-    grid-template-columns: 1fr;
-  }
-
-  .tradeSwapIcon {
-    justify-self: center;
-    transform: rotate(90deg);
+  @media (max-width: $mantine-breakpoint-sm) {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+    padding: 28px 20px;
+    justify-items: start;
   }
 }
 
-/* Closing CTA */
-
-.ctaSection {
-  background: light-dark(
-    var(--mantine-color-white),
-    var(--mantine-color-dark-8)
-  );
+.closingTitle {
+  margin: 0;
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: clamp(1.75rem, 3vw, 2.25rem);
+  letter-spacing: -0.02em;
+  color: var(--mantine-color-dark-0);
 }
 
-.ctaContent {
-  padding-top: clamp(3rem, 7vw, 5rem);
-  padding-bottom: clamp(4rem, 8vw, 6rem);
-  text-align: center;
+.closingText {
+  margin: 8px 0 0;
+  max-width: 46ch;
+  color: var(--mantine-color-dark-1);
 }
 
-.ctaTitle {
-  font-size: clamp(2rem, 5.5vw, 3rem);
-  font-weight: 900;
-  line-height: 1.1;
-  color: light-dark(var(--mantine-color-black), var(--mantine-color-white));
-  letter-spacing: -0.04em;
+.exampleTotals {
+  display: grid;
+  gap: 6px;
+  margin: var(--mantine-spacing-md) 0 0;
+  padding: 0;
+  list-style: none;
+  max-width: 360px;
 }
 
-.ctaDescription {
-  line-height: 1.6;
+.exampleTotals li {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--mantine-font-size-sm);
 }
 
-/* Utility */
+.exampleTotal {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 1.125rem;
+  letter-spacing: -0.02em;
+}
 
-.selfStart {
-  align-self: flex-start;
+.exampleTotal small {
+  margin-left: 3px;
+  font-size: 0.625rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+  font-weight: 500;
 }

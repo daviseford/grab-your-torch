@@ -1,702 +1,456 @@
-import {
-  Button,
-  Container,
-  Group,
-  Paper,
-  SimpleGrid,
-  Stack,
-  Text,
-  ThemeIcon,
-  Title,
-} from "@mantine/core";
-import {
-  IconArrowsExchange,
-  IconChartBar,
-  IconClock,
-  IconCrystalBall,
-  IconEyeOff,
-  IconFlame,
-  IconLivePhoto,
-  IconPlayerPlay,
-  IconSearch,
-  IconTargetArrow,
-  IconTrophy,
-  IconUsers,
-} from "@tabler/icons-react";
+import { Badge, Button, Table, Title } from "@mantine/core";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { PropBetsQuestions } from "../../data/propbets";
+import { BASE_PLAYER_SCORING, type ScoringCategory } from "../../data/scoring";
+import { SEASON_METADATA } from "../../data/season-metadata";
 import { useUser } from "../../hooks/useUser";
+import { getSeasonEra } from "../../pages/SeasonEras";
+import { SeasonTile } from "../../pages/SeasonTile";
+import { BrandEmblem } from "../Brand";
+import { Board, RevealStrip } from "../Layout";
 import classes from "./Home.module.css";
 
+/** Scoring category colors, kept semantic app-wide. */
+const CATEGORY_COLORS: Record<ScoringCategory, string> = {
+  Challenges: "blue",
+  Milestones: "teal",
+  Idols: "yellow",
+  Advantages: "grape",
+  Other: "gray",
+};
+
+const CATEGORY_ORDER: ScoringCategory[] = [
+  "Challenges",
+  "Milestones",
+  "Idols",
+  "Advantages",
+  "Other",
+];
+
+/** Four actions that show the range of the system. */
+const EXAMPLE_ACTIONS = [
+  "immunity",
+  "use_idol",
+  "use_knowledge_is_power",
+  "win_survivor",
+] as const;
+
+/** Five predictions that show the range of the prop bets. */
+const EXAMPLE_BETS = [
+  "propbet_winner",
+  "propbet_first_vote",
+  "propbet_idols",
+  "propbet_medical_evac",
+  "propbet_successful_shot_in_the_dark",
+] as const;
+
+/**
+ * The example standings are fictional: made-up participants and points,
+ * no castaways, no season, no episode. The homepage never shows a real
+ * competition's results.
+ */
+const EXAMPLE_STANDINGS = [
+  { name: "Marisol", points: 184 },
+  { name: "Theo", points: 171 },
+  { name: "Priya", points: 158 },
+  { name: "Jordan", points: 142 },
+];
+
+/** Fictional per-episode points for the reveal-strip example (13 episodes). */
+const EXAMPLE_EPISODES = 13;
+const EXAMPLE_EPISODE_POINTS: Record<string, number[]> = {
+  Marisol: [31, 27, 36, 29, 33, 28, 24, 30, 22, 26, 19, 21, 25],
+  Theo: [28, 30, 25, 32, 27, 29, 31, 23, 26, 20, 24, 18, 22],
+  Priya: [26, 24, 29, 27, 25, 27, 22, 28, 21, 23, 20, 19, 17],
+  Jordan: [22, 25, 21, 26, 24, 24, 27, 19, 23, 18, 21, 16, 20],
+};
+
+const exampleTotalsThrough = (episode: number) =>
+  Object.entries(EXAMPLE_EPISODE_POINTS)
+    .map(([name, points]) => ({
+      name,
+      points: points.slice(0, episode).reduce((sum, p) => sum + p, 0),
+    }))
+    .sort((a, b) => b.points - a.points);
+
+const ACTION_COUNT = BASE_PLAYER_SCORING.length;
+const CATEGORY_COUNT = new Set(BASE_PLAYER_SCORING.map((s) => s.category)).size;
+const ALL_BETS = Object.values(PropBetsQuestions);
+const BET_COUNT = ALL_BETS.length;
+const MAX_BET_POINTS = ALL_BETS.reduce((sum, bet) => sum + bet.point_value, 0);
+const SEASON_COUNT = Object.keys(SEASON_METADATA).length;
+// Unique people, not appearances: returning players would inflate a sum of
+// per-season cast sizes. The figure is pinned to the hundreds and checked
+// against the season data in src/data/__tests__/castawayClaim.test.ts, so
+// the homepage never imports every season file just to print it.
+const CASTAWAY_COUNT = 700;
+
+const scoringByAction = new Map(
+  BASE_PLAYER_SCORING.map((entry) => [entry.action, entry]),
+);
+
 export const Home = () => {
+  const [exampleRevealed, setExampleRevealed] = useState(6);
+  const exampleTotals = useMemo(
+    () => exampleTotalsThrough(exampleRevealed),
+    [exampleRevealed],
+  );
   const { slimUser } = useUser();
+
+  const seasons = useMemo(
+    () => Object.values(SEASON_METADATA).sort((a, b) => b.order - a.order),
+    [],
+  );
+  const liveSeasonId = seasons.find((m) => !m.complete)?.id ?? null;
+  const guideSeasons = seasons.slice(0, 5);
+
   return (
-    <>
-      {/* Hero */}
-      <section aria-label="Hero" className={classes.wrapper}>
-        <Container size={700} className={classes.inner}>
-          <Text className={classes.eyebrow} size="sm" fw={700} tt="uppercase">
-            Fantasy Survivor for friends
-          </Text>
-          <Title order={1} className={classes.title}>
-            <Text component="span" variant="gradient" inherit>
-              Grab your torch
-            </Text>{" "}
-            and draft your Survivor fantasy team
-          </Title>
-
-          <Text className={classes.description} c="dimmed">
-            Pick a season, draft your favorite contestants, and compete to see
-            whose team racks up the most points as the game plays out.
-          </Text>
-
-          <Group className={classes.controls}>
-            <Button
-              size="xl"
-              className={classes.control}
-              variant="gradient"
-              gradient={{ from: "blue", to: "cyan" }}
-              component={Link}
-              to="/seasons"
-              leftSection={<IconFlame size={22} />}
-            >
-              Pick a season to get started
-            </Button>
-            {slimUser && (
-              <Button
-                size="xl"
-                className={classes.controlSecondary}
-                variant="default"
-                component={Link}
-                to="/competitions"
-                leftSection={<IconTrophy size={22} />}
-              >
-                Your competitions
+    <div className={classes.root}>
+      {/* Hero: the broadcast frame, navy in both schemes */}
+      <section aria-label="Hero" className={classes.frame}>
+        <div className={`${classes.inner} ${classes.hero}`}>
+          <div className={classes.copy}>
+            <p className={classes.eyebrow}>Fantasy Survivor for friends</p>
+            <Title order={1} className={classes.title}>
+              Grab your torch and draft your Survivor fantasy team
+            </Title>
+            <p className={classes.sub}>
+              Pick a season, draft your favorite contestants, and compete to see
+              whose team racks up the most points as the game plays out.
+            </p>
+            <div className={classes.ctas}>
+              <Button size="lg" component={Link} to="/seasons">
+                Pick a season to get started
               </Button>
-            )}
-          </Group>
-        </Container>
+              {slimUser && (
+                <Button
+                  size="lg"
+                  variant="outline"
+                  color="dark.0"
+                  component={Link}
+                  to="/competitions"
+                >
+                  Your competitions
+                </Button>
+              )}
+              <Button
+                size="lg"
+                variant="outline"
+                color="dark.0"
+                component={Link}
+                to="/scoring"
+              >
+                How scoring works
+              </Button>
+            </div>
+          </div>
+          <BrandEmblem height={240} className={classes.emblem} />
+        </div>
       </section>
 
-      {/* How It Works */}
-      <section className={classes.howItWorksWrapper}>
-        <Container size={700} className={classes.howItWorks}>
-          <Title
-            order={2}
-            size="lg"
-            fw={600}
-            c="dimmed"
-            ta="center"
-            mb="md"
-            tt="uppercase"
-            lts={1}
-          >
-            How it works
-          </Title>
-          <SimpleGrid cols={{ base: 1, sm: 3 }}>
-            <Paper className={classes.step} withBorder radius="lg" p="lg">
-              <Stack gap="sm" align="flex-start">
-                <ThemeIcon size={44} radius="xl" variant="light" color="blue">
-                  <IconSearch size={22} />
-                </ThemeIcon>
-                <Text fw={700}>Pick a season</Text>
-                <Text size="sm" c="dimmed">
-                  Browse seasons and check out the cast before you commit.
-                </Text>
-              </Stack>
-            </Paper>
-            <Paper className={classes.step} withBorder radius="lg" p="lg">
-              <Stack gap="sm" align="flex-start">
-                <ThemeIcon size={44} radius="xl" variant="light" color="cyan">
-                  <IconTargetArrow size={22} />
-                </ThemeIcon>
-                <Text fw={700}>Draft your team</Text>
-                <Text size="sm" c="dimmed">
+      <div className={classes.sections}>
+        {/* How it works */}
+        <section aria-labelledby="home-how" className={classes.section}>
+          <div className={classes.inner}>
+            <div className={classes.head}>
+              <h2 id="home-how" className={classes.h2}>
+                How it works
+              </h2>
+            </div>
+            <ol className={classes.steps}>
+              <li>
+                <b>Pick a season</b>
+                <p>Browse seasons and check out the cast before you commit.</p>
+              </li>
+              <li>
+                <b>Draft your team</b>
+                <p>
                   Invite friends, take turns picking players, and build your
                   roster.
-                </Text>
-              </Stack>
-            </Paper>
-            <Paper className={classes.step} withBorder radius="lg" p="lg">
-              <Stack gap="sm" align="flex-start">
-                <ThemeIcon size={44} radius="xl" variant="light" color="teal">
-                  <IconTrophy size={22} />
-                </ThemeIcon>
-                <Text fw={700}>Compete for points</Text>
-                <Text size="sm" c="dimmed">
+                </p>
+              </li>
+              <li>
+                <b>Compete for points</b>
+                <p>
                   Earn points as your players win challenges, find idols, and
                   survive.
-                </Text>
-              </Stack>
-            </Paper>
-          </SimpleGrid>
-        </Container>
-      </section>
+                </p>
+              </li>
+            </ol>
+          </div>
+        </section>
 
-      {/* All 50 Seasons */}
-      <section className={classes.featureSectionLight}>
-        <Container size={700} className={classes.featureContent}>
-          <Stack gap="lg">
-            <Group gap="sm">
-              <ThemeIcon size={48} radius="xl" variant="light" color="orange">
-                <IconFlame size={24} />
-              </ThemeIcon>
-              <div>
-                <Text
-                  size="sm"
-                  fw={600}
-                  c="dimmed"
-                  tt="uppercase"
-                  className={classes.featureEyebrow}
-                >
-                  Complete coverage
-                </Text>
-                <Title order={2} className={classes.featureTitle}>
-                  Every season of Survivor
-                </Title>
-              </div>
-            </Group>
-
-            <Text className={classes.featureDescription} c="dimmed">
-              From the original Borneo to the latest New Era twists, all 50 US
-              seasons are ready to play. Browse by era, search by name or
-              location, and start a competition on any season, past or present.
-              The currently airing season gets live updates as each episode
-              airs, so you're never behind.
-            </Text>
-
-            <SimpleGrid cols={{ base: 2, sm: 4 }} mt="sm">
-              {(
-                [
-                  { num: "50", label: "Seasons", color: "orange" },
-                  { num: "700+", label: "Castaways", color: "red" },
-                  { num: "4", label: "Eras", color: "yellow.8" },
-                  { num: "Live", label: "Updates", color: "green" },
-                ] as const
-              ).map((stat) => (
-                <Paper
-                  key={stat.label}
-                  className={classes.statCard}
-                  withBorder
-                  radius="lg"
-                  p="md"
-                >
-                  <Text className={classes.statNumber} c={stat.color} fw={900}>
-                    {stat.num}
-                  </Text>
-                  <Text size="sm" c="dimmed" mt={4}>
-                    {stat.label}
-                  </Text>
-                </Paper>
-              ))}
-            </SimpleGrid>
-
-            <Button
-              variant="light"
-              color="orange"
-              size="md"
-              mt="sm"
-              component={Link}
-              to="/seasons"
-              leftSection={<IconSearch size={18} />}
-              className={classes.selfStart}
-            >
-              Browse all seasons
-            </Button>
-          </Stack>
-        </Container>
-      </section>
-
-      {/* Spoiler-Free Watch-Along — hero-weight centered layout */}
-      <section className={classes.watchAlongWrapper}>
-        <Container size={700} className={classes.watchAlongContent}>
-          <Stack gap="lg" align="center">
-            <ThemeIcon size={56} radius="xl" variant="light" color="grape">
-              <IconEyeOff size={28} />
-            </ThemeIcon>
-
-            <Text
-              size="sm"
-              fw={600}
-              c="dimmed"
-              tt="uppercase"
-              className={classes.featureEyebrow}
-            >
-              No spoilers. Ever.
-            </Text>
-
-            <Title order={2} className={classes.watchAlongTitle}>
-              Watch at your own pace
-            </Title>
-
-            <Text className={classes.watchAlongDescription} c="dimmed">
-              Rewatching a classic season with friends who've never seen it?
-              Catching up on a season you missed? Watch-along mode is built for
-              you. The competition creator controls which episodes are revealed.
-              Scores, standings, and predictions only reflect what your group
-              has actually watched. No accidental spoilers, no peeking ahead.
-              When you're ready for the next episode, advance the counter and
-              watch the points shift in real time.
-            </Text>
-
-            <SimpleGrid cols={{ base: 1, sm: 3 }} mt="sm" w="100%">
-              {(
-                [
-                  {
-                    title: "Creator controls pacing",
-                    desc: "Advance episodes when your group is ready. One tap is all it takes.",
-                    color: "grape",
-                  },
-                  {
-                    title: "Everything stays hidden",
-                    desc: "Scores, eliminations, prop bets, and standings are filtered to your current episode.",
-                    color: "indigo",
-                  },
-                  {
-                    title: "Works for any season",
-                    desc: "Play along with the current season or relive any of the 50 classic seasons.",
-                    color: "pink",
-                  },
-                ] as const
-              ).map((item) => (
-                <Paper
-                  key={item.title}
-                  className={classes.watchAlongCard}
-                  radius="md"
-                  p="md"
-                  style={
-                    {
-                      "--card-accent": `var(--mantine-color-${item.color}-5)`,
-                    } as React.CSSProperties
-                  }
-                >
-                  <Stack gap="xs">
-                    <Text fw={700} size="sm">
-                      {item.title}
-                    </Text>
-                    <Text size="sm" c="dimmed">
-                      {item.desc}
-                    </Text>
-                  </Stack>
-                </Paper>
-              ))}
-            </SimpleGrid>
-
-            <Button
-              variant="light"
-              color="grape"
-              size="md"
-              mt="sm"
-              component={Link}
-              to="/seasons"
-              leftSection={<IconPlayerPlay size={18} />}
-            >
-              Start a watch-along
-            </Button>
-          </Stack>
-        </Container>
-      </section>
-
-      {/* Balanced Scoring — compact layout with inline badges */}
-      <section className={classes.featureSectionTinted}>
-        <Container size={700} className={classes.compactContent}>
-          <Stack gap="md">
-            <Group gap="sm">
-              <ThemeIcon size={48} radius="xl" variant="light" color="violet">
-                <IconChartBar size={24} />
-              </ThemeIcon>
-              <div>
-                <Text
-                  size="sm"
-                  fw={600}
-                  c="dimmed"
-                  tt="uppercase"
-                  className={classes.featureEyebrow}
-                >
-                  Thoughtful scoring
-                </Text>
-                <Title order={2} className={classes.featureTitle}>
-                  A system that rewards smart drafting
-                </Title>
-              </div>
-            </Group>
-
-            <Text className={classes.featureDescription} c="dimmed">
-              31 scoring actions across 5 categories. No single path to victory.
-              Challenge beasts, strategic idol players, and social savants all
-              earn points their own way. Even early boots contribute:
-              elimination points scale by episode, so every pick matters.
-            </Text>
-
-            <Group gap="xs" wrap="wrap">
-              {(
-                [
-                  { label: "Challenges", color: "blue" },
-                  { label: "Milestones", color: "teal" },
-                  { label: "Idols", color: "yellow" },
-                  { label: "Advantages", color: "grape" },
-                  { label: "Other", color: "gray" },
-                ] as const
-              ).map((cat) => (
-                <Group
-                  key={cat.label}
-                  gap={8}
-                  className={classes.categoryBadge}
-                  wrap="nowrap"
-                >
-                  <div
-                    className={classes.categoryDot}
-                    style={{
-                      backgroundColor: `var(--mantine-color-${cat.color}-5)`,
-                    }}
+        {/* Program guide preview */}
+        <section aria-labelledby="home-seasons" className={classes.section}>
+          <div className={classes.inner}>
+            <div className={classes.head}>
+              <h2 id="home-seasons" className={classes.h2}>
+                Every season of Survivor
+              </h2>
+              <p className={classes.lead}>
+                All {SEASON_COUNT} US seasons and {CASTAWAY_COUNT}+ castaways
+                are ready to play, from the original Borneo to the season airing
+                now. Browse by era, search by name or location, and start a
+                competition on any of them.
+              </p>
+            </div>
+            <div className={classes.guide}>
+              {guideSeasons.map((meta) => {
+                const live = meta.id === liveSeasonId;
+                return (
+                  <SeasonTile
+                    key={meta.id}
+                    meta={meta}
+                    live={live}
+                    metaLine={
+                      live ? "Now airing" : getSeasonEra(meta.order).label
+                    }
                   />
-                  <Text size="sm" fw={600}>
-                    {cat.label}
-                  </Text>
-                </Group>
-              ))}
-            </Group>
-          </Stack>
-        </Container>
-      </section>
-
-      {/* Prop Bets — compact with curated list */}
-      <section className={classes.featureSectionLight}>
-        <Container size={700} className={classes.compactContent}>
-          <Stack gap="md">
-            <Group gap="sm">
-              <ThemeIcon size={48} radius="xl" variant="light" color="orange">
-                <IconCrystalBall size={24} />
-              </ThemeIcon>
-              <div>
-                <Text
-                  size="sm"
-                  fw={600}
-                  c="dimmed"
-                  tt="uppercase"
-                  className={classes.featureEyebrow}
-                >
-                  11 Predictions
-                </Text>
-                <Title order={2} className={classes.featureTitle}>
-                  Predict the game before it starts
-                </Title>
-              </div>
-            </Group>
-
-            <Text className={classes.featureDescription} c="dimmed">
-              After the draft, every participant fills out pre-season
-              predictions. Correct calls earn up to 44 bonus points, enough to
-              swing the standings even if your draft goes sideways.
-            </Text>
-
-            <SimpleGrid cols={{ base: 1, sm: 2 }}>
-              {[
-                "Pick the season winner",
-                "First player eliminated",
-                "Most individual immunity wins",
-                "Most idol finds",
-                "Successful Shot in the Dark?",
-                "Medical evacuation?",
-              ].map((bet) => (
-                <Group
-                  key={bet}
-                  gap="sm"
-                  className={classes.propBetItem}
-                  wrap="nowrap"
-                >
-                  <ThemeIcon
-                    size={24}
-                    radius="xl"
-                    variant="light"
-                    color="orange"
-                  >
-                    <IconCrystalBall size={12} />
-                  </ThemeIcon>
-                  <Text size="sm" fw={500}>
-                    {bet}
-                  </Text>
-                </Group>
-              ))}
-            </SimpleGrid>
-
-            <Text size="sm" c="dimmed" fs="italic">
-              Plus 5 more predictions covering idols, advantages, and journeys.
-            </Text>
-          </Stack>
-        </Container>
-      </section>
-
-      {/* Real-Time Draft — callout-led layout */}
-      <section className={classes.featureSectionTinted}>
-        <Container size={700} className={classes.featureContent}>
-          <Stack gap="lg">
-            <Group gap="sm">
-              <ThemeIcon size={48} radius="xl" variant="light" color="cyan">
-                <IconUsers size={24} />
-              </ThemeIcon>
-              <div>
-                <Text
-                  size="sm"
-                  fw={600}
-                  c="dimmed"
-                  tt="uppercase"
-                  className={classes.featureEyebrow}
-                >
-                  Real-time multiplayer
-                </Text>
-                <Title order={2} className={classes.featureTitle}>
-                  Draft night, every night
-                </Title>
-              </div>
-            </Group>
-
-            <Text className={classes.draftCallout}>
-              Share a link. Friends join instantly.
-            </Text>
-
-            <Text className={classes.featureDescription} c="dimmed">
-              Browse every season and castaway without an account. When you're
-              ready to play, a free account is all it takes to kick off the
-              draft, watch the animated order reveal, and take turns picking
-              from the full cast, all in real time on any device.
-            </Text>
-
-            <Stack gap="sm">
-              {(
-                [
-                  {
-                    icon: IconUsers,
-                    title: "One link, one free account",
-                    desc: "Friends click your link, create a free account, and join.",
-                    color: "cyan",
-                  },
-                  {
-                    icon: IconTargetArrow,
-                    title: "Animated order reveal",
-                    desc: "A slot-machine-style reveal builds anticipation before the first pick.",
-                    color: "blue",
-                  },
-                  {
-                    icon: IconLivePhoto,
-                    title: "Live turn-by-turn updates",
-                    desc: "Every pick syncs instantly across all devices.",
-                    color: "teal",
-                  },
-                ] as const
-              ).map((item) => (
-                <Group
-                  key={item.title}
-                  gap="md"
-                  className={classes.draftHighlight}
-                  wrap="nowrap"
-                >
-                  <ThemeIcon
-                    size={36}
-                    radius="xl"
-                    variant="light"
-                    color={item.color}
-                  >
-                    <item.icon size={18} />
-                  </ThemeIcon>
-                  <div>
-                    <Text fw={600} size="sm">
-                      {item.title}
-                    </Text>
-                    <Text size="xs" c="dimmed">
-                      {item.desc}
-                    </Text>
-                  </div>
-                </Group>
-              ))}
-            </Stack>
-
-            <Button
-              variant="light"
-              color="cyan"
-              size="md"
-              mt="sm"
-              component={Link}
-              to="/seasons"
-              leftSection={<IconUsers size={18} />}
-              className={classes.selfStart}
-            >
-              Pick a season and draft
-            </Button>
-          </Stack>
-        </Container>
-      </section>
-
-      {/* Player Trades */}
-      <section className={classes.tradeSection}>
-        <Container size={700} className={classes.tradeContent}>
-          <SimpleGrid
-            cols={{ base: 1, sm: 2 }}
-            spacing={{ base: "xl", sm: 48 }}
-            className={classes.tradeLayout}
-          >
-            <Stack gap="lg" className={classes.tradeCopy}>
-              <Group gap="sm">
-                <ThemeIcon size={48} radius="xl" variant="light" color="teal">
-                  <IconArrowsExchange size={24} />
-                </ThemeIcon>
-                <div>
-                  <Text
-                    size="sm"
-                    fw={600}
-                    c="dimmed"
-                    tt="uppercase"
-                    className={classes.featureEyebrow}
-                  >
-                    Midseason moves
-                  </Text>
-                  <Title order={2} className={classes.featureTitle}>
-                    Outwit your friends after the draft
-                  </Title>
-                </div>
-              </Group>
-
-              <Text className={classes.featureDescription} c="dimmed">
-                Your opening roster is only the beginning. Package active
-                players into an offer, send it to another participant, and
-                negotiate your way back into contention.
-              </Text>
-
-              <Stack gap="md" className={classes.tradeBenefits}>
-                <div className={classes.tradeBenefit}>
-                  <Text className={classes.tradeBenefitNumber}>01</Text>
-                  <Text size="sm">
-                    <Text component="span" inherit fw={700}>
-                      Build the deal.
-                    </Text>{" "}
-                    Swap one or more active players in a single offer.
-                  </Text>
-                </div>
-                <div className={classes.tradeBenefit}>
-                  <Text className={classes.tradeBenefitNumber}>02</Text>
-                  <Text size="sm">
-                    <Text component="span" inherit fw={700}>
-                      Stay in control.
-                    </Text>{" "}
-                    Accept, reject, or withdraw while an offer is pending.
-                  </Text>
-                </div>
-                <div className={classes.tradeBenefit}>
-                  <Text className={classes.tradeBenefitNumber}>03</Text>
-                  <Text size="sm">
-                    <Text component="span" inherit fw={700}>
-                      Keep scoring fair.
-                    </Text>{" "}
-                    Deals take effect at the next episode reveal, so past points
-                    stay put.
-                  </Text>
-                </div>
-              </Stack>
-
-              <Button
-                variant="light"
-                color="teal"
-                size="md"
-                component={Link}
-                to={slimUser ? "/competitions" : "/seasons"}
-                leftSection={<IconArrowsExchange size={18} />}
-                className={classes.selfStart}
-              >
-                {slimUser
-                  ? "Open your competitions"
-                  : "Draft a team to start trading"}
+                );
+              })}
+            </div>
+            <div className={classes.foot}>
+              <Button component={Link} to="/seasons" variant="outline">
+                Browse all seasons
               </Button>
-            </Stack>
+            </div>
+          </div>
+        </section>
 
-            <Paper
-              className={classes.tradePreview}
-              withBorder
-              radius="xl"
-              p={{ base: "lg", sm: "xl" }}
-              aria-label="Example player trade"
-            >
-              <Group justify="space-between" align="flex-start" gap="md">
-                <div>
-                  <Text fw={800}>Trade offer</Text>
-                  <Text size="xs" c="dimmed" mt={2}>
-                    A roster shake-up is on the table
-                  </Text>
-                </div>
-                <Text className={classes.tradeStatus} size="xs" fw={700}>
-                  Awaiting reply
-                </Text>
-              </Group>
+        {/* Watch-along: the reveal strip example */}
+        <section
+          aria-labelledby="home-watch"
+          className={`${classes.section} ${classes.sectionPlate}`}
+        >
+          <div className={classes.inner}>
+            <div className={classes.head}>
+              <h2 id="home-watch" className={classes.h2}>
+                Watch at your own pace
+              </h2>
+              <p className={classes.lead}>
+                Every competition has its own current episode, set by its
+                creator, so groups on different seasons and paces never see each
+                other's results. Scores, standings, and predictions only reflect
+                what your group has actually watched. When you're ready for the
+                next episode, advance the counter and watch the points shift.
+              </p>
+            </div>
+            <figure className={`${classes.example} ${classes.exampleStrip}`}>
+              <RevealStrip
+                total={EXAMPLE_EPISODES}
+                revealedThrough={exampleRevealed}
+                legend
+                ariaLabel="Example episode reveal"
+                onSelect={setExampleRevealed}
+              />
+              <ol className={classes.exampleTotals} aria-live="polite">
+                {exampleTotals.map((row, index) => (
+                  <li key={row.name}>
+                    <span
+                      className={`${classes.rank} ${classes.pickRank} ${index === 0 ? classes.rankFirst : ""}`}
+                    >
+                      {index + 1}
+                    </span>
+                    <span>{row.name}</span>
+                    <span className={classes.exampleTotal}>
+                      {row.points}
+                      <small>pts</small>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </figure>
+          </div>
+        </section>
 
-              <div className={classes.tradeSwap}>
-                <div className={classes.tradeSide}>
-                  <Text size="xs" fw={700} c="dimmed" tt="uppercase" lts={0.8}>
-                    You send
-                  </Text>
-                  <Text fw={700} mt={6}>
-                    Your active pick
-                  </Text>
-                </div>
-
-                <ThemeIcon
-                  className={classes.tradeSwapIcon}
-                  size={42}
-                  radius="xl"
-                  variant="gradient"
-                  gradient={{ from: "teal", to: "cyan" }}
-                >
-                  <IconArrowsExchange size={21} />
-                </ThemeIcon>
-
-                <div className={classes.tradeSide}>
-                  <Text size="xs" fw={700} c="dimmed" tt="uppercase" lts={0.8}>
-                    You receive
-                  </Text>
-                  <Text fw={700} mt={6}>
-                    A friend's pick
-                  </Text>
-                </div>
+        {/* Scoring */}
+        <section aria-labelledby="home-scoring" className={classes.section}>
+          <div className={classes.inner}>
+            <div className={classes.head}>
+              <h2 id="home-scoring" className={classes.h2}>
+                A system that rewards smart drafting
+              </h2>
+              <p className={classes.lead}>
+                {ACTION_COUNT} scoring actions across {CATEGORY_COUNT}{" "}
+                categories, so challenge beasts, idol players, and social
+                savants all earn points their own way. Even early boots
+                contribute: elimination points scale by episode, so every pick
+                matters.
+              </p>
+              <div className={classes.cats}>
+                {CATEGORY_ORDER.map((category) => (
+                  <Badge
+                    key={category}
+                    variant="filled"
+                    color={CATEGORY_COLORS[category]}
+                  >
+                    {category}
+                  </Badge>
+                ))}
               </div>
+            </div>
+            <figure className={`${classes.example} ${classes.exampleNarrow}`}>
+              <Board title="Sample actions" flush scroll>
+                <Table className={classes.table}>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>Action</Table.Th>
+                      <Table.Th>Category</Table.Th>
+                      <Table.Th ta="right">Points</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {EXAMPLE_ACTIONS.map((action) => {
+                      const entry = scoringByAction.get(action);
+                      if (!entry || entry.fixed_value == null) return null;
+                      return (
+                        <Table.Tr key={action}>
+                          <Table.Td>
+                            <span className={classes.action}>
+                              {entry.description.replace(/\.$/, "")}
+                            </span>
+                          </Table.Td>
+                          <Table.Td>
+                            <Badge
+                              variant="filled"
+                              color={CATEGORY_COLORS[entry.category]}
+                            >
+                              {entry.category}
+                            </Badge>
+                          </Table.Td>
+                          <Table.Td ta="right">
+                            <span
+                              className={`${classes.scoreVal} ${action === "win_survivor" ? classes.flame : ""}`}
+                            >
+                              +{entry.fixed_value}
+                            </span>
+                          </Table.Td>
+                        </Table.Tr>
+                      );
+                    })}
+                  </Table.Tbody>
+                </Table>
+              </Board>
+            </figure>
+            <div className={classes.foot}>
+              <Button component={Link} to="/scoring" variant="outline">
+                How scoring works
+              </Button>
+            </div>
+          </div>
+        </section>
 
-              <Group gap="xs" wrap="nowrap" className={classes.tradeTiming}>
-                <IconClock size={17} aria-hidden="true" />
-                <Text size="sm" fw={600}>
-                  Applies at the next episode reveal
-                </Text>
-              </Group>
-            </Paper>
-          </SimpleGrid>
-        </Container>
-      </section>
+        {/* Predictions */}
+        <section
+          aria-labelledby="home-bets"
+          className={`${classes.section} ${classes.sectionPlate}`}
+        >
+          <div className={classes.inner}>
+            <div className={classes.head}>
+              <h2 id="home-bets" className={classes.h2}>
+                Predict the game before it starts
+              </h2>
+              <p className={classes.lead}>
+                After the draft, every participant answers {BET_COUNT}{" "}
+                predictions. Correct calls earn up to {MAX_BET_POINTS} bonus
+                points, enough to swing the standings even if your draft goes
+                sideways.
+              </p>
+            </div>
+            <figure className={`${classes.example} ${classes.exampleNarrow}`}>
+              <ol className={classes.bets}>
+                {EXAMPLE_BETS.map((key) => {
+                  const bet = PropBetsQuestions[key];
+                  return (
+                    <li key={key}>
+                      <span>{bet.description}</span>
+                      <span className={classes.betPts}>
+                        {bet.point_value}
+                        <small>pts</small>
+                      </span>
+                    </li>
+                  );
+                })}
+              </ol>
+            </figure>
+          </div>
+        </section>
 
-      {/* Closing CTA */}
-      <section className={classes.ctaSection}>
-        <Container size={700} className={classes.ctaContent}>
-          <Stack align="center" gap="lg">
-            <Title order={2} className={classes.ctaTitle}>
-              Ready to play?
-            </Title>
-            <Text
-              size="lg"
-              c="dimmed"
-              maw={420}
-              ta="center"
-              className={classes.ctaDescription}
-            >
-              Pick a season, invite your friends, and find out who really knows
-              Survivor best.
-            </Text>
-            <Button
-              size="xl"
-              variant="gradient"
-              gradient={{ from: "blue", to: "cyan" }}
-              component={Link}
-              to="/seasons"
-              leftSection={<IconFlame size={22} />}
-            >
-              Browse seasons
-            </Button>
-          </Stack>
-        </Container>
-      </section>
-    </>
+        {/* Draft night */}
+        <section aria-labelledby="home-draft" className={classes.section}>
+          <div className={classes.inner}>
+            <div className={classes.head}>
+              <h2 id="home-draft" className={classes.h2}>
+                Draft night, every night
+              </h2>
+              <p className={classes.lead}>
+                Share a link and friends join with a free account, then everyone
+                takes turns picking from the full cast in real time on any
+                device, after an animated order reveal. Browsing seasons and
+                castaways never needs an account.
+              </p>
+            </div>
+            <figure className={`${classes.example} ${classes.exampleNarrow}`}>
+              <ol className={classes.picks}>
+                {EXAMPLE_STANDINGS.map((row, index) => (
+                  <li key={row.name}>
+                    <span className={`${classes.rank} ${classes.pickRank}`}>
+                      {index + 1}
+                    </span>
+                    <span>
+                      {row.name} picks {ordinal(index + 1)}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </figure>
+          </div>
+        </section>
+
+        {/* Trades */}
+        <section
+          aria-labelledby="home-trades"
+          className={`${classes.section} ${classes.sectionPlate}`}
+        >
+          <div className={classes.inner}>
+            <div className={classes.head}>
+              <h2 id="home-trades" className={classes.h2}>
+                Outwit your friends after the draft
+              </h2>
+              <p className={classes.lead}>
+                Package active players into an offer, send it to another
+                participant, and negotiate your way back into contention.
+                Accept, reject, or withdraw while an offer is pending. Deals
+                take effect at the next episode reveal, so past points stay put.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* Closing slate */}
+        <section aria-labelledby="home-cta" className={classes.section}>
+          <div className={classes.inner}>
+            <div className={classes.closing}>
+              <div>
+                <h2 id="home-cta" className={classes.closingTitle}>
+                  Ready to play?
+                </h2>
+                <p className={classes.closingText}>
+                  Pick a season, invite your friends, and find out who really
+                  knows Survivor best.
+                </p>
+              </div>
+              <Button size="lg" component={Link} to="/seasons">
+                Browse seasons
+              </Button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
   );
 };
+
+const ORDINALS = ["first", "second", "third", "fourth", "fifth", "sixth"];
+const ordinal = (n: number) => ORDINALS[n - 1] ?? `${n}th`;

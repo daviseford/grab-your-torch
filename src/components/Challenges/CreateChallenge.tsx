@@ -1,19 +1,11 @@
 import {
-  Accordion,
   Alert,
-  Box,
   Button,
-  Center,
-  Group,
-  Loader,
   MultiSelect,
   NumberInput,
-  Paper,
   Select,
-  SimpleGrid,
   Text,
   TextInput,
-  Title,
 } from "@mantine/core";
 import { hasLength, useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
@@ -30,6 +22,15 @@ import { useTeamAssignments } from "../../hooks/useTeamAssignments";
 import { useTeams } from "../../hooks/useTeams";
 import { Challenge, ChallengeWinActions, Team } from "../../types";
 import { getPlayersOnTeam } from "../../utils/teamUtils";
+import { EmptySlate } from "../Layout";
+import {
+  CreatePanel,
+  FormActions,
+  FormRow,
+  FormStack,
+  LoadingRow,
+  PanelAside,
+} from "../SeasonAdmin/SeasonAdminParts";
 
 export const CreateChallenge = () => {
   const { data: season, isLoading } = useSeason();
@@ -103,19 +104,11 @@ export const CreateChallenge = () => {
   }, [currentEpisodeNum]);
 
   if (isLoading) {
-    return (
-      <Center>
-        <Loader size="xl" />
-      </Center>
-    );
+    return <LoadingRow label="Loading season" />;
   }
 
   if (!season?.episodes?.length) {
-    return (
-      <Center>
-        <Text>Create an Episode first before adding events</Text>
-      </Center>
-    );
+    return <EmptySlate title="Create an Episode first before adding events" />;
   }
 
   const handleSubmit = async (values: Challenge) => {
@@ -188,102 +181,100 @@ export const CreateChallenge = () => {
     .map((x) => ({ value: x.castaway_id, label: x.full_name }));
 
   return (
-    <Accordion defaultValue="create-challenge">
-      <Accordion.Item value="create-challenge">
-        <Accordion.Control>
-          <Title order={4}>Add Challenge Result</Title>
-        </Accordion.Control>
-        <Accordion.Panel>
-          <SimpleGrid cols={{ base: 1, md: 2 }}>
-            <Box maw={420} mx="auto">
-              <form onSubmit={form.onSubmit((values) => handleSubmit(values))}>
-                <TextInput
-                  withAsterisk
-                  readOnly
-                  label="Season #"
-                  value={form.values.season_num}
-                />
+    <CreatePanel
+      id="create-challenge"
+      title="Add Challenge Result"
+      aside={
+        <PanelAside title="Recording guidance">
+          <Text size="sm" c="dimmed">
+            Use the episode number to place this result correctly in the season
+            timeline. Team selection is optional and only helps pre-fill winners
+            when team assignments exist.
+          </Text>
+          {!hasEpisodeSnapshot && teamSelectData.length > 0 && (
+            <Alert color="orange" variant="light" mt="xs">
+              No team assignments exist for this episode yet, so winners need to
+              be selected manually.
+            </Alert>
+          )}
+        </PanelAside>
+      }
+    >
+      <form
+        onSubmit={form.onSubmit((values) => handleSubmit(values))}
+        aria-label="Add challenge result"
+      >
+        <FormStack>
+          <FormRow short>
+            <TextInput
+              withAsterisk
+              readOnly
+              label="Season #"
+              value={form.values.season_num}
+            />
 
-                <NumberInput
-                  withAsterisk
-                  label="Episode #"
-                  min={1}
-                  max={season?.episodes.length}
-                  {...form.getInputProps("episode_num")}
-                />
+            <FormRow>
+              <NumberInput
+                withAsterisk
+                label="Episode #"
+                min={1}
+                max={season?.episodes.length}
+                {...form.getInputProps("episode_num")}
+              />
 
-                <NumberInput
-                  withAsterisk
-                  label="Order"
-                  min={1}
-                  {...form.getInputProps("order")}
-                />
+              <NumberInput
+                withAsterisk
+                label="Order"
+                min={1}
+                {...form.getInputProps("order")}
+              />
+            </FormRow>
+          </FormRow>
 
-                {teamSelectData.length > 0 && (
-                  <Select
-                    label="Winning Team (optional)"
-                    placeholder={
-                      hasEpisodeSnapshot
-                        ? "Select a team to auto-fill winners"
-                        : "No team assignments for this episode"
-                    }
-                    description={
-                      !hasEpisodeSnapshot
-                        ? "Assign players to teams for this episode first"
-                        : undefined
-                    }
-                    data={teamSelectData}
-                    clearable
-                    searchable
-                    disabled={!hasEpisodeSnapshot}
-                    value={form.values.winning_team_id ?? null}
-                    onChange={handleWinningTeamChange}
-                  />
-                )}
+          {teamSelectData.length > 0 && (
+            <Select
+              label="Winning Team (optional)"
+              placeholder={
+                hasEpisodeSnapshot
+                  ? "Select a team to auto-fill winners"
+                  : "No team assignments for this episode"
+              }
+              description={
+                !hasEpisodeSnapshot
+                  ? "Assign players to teams for this episode first"
+                  : undefined
+              }
+              data={teamSelectData}
+              clearable
+              searchable
+              disabled={!hasEpisodeSnapshot}
+              value={form.values.winning_team_id ?? null}
+              onChange={handleWinningTeamChange}
+            />
+          )}
 
-                <MultiSelect
-                  withAsterisk
-                  label="Winning Players"
-                  data={playerOptions}
-                  searchable
-                  description="Choose the winner or winners for this challenge. Team winners can be auto-filled from the selected team."
-                  {...form.getInputProps("winning_castaways")}
-                />
+          <MultiSelect
+            withAsterisk
+            label="Winning Players"
+            data={playerOptions}
+            searchable
+            description="Choose the winner or winners for this challenge. Team winners can be auto-filled from the selected team."
+            {...form.getInputProps("winning_castaways")}
+          />
 
-                <Select
-                  withAsterisk
-                  label="Challenge Type"
-                  data={ChallengeWinActions}
-                  searchable
-                  {...form.getInputProps("variant")}
-                />
+          <Select
+            withAsterisk
+            label="Challenge Type"
+            data={ChallengeWinActions}
+            searchable
+            {...form.getInputProps("variant")}
+          />
 
-                <Group justify="flex-end" mt="md">
-                  <Button type="submit">Save Challenge</Button>
-                </Group>
-              </form>
-            </Box>
-            <Box>
-              <Paper withBorder p="md" radius="md">
-                <Title order={5} mb="xs">
-                  Recording guidance
-                </Title>
-                <Text size="sm" c="dimmed">
-                  Use the episode number to place this result correctly in the
-                  season timeline. Team selection is optional and only helps
-                  pre-fill winners when team assignments exist.
-                </Text>
-                {!hasEpisodeSnapshot && teamSelectData.length > 0 && (
-                  <Alert color="yellow" variant="light" mt="md">
-                    No team assignments exist for this episode yet, so winners
-                    need to be selected manually.
-                  </Alert>
-                )}
-              </Paper>
-            </Box>
-          </SimpleGrid>
-        </Accordion.Panel>
-      </Accordion.Item>
-    </Accordion>
+          <FormActions>
+            <Button type="submit">Save Challenge</Button>
+          </FormActions>
+        </FormStack>
+      </form>
+    </CreatePanel>
   );
 };

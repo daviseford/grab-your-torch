@@ -1,11 +1,189 @@
-.cardNegative {
-  border-left: 3px solid
-    light-dark(var(--mantine-color-red-4), var(--mantine-color-red-7));
+/*
+ * Season stats: castaway stat slates in a grid, then the roster stats board.
+ * Tone is a mark (the Ember rule on negative stats), rank is text.
+ */
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-lg);
+  min-width: 0;
 }
 
-/* Equal-height stat cards on mobile so grid rows align */
-@media (max-width: 62em) {
-  .card {
-    min-height: 10rem;
+.groupLabel {
+  margin: 0 0 var(--mantine-spacing-xs);
+  font-family: var(--mantine-headings-font-family);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--mantine-spacing-sm);
+  align-items: start;
+
+  @media (max-width: $mantine-breakpoint-md) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.card {
+  display: grid;
+  gap: var(--mantine-spacing-sm);
+  align-content: start;
+  min-width: 0;
+  padding: 14px 16px;
+  background: var(--gyt-panel);
+  border: 1px solid var(--gyt-rule);
+  border-radius: var(--mantine-radius-md);
+}
+
+.cardNegative .cardTitle {
+  color: var(--mantine-color-red-7);
+}
+
+.cardTitle {
+  margin: 0;
+  font-family: var(--mantine-headings-font-family);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+
+.cardSubtitle {
+  margin-top: 2px;
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+}
+
+.winner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.face,
+.facePlaceholder {
+  display: block;
+  width: 36px;
+  height: 46px;
+  border-radius: 3px;
+  object-fit: cover;
+  object-position: top;
+  flex-shrink: 0;
+}
+
+.facePlaceholder {
+  display: grid;
+  place-items: center;
+  background: var(--gyt-plate);
+  color: var(--mantine-color-dark-1);
+  font-family: var(--mantine-headings-font-family);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.winnerName {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: var(--mantine-font-size-sm);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.value {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 1.375rem;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.value small {
+  margin-left: 4px;
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--mantine-color-dimmed);
+}
+
+.tied {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: var(--mantine-font-size-sm);
+  line-height: 1.3;
+}
+
+.rosterLabel {
+  min-width: 160px;
+}
+
+.rosterTitle {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: 0.75rem;
+  line-height: 1.25;
+}
+
+.rosterDescription {
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+}
+
+.cell {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.cellBest {
+  color: var(--mantine-color-green-8);
+  font-weight: 700;
+}
+
+.cellWorst {
+  color: var(--mantine-color-red-7);
+  font-weight: 700;
+}
+
+[data-mantine-color-scheme="dark"] .cellBest {
+  color: var(--mantine-color-green-4);
+}
+
+[data-mantine-color-scheme="dark"] .cellWorst {
+  color: var(--mantine-color-red-4);
+}
+
+.rank {
+  font-family: var(--mantine-headings-font-family);
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 600;
+  color: var(--mantine-color-dimmed);
+}
+
+.cellValue {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: var(--mantine-font-size-sm);
+}
+
+.cellValue span {
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 400;
+  color: var(--mantine-color-dimmed);
+}
+
+.cellDetail {
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
 }

@@ -1,6 +1,5 @@
 import {
   Alert,
-  Avatar,
   Badge,
   Box,
   Button,
@@ -13,15 +12,8 @@ import {
 } from "@mantine/core";
 import {
   IconAlertCircle,
-  IconArrowRight,
   IconArrowsExchange,
-  IconCheck,
-  IconChevronDown,
-  IconClock,
-  IconHistory,
   IconLock,
-  IconPlus,
-  IconX,
 } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
 import { useChallenges } from "../../hooks/useChallenges";
@@ -39,6 +31,7 @@ import { useUser } from "../../hooks/useUser";
 import { CastawayId, Player, Trade } from "../../types";
 import { getParticipantName } from "../../utils/misc";
 import { getTradeLockEpisode } from "../../utils/tradeUtils";
+import { EmptySlate, StatusBadge } from "../Layout";
 import { ProposeTradeModal } from "./ProposeTradeModal";
 import styles from "./TradesSection.module.css";
 
@@ -62,7 +55,15 @@ const getPlayers = (
       },
   );
 
-const StatusBadge = ({
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part.charAt(0))
+    .join("")
+    .toUpperCase();
+
+const TradeStatusBadge = ({
   trade,
   currentEpisode,
 }: {
@@ -80,43 +81,47 @@ const StatusBadge = ({
       typeof cutoff === "number" &&
       (currentEpisode === null || cutoff <= currentEpisode + 1);
     return (
-      <Badge
-        color="green"
-        variant="light"
-        leftSection={<IconCheck size={12} />}
-      >
+      <Badge color="green" variant="filled" size="sm">
         {showCutoff ? `Accepted · from Ep ${cutoff}` : "Accepted"}
       </Badge>
     );
   }
   if (trade.status === "rejected")
     return (
-      <Badge color="red" variant="light" leftSection={<IconX size={12} />}>
+      <Badge color="red" variant="outline" size="sm">
         Declined
       </Badge>
     );
   if (trade.status === "canceled")
     return (
-      <Badge color="gray" variant="light" leftSection={<IconX size={12} />}>
+      <Badge color="gray" variant="outline" size="sm">
         Canceled
       </Badge>
     );
-  return (
-    <Badge color="yellow" variant="light" leftSection={<IconClock size={12} />}>
-      Pending
-    </Badge>
-  );
+  return <StatusBadge kind="pending" size="sm" />;
 };
 
 const PlayerList = ({ players }: { players: TradePlayer[] }) => (
   <Stack gap={6}>
     {players.map((player) => (
-      <Group key={player.castaway_id} gap="xs" wrap="nowrap">
-        <Avatar src={player.img || undefined} alt="" size={30} />
-        <Text size="sm" fw={600} lh={1.25}>
-          {player.full_name}
-        </Text>
-      </Group>
+      <div key={player.castaway_id} className={styles.playerRow}>
+        {player.img ? (
+          <img
+            src={player.img}
+            alt=""
+            width={30}
+            height={38}
+            loading="lazy"
+            decoding="async"
+            className={styles.face}
+          />
+        ) : (
+          <span className={styles.facePlaceholder} aria-hidden="true">
+            {initials(player.full_name)}
+          </span>
+        )}
+        <span className={styles.playerName}>{player.full_name}</span>
+      </div>
     ))}
   </Stack>
 );
@@ -171,9 +176,7 @@ const TradeOffer = ({
   <Box className={styles.offer} data-trade-id={trade.id}>
     <Group justify="space-between" align="flex-start" gap="sm" wrap="nowrap">
       <div>
-        <Text fw={700} size="sm">
-          {title}
-        </Text>
+        <Text className={styles.offerTitle}>{title}</Text>
         <Text size="xs" c="dimmed">
           {subtitle}
         </Text>
@@ -190,6 +193,33 @@ const TradeOffer = ({
 
     {actions && <div className={styles.offerActions}>{actions}</div>}
   </Box>
+);
+
+const GroupHead = ({
+  title,
+  count,
+  muted = false,
+  aside,
+}: {
+  title: string;
+  count?: number;
+  muted?: boolean;
+  aside?: React.ReactNode;
+}) => (
+  <div className={styles.groupHead}>
+    <div className={styles.groupTitle}>
+      <Title order={4}>{title}</Title>
+      {count != null && (
+        <span
+          className={`${styles.count} ${muted ? styles.countMuted : ""}`}
+          aria-label={`${count} ${count === 1 ? "offer" : "offers"}`}
+        >
+          {count}
+        </span>
+      )}
+    </div>
+    {aside}
+  </div>
 );
 
 type TradesSectionProps = {
@@ -343,7 +373,7 @@ export const TradesSection = ({
     <Stack gap="lg">
       {lockEpisode && !competition.finished && (
         <Alert
-          variant="light"
+          variant="outline"
           color="orange"
           icon={<IconLock size={18} />}
           title="Trades are locked"
@@ -354,7 +384,7 @@ export const TradesSection = ({
 
       {tradesError && (
         <Alert
-          variant="light"
+          variant="outline"
           color="red"
           icon={<IconAlertCircle size={18} />}
           title="Trade activity is unavailable"
@@ -366,25 +396,19 @@ export const TradesSection = ({
       )}
 
       {isParticipant && !competition.finished && (
-        <Group justify="flex-end">
+        <div className={styles.toolbar}>
           <Button
-            leftSection={<IconPlus size={17} />}
             onClick={() => setModalOpen(true)}
             disabled={tradingClosed || !tradesLoaded || !!tradesError}
           >
             Propose trade
           </Button>
-        </Group>
+        </div>
       )}
 
       {incoming.length > 0 && (
         <Stack gap="sm">
-          <Group gap="xs">
-            <Title order={4}>Incoming offers</Title>
-            <Badge color="grape" variant="light" circle>
-              {incoming.length}
-            </Badge>
-          </Group>
+          <GroupHead title="Incoming offers" count={incoming.length} />
           {incoming.map((trade) => {
             const view = perspective(trade);
             const isResolving = resolvingTradeId === trade.id;
@@ -395,16 +419,15 @@ export const TradesSection = ({
                 trade={trade}
                 {...view}
                 status={
-                  <Badge color="grape" variant="light">
+                  <StatusBadge kind="live" size="sm">
                     Your move
-                  </Badge>
+                  </StatusBadge>
                 }
                 actions={
-                  <Group gap="xs" justify="flex-end">
+                  <>
                     <Button
                       variant="subtle"
                       color="red"
-                      leftSection={<IconX size={16} />}
                       disabled={isResolving}
                       onClick={() =>
                         resolveTrade(trade.id, () => rejectTrade(trade))
@@ -413,8 +436,6 @@ export const TradesSection = ({
                       Decline
                     </Button>
                     <Button
-                      color="green"
-                      leftSection={<IconCheck size={16} />}
                       disabled={
                         tradingClosed ||
                         (competition.current_episode === null &&
@@ -439,7 +460,7 @@ export const TradesSection = ({
                     >
                       Accept offer
                     </Button>
-                  </Group>
+                  </>
                 }
               />
             );
@@ -449,12 +470,7 @@ export const TradesSection = ({
 
       {outgoing.length > 0 && (
         <Stack gap="sm">
-          <Group gap="xs">
-            <Title order={4}>Sent offers</Title>
-            <Badge color="yellow" variant="light" circle>
-              {outgoing.length}
-            </Badge>
-          </Group>
+          <GroupHead title="Sent offers" count={outgoing.length} muted />
           {outgoing.map((trade) => {
             const view = perspective(trade);
             const isResolving = resolvingTradeId === trade.id;
@@ -465,7 +481,7 @@ export const TradesSection = ({
                 trade={trade}
                 {...view}
                 status={
-                  <StatusBadge
+                  <TradeStatusBadge
                     trade={trade}
                     currentEpisode={competition.current_episode}
                   />
@@ -501,27 +517,21 @@ export const TradesSection = ({
 
       {tradesLoaded && history.length > 0 && (
         <Stack gap="sm">
-          <Group justify="space-between" gap="sm" wrap="nowrap">
-            <Group gap="xs" wrap="nowrap">
-              <IconHistory size={18} color="var(--mantine-color-dimmed)" />
-              <Title order={4}>Trade history</Title>
-            </Group>
-            <Text
-              size="xs"
-              c="dimmed"
-              style={{ whiteSpace: "nowrap" }}
-              aria-live="polite"
-            >
-              Showing {visibleHistory.length} of {history.length}
-            </Text>
-          </Group>
+          <GroupHead
+            title="Trade history"
+            aside={
+              <span className={styles.historyCount} aria-live="polite">
+                Showing {visibleHistory.length} of {history.length}
+              </span>
+            }
+          />
           {visibleHistory.map((trade) => (
             <TradeOffer
               key={trade.id}
               trade={trade}
               {...perspective(trade)}
               status={
-                <StatusBadge
+                <TradeStatusBadge
                   trade={trade}
                   currentEpisode={competition.current_episode}
                 />
@@ -530,10 +540,9 @@ export const TradesSection = ({
           ))}
           {remainingHistoryCount > 0 && (
             <Button
-              variant="light"
+              variant="default"
               size="md"
               fullWidth
-              leftSection={<IconChevronDown size={17} />}
               onClick={() =>
                 setHistoryVisibility((current) => ({
                   competitionId: competition.id,
@@ -551,17 +560,9 @@ export const TradesSection = ({
       )}
 
       {tradesLoaded && trades.length === 0 && (
-        <Box className={styles.emptyState}>
-          <div className={styles.emptyIcon} aria-hidden="true">
-            <IconArrowRight size={22} />
-          </div>
-          <div>
-            <Text fw={700}>No trade activity yet</Text>
-            <Text size="sm" c="dimmed">
-              Propose a swap when you spot a deal that helps both teams.
-            </Text>
-          </div>
-        </Box>
+        <EmptySlate title="No trade activity yet">
+          Propose a swap when you spot a deal that helps both teams.
+        </EmptySlate>
       )}
 
       {myUid && !tradesError && (

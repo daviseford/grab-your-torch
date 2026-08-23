@@ -1,21 +1,19 @@
-import {
-  Alert,
-  Badge,
-  Button,
-  Center,
-  Group,
-  Loader,
-  Paper,
-  Stack,
-  Text,
-  Title,
-} from "@mantine/core";
+import { Button } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
-import { IconAlertCircle, IconLogin, IconUserPlus } from "@tabler/icons-react";
+import { IconAlertCircle } from "@tabler/icons-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { saveAuthIntent, type AuthIntent } from "../components/Auth/authIntent";
+import {
+  EmptySlate,
+  Notice,
+  PageIntro,
+  RouteLoading,
+  StatusBadge,
+  useBugContext,
+} from "../components/Layout";
+import { SEASON_METADATA, type SeasonMeta } from "../data/season-metadata";
 import { useAuthContinuation } from "../hooks/useAuthContinuation";
 import { useCreateDraft } from "../hooks/useCreateDraft";
 import { useSeason } from "../hooks/useSeason";
@@ -126,155 +124,144 @@ export const SingleSeason = () => {
     execute: executeStartIntent,
   });
 
-  if (isLoading)
-    return (
-      <Center py="xl">
-        <Loader size="lg" />
-      </Center>
-    );
+  useBugContext(season ? `Season ${season.order} · Cast` : null);
+
+  if (isLoading) return <RouteLoading />;
 
   if (!season)
     return (
-      <Stack gap="md" p="md" maw={480}>
-        <Alert
-          icon={<IconAlertCircle size={18} />}
+      <div className={classes.page}>
+        <EmptySlate
           title="Season not found"
-          color="red"
-          variant="light"
+          actions={
+            <Button component={Link} to="/seasons" variant="outline" size="sm">
+              Back to Seasons
+            </Button>
+          }
         >
           We couldn't find this season. It may have been removed or the link may
           be incorrect.
-        </Alert>
-        <Button component={Link} to="/seasons" variant="light" size="sm">
-          Back to Seasons
-        </Button>
-      </Stack>
+        </EmptySlate>
+      </div>
     );
 
+  // Catalog facts (location, year, airing state) live in the lightweight
+  // metadata; the season document itself carries the cast.
+  const meta: SeasonMeta | undefined = SEASON_METADATA[season.id];
+  const live = meta ? !meta.complete : false;
+  const castCount = season.players?.length ?? 0;
+
   return (
-    <Stack gap="lg" p="md">
+    <div className={classes.page}>
       {continuation.status === "executing" && (
-        <Alert color="blue" variant="light">
+        <Notice label="Setting up" role="status">
           Setting up your draft...
-        </Alert>
+        </Notice>
       )}
       {continuation.status === "failed" && (
-        <Alert color="red" variant="light" icon={<IconAlertCircle size={18} />}>
-          <Stack gap="xs">
-            <Text size="sm">{continuation.error}</Text>
-            <Button
-              size="xs"
-              variant="light"
-              onClick={continuation.retry}
-              w="fit-content"
-            >
+        <Notice
+          label="Failed"
+          tone="danger"
+          role="alert"
+          actions={
+            <Button size="xs" variant="default" onClick={continuation.retry}>
               Try again
             </Button>
-          </Stack>
-        </Alert>
+          }
+        >
+          {continuation.error}
+        </Notice>
       )}
       {continuation.status === "invalid" && (
-        <Alert
-          color="orange"
-          variant="light"
-          icon={<IconAlertCircle size={18} />}
-        >
-          <Stack gap="xs">
-            <Text size="sm">{continuation.error}</Text>
-            <Button
-              size="xs"
-              variant="light"
-              component={Link}
-              to="/seasons"
-              w="fit-content"
-            >
+        <Notice
+          label="Unavailable"
+          tone="warning"
+          role="alert"
+          actions={
+            <Button size="xs" variant="default" component={Link} to="/seasons">
               Back to Seasons
             </Button>
-          </Stack>
-        </Alert>
+          }
+        >
+          {continuation.error}
+        </Notice>
       )}
 
-      <Group justify="space-between" align="flex-start" wrap="wrap">
-        <div>
-          <Group gap="xs" mb={4}>
-            <Badge variant="light" size="sm">
-              Season {season.order}
-            </Badge>
-            <Badge variant="light" color="gray" size="sm">
-              {season.players?.length ?? 0} contestants
-            </Badge>
-          </Group>
-          <Title order={2}>{season.name}</Title>
-          <Text c="dimmed" size="sm">
+      <PageIntro
+        eyebrow="Seasons"
+        context={live ? `On air · Season ${season.order}` : undefined}
+        title={season.name}
+        description={
+          <>
+            {meta && (
+              <>
+                {meta.location} &middot; {meta.year}.{" "}
+              </>
+            )}
             Meet the cast. When you're ready, start a draft and invite your
-            friends to pick teams.
-          </Text>
-        </div>
-
-        {slimUser ? (
-          <Stack gap={4} align="flex-end" w={{ base: "100%", sm: "auto" }}>
-            <Button
-              size="sm"
-              onClick={handleCreateDraft}
-              loading={isCreating}
-              leftSection={<IconUserPlus size={16} />}
-            >
-              Start a draft
-            </Button>
-            <Text size="xs" c="dimmed">
-              You'll get a link to share with friends
-            </Text>
-          </Stack>
-        ) : (
-          <Paper p="md" radius="md" className={classes.loginBanner}>
-            <Group gap="md" align="center" wrap="wrap">
-              <Text size="sm" c="white" fw={500}>
+            friends to build their rosters.
+          </>
+        }
+        meta={
+          <>
+            <StatusBadge kind="season">Season {season.order}</StatusBadge>
+            <StatusBadge kind="complete">{castCount} castaways</StatusBadge>
+          </>
+        }
+        actions={
+          slimUser ? (
+            <div className={classes.start}>
+              <Button
+                size="md"
+                onClick={handleCreateDraft}
+                loading={isCreating}
+              >
+                Start a draft
+              </Button>
+              <span className={classes.hint}>
+                You'll get a link to share with friends
+              </span>
+            </div>
+          ) : (
+            <div className={classes.auth}>
+              <p className={classes.authCopy}>
                 Start a draft with friends: create a free account or sign in.
-              </Text>
-              <Group gap="xs" wrap="nowrap">
-                <Button
-                  size="sm"
-                  variant="white"
-                  color="blue"
-                  leftSection={<IconUserPlus size={16} />}
-                  onClick={() => handleStartDraftIntent("register")}
-                >
+              </p>
+              <div className={classes.authSlates}>
+                <Button onClick={() => handleStartDraftIntent("register")}>
                   Create account
                 </Button>
                 <Button
-                  size="sm"
-                  variant="subtle"
-                  c="white"
-                  leftSection={<IconLogin size={16} />}
+                  variant="outline"
                   onClick={() => handleStartDraftIntent("login")}
                 >
                   Sign in
                 </Button>
-              </Group>
-            </Group>
-          </Paper>
-        )}
-      </Group>
+              </div>
+            </div>
+          )
+        }
+      />
 
-      <Players />
+      <section aria-labelledby="season-cast" className={classes.cast}>
+        <div className={classes.sectionLabel}>
+          <h2 id="season-cast" className={classes.sectionTitle}>
+            Cast &middot; {castCount} castaways
+          </h2>
+        </div>
+        <Players />
+      </section>
 
       {slimUser && (
-        <Center>
-          <Stack gap={4} align="center">
-            <Button
-              size="md"
-              onClick={handleCreateDraft}
-              loading={isCreating}
-              leftSection={<IconUserPlus size={18} />}
-            >
-              Start a draft with {season.name}
-            </Button>
-            <Text size="xs" c="dimmed">
-              You'll get a shareable link to invite friends
-            </Text>
-          </Stack>
-        </Center>
+        <div className={classes.closing}>
+          <Button size="md" onClick={handleCreateDraft} loading={isCreating}>
+            Start a draft with {season.name}
+          </Button>
+          <span className={classes.hint}>
+            You'll get a shareable link to invite friends
+          </span>
+        </div>
       )}
-    </Stack>
+    </div>
   );
 };

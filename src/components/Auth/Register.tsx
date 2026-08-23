@@ -95,7 +95,7 @@ export const Register = ({
 
   if (user) {
     return (
-      <Paper withBorder shadow="md" p={30} mt="md" radius="md" ta="center">
+      <Paper p="md" mt="md" ta="center">
         <Title order={3}>You are already signed in.</Title>
         <Button mt="md" onClick={() => auth.signOut()}>
           Sign out
@@ -105,7 +105,7 @@ export const Register = ({
   }
 
   return (
-    <Paper withBorder shadow="md" p={30} mt="md" radius="md">
+    <Paper p={0} mt="md">
       <form onSubmit={onSubmit}>
         <TextInput
           label="Display Name"

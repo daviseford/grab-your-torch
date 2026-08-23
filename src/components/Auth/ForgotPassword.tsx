@@ -85,7 +85,7 @@ export const ForgotPassword = ({
   };
 
   return (
-    <Paper withBorder shadow="md" p={30} mt="md" radius="md">
+    <Paper p={0} mt="md">
       <Text size="sm" c="dimmed">
         Enter your account email and we will send you a reset link.
       </Text>

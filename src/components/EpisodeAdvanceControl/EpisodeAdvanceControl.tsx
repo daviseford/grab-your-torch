@@ -1,25 +1,12 @@
-import {
-  Badge,
-  Button,
-  Group,
-  Paper,
-  Select,
-  Stack,
-  Text,
-  Title,
-} from "@mantine/core";
+import { Button, Group, Select, Stack, Text } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
-import {
-  IconChevronLeft,
-  IconChevronRight,
-  IconEye,
-  IconPlayerPlay,
-} from "@tabler/icons-react";
+import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
 import { doc, updateDoc } from "firebase/firestore";
 import { useState } from "react";
 import { db } from "../../firebase";
 import { Competition, Season } from "../../types";
+import { StatusBadge } from "../Layout";
 import classes from "./EpisodeAdvanceControl.module.css";
 
 type Props = {
@@ -60,7 +47,7 @@ const EpisodePickerModal = ({
         allowDeselect={false}
       />
       <Group justify="flex-end" gap="xs">
-        <Button variant="light" color="gray" onClick={() => modals.closeAll()}>
+        <Button variant="default" onClick={() => modals.closeAll()}>
           Cancel
         </Button>
         <Button
@@ -76,6 +63,11 @@ const EpisodePickerModal = ({
   );
 };
 
+/**
+ * The creator's episode boundary controls, rendered beside the reveal strip
+ * in the competition header. Everyone else reads the boundary from the strip
+ * and the header meta, so the control renders nothing for them.
+ */
 export const EpisodeAdvanceControl = ({
   competition,
   season,
@@ -85,8 +77,7 @@ export const EpisodeAdvanceControl = ({
   const currentEpisode = competition.current_episode;
   const totalEpisodes = season.episodes?.length ?? 0;
 
-  // Non-creators in Live mode see nothing
-  if (currentEpisode == null && !isCreator) return null;
+  if (!isCreator) return null;
 
   const updateEpisode = async (newValue: number | null) => {
     try {
@@ -114,39 +105,17 @@ export const EpisodeAdvanceControl = ({
     };
 
     return (
-      <Paper p="md" radius="md" withBorder className={classes.root}>
-        <div className={classes.modeControl}>
-          <Stack gap={4} className={classes.modeSummary}>
-            <Group gap="xs">
-              <IconPlayerPlay size={18} color="var(--mantine-color-green-6)" />
-              <Title order={4}>Live</Title>
-              <Badge variant="light" color="green" size="sm">
-                All episodes visible
-              </Badge>
-            </Group>
-            <Text size="sm" c="dimmed">
-              All episode results are shown as they happen. Switch to
-              watch-along mode if you need to avoid spoilers.
-            </Text>
-          </Stack>
-          <Button
-            variant="light"
-            size="sm"
-            leftSection={<IconEye size={16} />}
-            onClick={openEpisodePicker}
-            className={classes.primaryModeAction}
-          >
+      <div className={classes.root}>
+        <div className={classes.actions}>
+          <Button variant="default" size="sm" onClick={openEpisodePicker}>
             Switch to Watch-Along
           </Button>
         </div>
-      </Paper>
+      </div>
     );
   }
 
   // Watch-Along mode
-  const currentEpisodeData = season.episodes?.find(
-    (e) => e.order === currentEpisode,
-  );
   const canAdvance = currentEpisode < totalEpisodes;
   const canGoBack = currentEpisode > 0;
 
@@ -188,91 +157,50 @@ export const EpisodeAdvanceControl = ({
     });
   };
 
-  // Watch-Along — non-creator read-only view
-  if (!isCreator) {
-    return (
-      <Paper p="sm" radius="md" withBorder>
-        <Group gap="xs" justify="center">
-          <IconEye size={16} />
-          <Text size="sm" fw={500}>
-            Watch-Along: Episode {currentEpisode} of {totalEpisodes}
-          </Text>
-        </Group>
-      </Paper>
-    );
-  }
-
-  // Watch-Along — creator view
   return (
-    <Paper p="md" radius="md" withBorder className={classes.root}>
-      <div className={classes.modeControl}>
-        <Stack gap={4} className={classes.modeSummary}>
-          <Group gap="xs">
-            <IconEye size={18} color="var(--mantine-color-blue-6)" />
-            <Title order={4}>Watch-Along</Title>
-            <Badge variant="light" size="sm">
-              Episode {currentEpisode} of {totalEpisodes}
-            </Badge>
-          </Group>
-          {currentEpisode === 0 ? (
-            <Text size="sm" c="dimmed">
-              No episodes revealed yet. Reveal the first episode when your group
-              is ready.
-            </Text>
-          ) : (
-            <Text size="sm" c="dimmed">
-              Showing: Episode {currentEpisode}
-              {currentEpisodeData ? ` (${currentEpisodeData.name})` : ""}
-            </Text>
-          )}
-        </Stack>
-
-        <Stack gap={4} className={classes.modeActions}>
-          <Group gap="xs" wrap="nowrap" className={classes.episodeNavigation}>
-            <Button
-              variant="light"
-              color="gray"
-              size="sm"
-              leftSection={<IconChevronLeft size={14} />}
-              disabled={!canGoBack}
-              onClick={goBackEpisode}
-            >
-              Back
-            </Button>
-            {canAdvance && (
-              <Button
-                variant="filled"
-                size="sm"
-                rightSection={<IconChevronRight size={14} />}
-                onClick={advanceEpisode}
-              >
-                {currentEpisode === 0
-                  ? "Reveal Ep 1"
-                  : `Reveal Ep ${currentEpisode + 1}`}
-              </Button>
-            )}
-          </Group>
-          {canAdvance ? (
-            <Button
-              variant="subtle"
-              size="compact-sm"
-              onClick={switchToLive}
-              className={classes.switchModeAction}
-            >
-              Switch to Live
-            </Button>
-          ) : (
-            <Badge
-              variant="light"
-              color={hasWinner ? "green" : "blue"}
-              size="lg"
-              className={classes.completionBadge}
-            >
-              {hasWinner ? "Season Complete" : "Up to Date"}
-            </Badge>
-          )}
-        </Stack>
+    <div className={classes.root}>
+      <div className={classes.actions}>
+        {canAdvance ? (
+          <Button
+            variant="subtle"
+            color="gray"
+            size="sm"
+            onClick={switchToLive}
+            className={classes.switchModeAction}
+          >
+            Switch to Live
+          </Button>
+        ) : (
+          <StatusBadge
+            kind={hasWinner ? "complete" : "in-progress"}
+            size="sm"
+            className={classes.completionBadge}
+          >
+            {hasWinner ? "Season Complete" : "Up to Date"}
+          </StatusBadge>
+        )}
+        <Button
+          variant="default"
+          size="sm"
+          leftSection={<IconChevronLeft size={14} />}
+          disabled={!canGoBack}
+          onClick={goBackEpisode}
+        >
+          Back
+        </Button>
+        {canAdvance && (
+          <Button
+            variant="filled"
+            size="sm"
+            rightSection={<IconChevronRight size={14} />}
+            onClick={advanceEpisode}
+          >
+            {currentEpisode === 0
+              ? "Reveal Ep 1"
+              : `Reveal Ep ${currentEpisode + 1}`}
+          </Button>
+        )}
       </div>
-    </Paper>
+    </div>
   );
 };

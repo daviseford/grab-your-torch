@@ -11,7 +11,17 @@
       name="description"
       content="Grab Your Torch is a fantasy Survivor league for friends. Draft contestants from any of 50 seasons, earn points for challenge wins, idol plays, and more. Free, spoiler-free, real-time drafts."
     />
-    <meta name="theme-color" content="#228be6" />
+    <meta
+      name="theme-color"
+      content="#071D3A"
+      media="(prefers-color-scheme: dark)"
+    />
+    <meta
+      name="theme-color"
+      content="#EAF8FF"
+      media="(prefers-color-scheme: light)"
+    />
+    <meta name="color-scheme" content="light dark" />
     <link rel="canonical" href="https://grabyourtorch.com/" />
 
     <!-- Favicon -->
@@ -39,6 +49,11 @@
     />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
+    <meta property="og:image:type" content="image/png" />
+    <meta
+      property="og:image:alt"
+      content="Grab Your Torch logo, a torch with a trophy cut from its flame, with the tagline: Draft castaways. Score every move. Compete spoiler-free."
+    />
 
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
@@ -54,8 +69,30 @@
       name="twitter:image"
       content="https://grabyourtorch.com/og-image.png"
     />
+    <meta
+      name="twitter:image:alt"
+      content="Grab Your Torch logo, a torch with a trophy cut from its flame, with the tagline: Draft castaways. Score every move. Compete spoiler-free."
+    />
   </head>
   <body>
+    <!--
+      Design contract (Impeccable seed 67cc3cac). See docs/brand/redesign-direction.md.
+      THESIS: Grab Your Torch is the broadcast of your league; every surface is a
+      graphics package laid over the game, not a SaaS dashboard about it.
+      OWN-WORLD: flat broadcast ink; Night Navy glass in dark, Ice White studio
+      in light; League Blue owns regions, Signal Cyan only signals live/active,
+      Ember and Gold only for the flame; Space Grotesk titles and numbers,
+      Inter for everything operated; bug, lower-third, board, slate, ticker,
+      reveal strip.
+      STORY: a visitor sees a league broadcast with nothing past the current
+      episode, trusts it will not spoil their group, and picks a season.
+      FIRST VIEWPORT: navy frame, product headline, two slates, the emblem as
+      the only visual; no competition results on the homepage.
+      FORM: live sports broadcast graphics package, candidate 3, seed 67cc3cac.
+      FINISH: unreviewed and undocumented is unfinished; this build ends with
+      the finish review, the verdict, DESIGN.md, and every shipping raster
+      carrying its provenance.
+    -->
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

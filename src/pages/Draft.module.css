@@ -1,0 +1,886 @@
+/*
+ * Draft (On Air, Operate mode): the board spine. A navy plate at the top of
+ * the page carries the lower-third (eyebrow, title, tools) and the
+ * rounds-by-participants draft board; the rundown, the cast grid, and the
+ * result boards follow on the page ground. Mantine text tokens are
+ * re-pointed inside the plate so Title, Text, and inputs read on navy in
+ * both color schemes.
+ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-md);
+}
+
+.alerts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-sm);
+}
+
+/* ---------- Spine (navy plate) ---------- */
+
+.spine {
+  --mantine-color-text: var(--mantine-color-dark-0);
+  --mantine-color-dimmed: var(--mantine-color-dark-1);
+  --mantine-color-anchor: var(--mantine-color-signal-5);
+  --spine-rule: var(--gyt-plate-rule);
+  --spine-rule-strong: rgba(184, 217, 238, 0.35);
+  --spine-cell: rgba(234, 248, 255, 0.06);
+
+  margin: calc(-1 * var(--app-shell-padding, 0px))
+    calc(-1 * var(--app-shell-padding, 0px)) 0;
+  padding: var(--mantine-spacing-lg) var(--app-shell-padding, 0px)
+    var(--mantine-spacing-lg);
+  background: var(--gyt-plate);
+  color: var(--mantine-color-dark-0);
+  border-bottom: 1px solid var(--gyt-rule);
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    padding-top: var(--mantine-spacing-sm);
+    padding-bottom: var(--mantine-spacing-md);
+  }
+}
+
+[data-mantine-color-scheme="dark"] .spine {
+  --spine-cell: var(--gyt-panel-2);
+  --spine-rule: var(--gyt-rule);
+  --spine-rule-strong: var(--gyt-rule-strong);
+}
+
+.head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--mantine-spacing-lg);
+  margin-bottom: var(--mantine-spacing-md);
+
+  @media (max-width: $mantine-breakpoint-md) {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    gap: var(--mantine-spacing-sm);
+    margin-bottom: var(--mantine-spacing-sm);
+  }
+}
+
+.headText {
+  min-width: 0;
+}
+
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  overflow-wrap: anywhere;
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: 0.6875rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-signal-5);
+}
+
+.liveDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--mantine-color-signal-5);
+  flex-shrink: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(1.625rem, 1.2rem + 1.6vw, 2.25rem);
+  line-height: 1.1;
+  color: var(--mantine-color-dark-0);
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+
+.sub {
+  margin: 6px 0 0;
+  max-width: 60ch;
+  color: var(--mantine-color-dark-1);
+  overflow-wrap: anywhere;
+}
+
+.tools {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-shrink: 0;
+  min-width: 0;
+  max-width: 100%;
+
+  @media (max-width: $mantine-breakpoint-md) {
+    flex-wrap: wrap;
+  }
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+/* The current picker as a live marker in the page header. */
+.marker {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+  font-size: var(--mantine-font-size-sm);
+  color: var(--mantine-color-dark-1);
+}
+
+/* A long picker name truncates inside the badge instead of widening the page. */
+.marker > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.markerMeta {
+  font-family: var(--mantine-headings-font-family);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Share plate: invite link first, then the copy slate. */
+.share {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px 12px;
+  align-items: end;
+  width: 380px;
+  max-width: 100%;
+
+  @media (max-width: $mantine-breakpoint-md) {
+    width: 100%;
+  }
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.share :global(.mantine-InputWrapper-label) {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: 0.6875rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dark-1);
+}
+
+.share :global(.mantine-Input-input) {
+  background: rgba(234, 248, 255, 0.06);
+  color: var(--mantine-color-dark-0);
+  border-color: var(--spine-rule-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.foot {
+  margin: 10px 0 0;
+  font-size: var(--mantine-font-size-sm);
+  color: var(--mantine-color-dark-1);
+}
+
+/* ---------- Draft board ---------- */
+
+.boardScroll {
+  position: relative;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+/* Active drafting on narrow screens: the board becomes a local window so
+ * the turn state and the Draft slates stay inside the first screen; the
+ * current row is scrolled into view on every turn change. */
+@media (max-width: $mantine-breakpoint-xs) {
+  .boardWindowed {
+    max-height: min(30vh, 240px);
+  }
+}
+
+.board {
+  display: grid;
+  grid-template-columns: 48px repeat(var(--board-cols), minmax(0, 1fr));
+  gap: 4px;
+  min-width: 0;
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    grid-template-columns: 28px repeat(var(--board-cols), minmax(88px, 1fr));
+    gap: 3px;
+  }
+}
+
+.hd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 40px;
+  padding: 6px 10px;
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 0.8125rem;
+  border-bottom: 2px solid var(--spine-rule-strong);
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    min-height: 34px;
+    padding: 4px;
+    gap: 5px;
+    font-size: 0.6875rem;
+  }
+}
+
+.hdName {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.hdName small {
+  font-weight: 500;
+  color: var(--mantine-color-dark-1);
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    display: none;
+  }
+}
+
+.hdNow {
+  color: var(--mantine-color-signal-5);
+  border-bottom-color: var(--mantine-color-signal-5);
+}
+
+.hdOpen {
+  font-weight: 500;
+  color: var(--mantine-color-dark-1);
+  border-bottom-style: dashed;
+}
+
+.avatar {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--mantine-color-league-6);
+  color: var(--mantine-color-white);
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 0.6875rem;
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    display: none;
+  }
+}
+
+.hdNow .avatar {
+  background: var(--mantine-color-signal-5);
+  color: var(--mantine-color-navy-9);
+}
+
+.slot {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px dashed var(--spine-rule-strong);
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    display: none;
+  }
+}
+
+.rd {
+  display: grid;
+  place-items: center;
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: 0.6875rem;
+  letter-spacing: 0.1em;
+  color: var(--mantine-color-dark-1);
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    font-size: 0.625rem;
+  }
+}
+
+.corner {
+  border-bottom: 2px solid var(--spine-rule-strong);
+}
+
+.cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 46px;
+  padding: 4px 8px;
+  background: var(--spine-cell);
+  border: 1px solid var(--spine-rule);
+  border-radius: var(--mantine-radius-sm);
+  color: var(--mantine-color-dark-0);
+  font-size: 0.8125rem;
+  line-height: 1.15;
+  overflow: hidden;
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    min-height: 36px;
+    padding: 2px 5px;
+    gap: 5px;
+    font-size: 0.6875rem;
+  }
+}
+
+.thumb {
+  flex-shrink: 0;
+  width: 26px;
+  height: 34px;
+  border-radius: 3px;
+  object-fit: cover;
+  object-position: top;
+  display: grid;
+  place-items: center;
+  background: var(--gyt-plate);
+  color: var(--mantine-color-dark-1);
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 0.625rem;
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    width: 20px;
+    height: 26px;
+    font-size: 0.5rem;
+  }
+}
+
+.cellText {
+  min-width: 0;
+}
+
+.cellName {
+  display: block;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cellNum {
+  font-family: var(--mantine-headings-font-family);
+  font-size: 0.625rem;
+  letter-spacing: 0.1em;
+  color: var(--mantine-color-dark-1);
+  font-variant-numeric: tabular-nums;
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    display: none;
+  }
+}
+
+/* Your column: League Blue bar. */
+.cellMe {
+  border-color: var(--mantine-color-league-6);
+  box-shadow: inset 3px 0 0 var(--mantine-color-league-6);
+}
+
+.cellEmpty {
+  justify-content: center;
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--spine-rule-strong);
+  color: var(--mantine-color-dark-1);
+  font-family: var(--mantine-headings-font-family);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The pick just made: Ember. */
+.cellFresh {
+  border-color: var(--mantine-color-ember-6);
+  box-shadow: inset 0 -3px 0 var(--mantine-color-ember-6);
+}
+
+.cellMe.cellFresh {
+  box-shadow:
+    inset 3px 0 0 var(--mantine-color-league-6),
+    inset 0 -3px 0 var(--mantine-color-ember-6);
+}
+
+/* The current pick: Signal Cyan, pulsing while the draft is live. */
+.cellNow {
+  border: 2px solid var(--mantine-color-signal-5);
+  background: rgba(24, 213, 242, 0.08);
+  color: var(--mantine-color-signal-5);
+  animation: boardPulse 1.1s ease-in-out infinite;
+}
+
+.cellNow .cellNum {
+  color: var(--mantine-color-signal-5);
+}
+
+.cellNow .liveDot {
+  @media (max-width: $mantine-breakpoint-xs) {
+    display: none;
+  }
+}
+
+/* One-shot entrance for a freshly filled cell. The element is keyed by the
+ * pick, so snapshot refreshes never replay it. */
+.cellFlash {
+  animation: boardFlash 700ms ease-out 1;
+}
+
+@keyframes boardPulse {
+  50% {
+    border-color: rgba(24, 213, 242, 0.35);
+  }
+}
+
+@keyframes boardFlash {
+  0% {
+    background: rgba(255, 90, 54, 0.35);
+  }
+  100% {
+    background: var(--spine-cell);
+  }
+}
+
+/* ---------- Rundown (the draft steps) ---------- */
+
+.rundown {
+  display: flex;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-bottom: 1px solid var(--gyt-rule);
+  overflow-x: auto;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 14px -1px 0;
+  padding: 10px 14px 12px 0;
+  border-bottom: 3px solid transparent;
+  white-space: nowrap;
+  color: var(--mantine-color-dimmed);
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    gap: 6px;
+    margin-right: 4px;
+    padding-right: 6px;
+  }
+}
+
+.stepLabel {
+  display: block;
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 0.8125rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+  }
+}
+
+.stepHint {
+  display: block;
+  font-size: var(--mantine-font-size-xs);
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    display: none;
+  }
+}
+
+.rank {
+  display: grid;
+  place-items: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px;
+  border-radius: var(--mantine-radius-sm);
+  border: 1px solid var(--gyt-rule-strong);
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    min-width: 22px;
+    height: 22px;
+    font-size: 0.6875rem;
+  }
+}
+
+.stepDone {
+  color: var(--mantine-color-text);
+}
+
+.stepDone .rank {
+  background: var(--mantine-color-league-6);
+  border-color: var(--mantine-color-league-6);
+  color: var(--mantine-color-white);
+}
+
+.stepNow {
+  color: var(--mantine-color-text);
+  border-bottom-color: var(--mantine-color-signal-5);
+}
+
+.stepNow .rank {
+  background: var(--mantine-color-signal-5);
+  border-color: var(--mantine-color-signal-5);
+  color: var(--mantine-color-navy-9);
+}
+
+/* ---------- Section heads and grids ---------- */
+
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--mantine-spacing-sm);
+  margin: var(--mantine-spacing-xs) 0 0;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-text);
+}
+
+.sectionTitle span {
+  font-weight: 500;
+  color: var(--mantine-color-dimmed);
+}
+
+.hint {
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    display: none;
+  }
+}
+
+.castGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  @media (max-width: $mantine-breakpoint-md) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+}
+
+.castGrid li {
+  display: flex;
+  min-width: 0;
+}
+
+.castGrid li > * {
+  flex: 1;
+}
+
+.taken img {
+  filter: grayscale(1) brightness(0.55);
+}
+
+.fresh {
+  outline: 3px solid var(--mantine-color-ember-6);
+  outline-offset: -3px;
+}
+
+.fresh img {
+  filter: none;
+}
+
+.draftedBy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--gyt-rule);
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 600;
+}
+
+.fresh .draftedBy {
+  border-top-color: var(--mantine-color-ember-6);
+}
+
+.label {
+  flex-shrink: 0;
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: 0.625rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+  white-space: nowrap;
+}
+
+.draftedByName {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.castActions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.below {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--mantine-spacing-md);
+  align-items: start;
+  margin-top: var(--mantine-spacing-xs);
+
+  @media (max-width: $mantine-breakpoint-md) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Grid items must be allowed to shrink below their tables' min-content. */
+.below > * {
+  min-width: 0;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-md);
+}
+
+/* ---------- Collapsible reference board ---------- */
+
+.details {
+  background: var(--gyt-panel);
+  border: 1px solid var(--gyt-rule);
+  border-radius: var(--mantine-radius-md);
+  overflow: hidden;
+}
+
+.details summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mantine-spacing-sm);
+  padding: 10px var(--mantine-spacing-md);
+  cursor: pointer;
+  list-style: none;
+}
+
+.details summary::-webkit-details-marker {
+  display: none;
+}
+
+.details summary:focus-visible {
+  outline: 2px solid var(--mantine-color-league-6);
+  outline-offset: -2px;
+}
+
+.details[open] summary {
+  border-bottom: 1px solid var(--gyt-rule);
+}
+
+.detailsHint {
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+}
+
+.details[open] .detailsHintClosed,
+.details:not([open]) .detailsHintOpen {
+  display: none;
+}
+
+.detailsBody {
+  padding: var(--mantine-spacing-md);
+}
+
+/* ---------- Lobby: participants and how it works ---------- */
+
+.people {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.person {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 14px 10px;
+  border: 1px solid var(--gyt-rule);
+  border-radius: var(--mantine-radius-md);
+  text-align: center;
+}
+
+.personAvatar {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--mantine-color-league-6);
+  color: var(--mantine-color-white);
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 1.125rem;
+}
+
+.personName {
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 600;
+  font-size: var(--mantine-font-size-sm);
+}
+
+.personMe {
+  box-shadow: inset 3px 0 0 var(--mantine-color-signal-5);
+}
+
+.personEmpty {
+  border-style: dashed;
+  border-color: var(--gyt-rule-strong);
+  color: var(--mantine-color-dimmed);
+}
+
+.personEmpty .personName {
+  font-weight: 500;
+  font-size: var(--mantine-font-size-xs);
+  white-space: normal;
+}
+
+.personSlot {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px dashed var(--gyt-rule-strong);
+}
+
+.howSteps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--mantine-spacing-md);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  @media (max-width: $mantine-breakpoint-sm) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.howStep {
+  display: grid;
+  gap: 4px;
+  padding-top: 10px;
+  border-top: 2px solid var(--gyt-rule-strong);
+  font-size: var(--mantine-font-size-sm);
+  color: var(--mantine-color-dimmed);
+}
+
+.howNum {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 1.75rem;
+  line-height: 1;
+  color: var(--gyt-signal-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.howStep b {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 0.9375rem;
+  color: var(--mantine-color-text);
+}
+
+/* ---------- Prop bets form ---------- */
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--mantine-spacing-md) var(--mantine-spacing-lg);
+
+  @media (max-width: $mantine-breakpoint-sm) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.formActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--mantine-spacing-md);
+  margin-top: var(--mantine-spacing-md);
+  padding-top: var(--mantine-spacing-md);
+  border-top: 1px solid var(--gyt-rule);
+}
+
+.formCount {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: 0.75rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Notices ---------- */
+
+.notice {
+  padding: 10px 14px;
+  border: 1px solid var(--gyt-rule-strong);
+  border-radius: var(--mantine-radius-sm);
+  background: var(--gyt-panel-2);
+  font-size: var(--mantine-font-size-sm);
+  color: var(--mantine-color-text);
+}
+
+.noticeWarn {
+  border-color: var(--mantine-color-orange-6);
+}

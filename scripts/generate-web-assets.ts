@@ -1,119 +1,205 @@
 /**
- * One-off script to generate favicon PNGs, apple-touch-icon, and OG image
- * from the custom SVG favicon source using sharp.
+ * Produce every shipping Victory Flame asset from the untouched brand package
+ * in docs/brand/source.
  *
- * Usage: yarn tsx scripts/generate-web-assets.ts
+ *   yarn tsx scripts/generate-web-assets.ts            # generate + validate
+ *   yarn tsx scripts/generate-web-assets.ts --check    # validate only
+ *
+ * What it does:
+ *   1. Outlines the wordmark in every lockup SVG (Space Grotesk / Inter glyphs
+ *      become paths) so `<img>`-embedded logos render identically on every
+ *      device, then writes the vectors under public/brand and public/favicon.svg.
+ *   2. Rasterizes PNG exports, favicons, the Apple touch icon, manifest icons,
+ *      and the Open Graph image with Sharp at exact pixel sizes.
+ *   3. Writes public/site.webmanifest from the shared manifest definition.
+ *   4. Validates the result: expected files, dimensions, no live `<text>` or
+ *      forbidden effects in shipping SVGs, manifest and index.html references.
+ *
+ * The docs/brand tree (source, reference, provenance, archive) is read-only
+ * input and is never copied into public/.
  */
 import fs from "fs";
 import path from "path";
 import sharp from "sharp";
-import { fileURLToPath } from "url";
+import {
+  BRAND_SOURCE_DIR,
+  expectedPublicOutputs,
+  findForbiddenEffects,
+  findLiveText,
+  loadBrandFonts,
+  PUBLIC_DIR,
+  RASTER_OUTPUTS,
+  referencedHeadAssets,
+  renderSvgOutput,
+  REPO_ROOT,
+  SVG_OUTPUTS,
+  WEB_MANIFEST,
+  type RasterOutput,
+} from "./lib/brand-assets";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PUBLIC = path.resolve(__dirname, "..", "public");
-const faviconSvg = fs.readFileSync(path.join(PUBLIC, "favicon.svg"));
+const checkOnly = process.argv.includes("--check");
 
-async function generateFaviconPngs() {
-  // 16x16
-  await sharp(faviconSvg)
-    .resize(16, 16)
-    .png()
-    .toFile(path.join(PUBLIC, "favicon-16x16.png"));
-
-  // 32x32
-  await sharp(faviconSvg)
-    .resize(32, 32)
-    .png()
-    .toFile(path.join(PUBLIC, "favicon-32x32.png"));
-
-  // 180x180 apple-touch-icon (white background, padded)
-  const iconSize = 180;
-  const iconPadding = 20;
-  const innerSize = iconSize - iconPadding * 2;
-
-  const resizedIcon = await sharp(faviconSvg)
-    .resize(innerSize, innerSize)
-    .png()
-    .toBuffer();
-
-  await sharp({
-    create: {
-      width: iconSize,
-      height: iconSize,
-      channels: 4,
-      background: { r: 255, g: 255, b: 255, alpha: 1 },
-    },
-  })
-    .composite([{ input: resizedIcon, left: iconPadding, top: iconPadding }])
-    .png()
-    .toFile(path.join(PUBLIC, "apple-touch-icon.png"));
-
-  console.log("✓ favicon-16x16.png, favicon-32x32.png, apple-touch-icon.png");
+function publicPath(rel: string): string {
+  return path.join(PUBLIC_DIR, rel);
 }
 
-async function generateOgImage() {
-  const width = 1200;
-  const height = 630;
-
-  // Create gradient background with text overlay using SVG
-  const svgOverlay = `
-    <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style="stop-color:#1864ab;stop-opacity:1" />
-          <stop offset="50%" style="stop-color:#1971c2;stop-opacity:1" />
-          <stop offset="100%" style="stop-color:#0c8599;stop-opacity:1" />
-        </linearGradient>
-        <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" style="stop-color:#228be6;stop-opacity:1" />
-          <stop offset="100%" style="stop-color:#15aabf;stop-opacity:1" />
-        </linearGradient>
-      </defs>
-
-      <!-- Background gradient -->
-      <rect width="${width}" height="${height}" fill="url(#bg)" />
-
-      <!-- Subtle pattern overlay -->
-      <rect width="${width}" height="${height}" fill="black" opacity="0.08" />
-
-      <!-- Torch icon — same paths as public/favicon.svg but brighter fills for visibility on the blue gradient -->
-      <g transform="translate(100, 160) scale(9)">
-        <rect x="14" y="16" width="4" height="14" rx="1.5" fill="#c9a96e" opacity="0.9"/>
-        <path d="M16 2c-1.5 3-6 6-6 10.5C10 16.1 12.7 18 16 18s6-1.9 6-5.5C22 8 17.5 5 16 2z" fill="#FF6B35" opacity="0.95"/>
-        <path d="M16 7c-1 2-3.5 3.5-3.5 6.5 0 2 1.5 3.5 3.5 3.5s3.5-1.5 3.5-3.5C19.5 10.5 17 9 16 7z" fill="#FFD166"/>
-      </g>
-
-      <!-- Title text -->
-      <text x="420" y="240" font-family="system-ui, -apple-system, sans-serif" font-size="72" font-weight="900" fill="white" letter-spacing="-2">
-        Grab Your
-      </text>
-      <text x="420" y="330" font-family="system-ui, -apple-system, sans-serif" font-size="72" font-weight="900" fill="url(#accent)" letter-spacing="-2">
-        Torch
-      </text>
-
-      <!-- Tagline -->
-      <text x="420" y="400" font-family="system-ui, -apple-system, sans-serif" font-size="28" fill="white" opacity="0.8">
-        Draft your team. Compete with friends.
-      </text>
-
-      <!-- Stats bar at bottom -->
-      <rect x="0" y="${height - 80}" width="${width}" height="80" fill="black" opacity="0.2"/>
-      <text x="100" y="${height - 32}" font-family="system-ui, -apple-system, sans-serif" font-size="22" fill="white" opacity="0.9">
-        50 Seasons  ·  700+ Castaways  ·  Real-time Drafts  ·  Spoiler-free
-      </text>
-    </svg>`;
-
-  await sharp(Buffer.from(svgOverlay))
-    .png({ quality: 90 })
-    .toFile(path.join(PUBLIC, "og-image.png"));
-
-  console.log("✓ og-image.png (1200×630)");
+function ensureDir(file: string): void {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
 }
 
-async function main() {
-  await generateFaviconPngs();
-  await generateOgImage();
-  console.log("\nAll assets generated in public/");
+function viewBoxOf(svg: string): { width: number; height: number } {
+  const m = /viewBox="([\d.\s-]+)"/.exec(svg);
+  if (!m) throw new Error("SVG has no viewBox");
+  const [, , w, h] = m[1].trim().split(/\s+/).map(Number);
+  return { width: w, height: h };
+}
+
+async function generateSvgs(): Promise<void> {
+  const fonts = await loadBrandFonts();
+  for (const out of SVG_OUTPUTS) {
+    const target = publicPath(out.target);
+    ensureDir(target);
+    fs.writeFileSync(target, renderSvgOutput(out, fonts));
+    console.log(`✓ ${out.target}${out.outline ? " (outlined)" : ""}`);
+  }
+}
+
+async function renderRaster(out: RasterOutput): Promise<void> {
+  const svgPath =
+    "public" in out.from
+      ? publicPath(out.from.public)
+      : path.join(BRAND_SOURCE_DIR, out.from.source);
+  const svg = fs.readFileSync(svgPath, "utf8");
+  const box = viewBoxOf(svg);
+  const target = publicPath(out.target);
+  ensureDir(target);
+
+  if (out.maskableSafeZone) {
+    // Maskable icons are cropped to arbitrary platform shapes, so the
+    // artwork sits inside the safe zone on a full-bleed brand field.
+    const inner = Math.round(out.height * out.maskableSafeZone);
+    const innerWidth = Math.round((inner * box.width) / box.height);
+    const art = await sharp(Buffer.from(svg), {
+      density: (72 * inner) / box.height,
+    })
+      .resize(innerWidth, inner)
+      .png()
+      .toBuffer();
+    await sharp({
+      create: {
+        width: out.width,
+        height: out.height,
+        channels: 4,
+        background: out.background ?? "#00000000",
+      },
+    })
+      .composite([
+        {
+          input: art,
+          left: Math.round((out.width - innerWidth) / 2),
+          top: Math.round((out.height - inner) / 2),
+        },
+      ])
+      .png()
+      .toFile(target);
+  } else {
+    let image = sharp(Buffer.from(svg), {
+      density: (72 * out.width) / box.width,
+    }).resize(out.width, out.height);
+    if (out.background) image = image.flatten({ background: out.background });
+    await image.png().toFile(target);
+  }
+  console.log(`✓ ${out.target} (${out.width}×${out.height})`);
+}
+
+function writeManifest(): void {
+  const target = publicPath("site.webmanifest");
+  fs.writeFileSync(target, JSON.stringify(WEB_MANIFEST, null, 2) + "\n");
+  console.log("✓ site.webmanifest");
+}
+
+async function validate(): Promise<string[]> {
+  const problems: string[] = [];
+
+  for (const rel of expectedPublicOutputs()) {
+    if (!fs.existsSync(publicPath(rel))) problems.push(`missing ${rel}`);
+  }
+
+  for (const out of SVG_OUTPUTS) {
+    const file = publicPath(out.target);
+    if (!fs.existsSync(file)) continue;
+    const svg = fs.readFileSync(file, "utf8");
+    const live = findLiveText(svg);
+    if (live.length) {
+      problems.push(
+        `${out.target} still contains live text: ${live.join(", ")}`,
+      );
+    }
+    const effects = findForbiddenEffects(svg);
+    if (effects.length) {
+      problems.push(
+        `${out.target} uses forbidden effects: ${effects.join(", ")}`,
+      );
+    }
+  }
+
+  for (const out of RASTER_OUTPUTS) {
+    const file = publicPath(out.target);
+    if (!fs.existsSync(file)) continue;
+    const meta = await sharp(file).metadata();
+    if (meta.width !== out.width || meta.height !== out.height) {
+      problems.push(
+        `${out.target} is ${meta.width}×${meta.height}, expected ${out.width}×${out.height}`,
+      );
+    }
+    if (out.background && meta.hasAlpha) {
+      const stats = await sharp(file).stats();
+      if (!stats.isOpaque) problems.push(`${out.target} should be opaque`);
+    }
+  }
+
+  const manifest = JSON.parse(
+    fs.readFileSync(publicPath("site.webmanifest"), "utf8"),
+  ) as typeof WEB_MANIFEST;
+  for (const icon of manifest.icons) {
+    const file = publicPath(icon.src.replace(/^\//, ""));
+    if (!fs.existsSync(file)) {
+      problems.push(`manifest icon ${icon.src} does not exist`);
+      continue;
+    }
+    const meta = await sharp(file).metadata();
+    if (`${meta.width}x${meta.height}` !== icon.sizes) {
+      problems.push(
+        `manifest icon ${icon.src} is ${meta.width}x${meta.height}, declared ${icon.sizes}`,
+      );
+    }
+  }
+
+  const html = fs.readFileSync(path.join(REPO_ROOT, "index.html"), "utf8");
+  for (const ref of referencedHeadAssets(html)) {
+    if (!fs.existsSync(publicPath(ref.replace(/^\//, "")))) {
+      problems.push(`index.html references missing asset ${ref}`);
+    }
+  }
+
+  return problems;
+}
+
+async function main(): Promise<void> {
+  if (!checkOnly) {
+    await generateSvgs();
+    for (const out of RASTER_OUTPUTS) await renderRaster(out);
+    writeManifest();
+  }
+  const problems = await validate();
+  if (problems.length) {
+    console.error("\nAsset validation failed:");
+    for (const p of problems) console.error(`  ✗ ${p}`);
+    process.exit(1);
+  }
+  console.log(
+    `\nAll ${expectedPublicOutputs().length} brand assets ${checkOnly ? "validated" : "generated and validated"} in public/`,
+  );
 }
 
 main().catch((err) => {
