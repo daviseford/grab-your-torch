@@ -485,3 +485,36 @@
   max-width: 46ch;
   color: var(--mantine-color-dark-1);
 }
+
+.exampleTotals {
+  display: grid;
+  gap: 6px;
+  margin: var(--mantine-spacing-md) 0 0;
+  padding: 0;
+  list-style: none;
+  max-width: 360px;
+}
+
+.exampleTotals li {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--mantine-font-size-sm);
+}
+
+.exampleTotal {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 1.125rem;
+  letter-spacing: -0.02em;
+}
+
+.exampleTotal small {
+  margin-left: 3px;
+  font-size: 0.625rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+  font-weight: 500;
+}

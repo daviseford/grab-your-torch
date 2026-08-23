@@ -1,5 +1,5 @@
 import { Badge, Button, Table, Title } from "@mantine/core";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { PropBetsQuestions } from "../../data/propbets";
 import { BASE_PLAYER_SCORING, type ScoringCategory } from "../../data/scoring";
@@ -57,6 +57,23 @@ const EXAMPLE_STANDINGS = [
   { name: "Jordan", points: 142 },
 ];
 
+/** Fictional per-episode points for the reveal-strip example (13 episodes). */
+const EXAMPLE_EPISODES = 13;
+const EXAMPLE_EPISODE_POINTS: Record<string, number[]> = {
+  Marisol: [31, 27, 36, 29, 33, 28, 24, 30, 22, 26, 19, 21, 25],
+  Theo: [28, 30, 25, 32, 27, 29, 31, 23, 26, 20, 24, 18, 22],
+  Priya: [26, 24, 29, 27, 25, 27, 22, 28, 21, 23, 20, 19, 17],
+  Jordan: [22, 25, 21, 26, 24, 24, 27, 19, 23, 18, 21, 16, 20],
+};
+
+const exampleTotalsThrough = (episode: number) =>
+  Object.entries(EXAMPLE_EPISODE_POINTS)
+    .map(([name, points]) => ({
+      name,
+      points: points.slice(0, episode).reduce((sum, p) => sum + p, 0),
+    }))
+    .sort((a, b) => b.points - a.points);
+
 const ACTION_COUNT = BASE_PLAYER_SCORING.length;
 const CATEGORY_COUNT = new Set(BASE_PLAYER_SCORING.map((s) => s.category)).size;
 const ALL_BETS = Object.values(PropBetsQuestions);
@@ -74,6 +91,11 @@ const scoringByAction = new Map(
 );
 
 export const Home = () => {
+  const [exampleRevealed, setExampleRevealed] = useState(6);
+  const exampleTotals = useMemo(
+    () => exampleTotalsThrough(exampleRevealed),
+    [exampleRevealed],
+  );
   const { slimUser } = useUser();
 
   const seasons = useMemo(
@@ -205,26 +227,11 @@ export const Home = () => {
                 Every season of Survivor
               </h2>
               <p className={classes.lead}>
-                All {SEASON_COUNT} US seasons are ready to play, from the
-                original Borneo to the newest season. Browse by era, search by
-                name or location, and start a competition on any season, past or
-                present. The season currently airing gets live updates as each
-                episode airs.
+                All {SEASON_COUNT} US seasons and {CASTAWAY_COUNT}+ castaways
+                are ready to play, from the original Borneo to the season airing
+                now. Browse by era, search by name or location, and start a
+                competition on any of them.
               </p>
-              <div className={classes.facts}>
-                <span>
-                  <b>{SEASON_COUNT}</b> seasons
-                </span>
-                <span>
-                  <b>{CASTAWAY_COUNT}+</b> castaways
-                </span>
-                <span>
-                  <b>4</b> eras
-                </span>
-                <span>
-                  <b>Live</b> updates
-                </span>
-              </div>
             </div>
             <div className={classes.guide}>
               {guideSeasons.map((meta) => {
@@ -269,14 +276,33 @@ export const Home = () => {
             </div>
             <figure className={`${classes.example} ${classes.exampleStrip}`}>
               <figcaption className={classes.caption}>
-                Example: a competition that has revealed episodes 1 to 6
+                Example: a competition that has revealed episodes 1 to{" "}
+                {exampleRevealed}. Select an episode to move the reveal; the
+                names and points are made up.
               </figcaption>
               <RevealStrip
-                total={13}
-                revealedThrough={6}
+                total={EXAMPLE_EPISODES}
+                revealedThrough={exampleRevealed}
                 legend
                 ariaLabel="Example episode reveal"
+                onSelect={setExampleRevealed}
               />
+              <ol className={classes.exampleTotals} aria-live="polite">
+                {exampleTotals.map((row, index) => (
+                  <li key={row.name}>
+                    <span
+                      className={`${classes.rank} ${classes.pickRank} ${index === 0 ? classes.rankFirst : ""}`}
+                    >
+                      {index + 1}
+                    </span>
+                    <span>{row.name}</span>
+                    <span className={classes.exampleTotal}>
+                      {row.points}
+                      <small>pts</small>
+                    </span>
+                  </li>
+                ))}
+              </ol>
             </figure>
           </div>
         </section>
@@ -478,5 +504,5 @@ export const Home = () => {
   );
 };
 
-const ordinal = (n: number) =>
-  n === 1 ? "first" : n === 2 ? "second" : n === 3 ? "third" : `${n}th`;
+const ORDINALS = ["first", "second", "third", "fourth", "fifth", "sixth"];
+const ordinal = (n: number) => ORDINALS[n - 1] ?? `${n}th`;

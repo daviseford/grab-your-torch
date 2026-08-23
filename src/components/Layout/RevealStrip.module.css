@@ -32,6 +32,14 @@
   grid-auto-flow: column;
   grid-auto-columns: minmax(0, 1fr);
   gap: 4px;
+
+  /* Seasons run to 16 episodes; on phones the strip wraps into rows of 7
+     so each cell keeps room for its digit and its mark. */
+  @media (max-width: 30em) {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 6px 4px;
+  }
 }
 
 .cell {

@@ -21,7 +21,7 @@ import {
 } from "../components/Eliminations";
 import { CreateEpisode, EpisodeCRUDTable } from "../components/Episodes";
 import { CreateGameEvent, GameEventsCRUDTable } from "../components/GameEvents";
-import { RevealStrip } from "../components/Layout";
+import { RevealStrip, StatusBadge, useBugContext } from "../components/Layout";
 import {
   CreateTeam,
   TeamCRUDTable,
@@ -87,6 +87,15 @@ export const SeasonAdmin = () => {
   const { data: challenges } = useChallenges(season?.id);
   const { data: eliminations } = useEliminations(season?.id);
   const { data: teams } = useTeams(season?.id);
+
+  useBugContext(
+    <>
+      <span>Admin{season ? ` · S${season.order}` : ""}</span>
+      <StatusBadge kind="admin" size="xs">
+        Admin
+      </StatusBadge>
+    </>,
+  );
 
   if (!slimUser?.isAdmin) {
     return <AdminAccessDenied />;

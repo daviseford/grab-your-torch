@@ -10,6 +10,7 @@ import {
   PageIntro,
   RouteLoading,
   StatusBadge,
+  useBugContext,
 } from "../components/Layout";
 import { SEASON_METADATA, type SeasonMeta } from "../data/season-metadata";
 import { useAuthContinuation } from "../hooks/useAuthContinuation";
@@ -121,6 +122,8 @@ export const SingleSeason = () => {
     matches: matchesStartIntent,
     execute: executeStartIntent,
   });
+
+  useBugContext(season ? `Season ${season.order} · Cast` : null);
 
   if (isLoading) return <RouteLoading />;
 

@@ -10,17 +10,9 @@ import {
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
-import {
-  Alert,
-  Button,
-  Group,
-  NumberInput,
-  Select,
-  Text,
-  Title,
-} from "@mantine/core";
+import { Button, NumberInput, Select, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { IconAlertCircle, IconCheck, IconX } from "@tabler/icons-react";
+import { IconCheck, IconX } from "@tabler/icons-react";
 import { doc, setDoc } from "firebase/firestore";
 import { CSSProperties, useId, useState } from "react";
 import { db } from "../../firebase";
@@ -29,6 +21,7 @@ import { useSeason } from "../../hooks/useSeason";
 import { useTeamAssignments } from "../../hooks/useTeamAssignments";
 import { useTeams } from "../../hooks/useTeams";
 import { CastawayId, Team, TeamAssignmentSnapshot } from "../../types";
+import { Notice } from "../Layout";
 import classes from "./Teams.module.css";
 
 const NO_TEAM_ID = "__no_team__";
@@ -313,9 +306,9 @@ export const TeamPlayerManager = () => {
 
   if (teamList.length === 0) {
     return (
-      <Alert icon={<IconAlertCircle />} title="No Teams" color="league">
+      <Notice label="No teams">
         Create teams above before assigning players.
-      </Alert>
+      </Notice>
     );
   }
 
@@ -357,50 +350,36 @@ export const TeamPlayerManager = () => {
       </div>
 
       {isMergeEpisode && (
-        <Alert
-          icon={<IconAlertCircle />}
-          title="Merge Episode"
-          color="orange"
-          variant="light"
-        >
-          <Group>
-            <Text size="sm">
-              This is a merge/post-merge episode. Players typically have no
-              team.
-            </Text>
-            <Button
-              size="xs"
-              variant="light"
-              color="orange"
-              onClick={handleMoveAllToNoTeam}
-            >
+        <Notice
+          label="Merge episode"
+          tone="warning"
+          actions={
+            <Button size="xs" variant="default" onClick={handleMoveAllToNoTeam}>
               Move all to No Team
             </Button>
-          </Group>
-        </Alert>
+          }
+        >
+          This is a merge/post-merge episode. Players typically have no team.
+        </Notice>
       )}
 
       {assignments[String(episodeNum)] && !localAssignments && (
-        <Alert color="green" variant="light">
-          <Text size="sm">
-            Saved assignments loaded for episode {episodeNum}.
-          </Text>
-        </Alert>
+        <Notice label="Saved" tone="success" role="status">
+          Saved assignments loaded for episode {episodeNum}.
+        </Notice>
       )}
 
       {localAssignments && (
-        <Alert color="yellow" variant="light">
-          <Text size="sm">You have unsaved changes.</Text>
-        </Alert>
+        <Notice label="Unsaved" tone="warning" role="status">
+          You have unsaved changes.
+        </Notice>
       )}
 
-      <Alert color="league" variant="light">
-        <Text size="sm">
-          Drag-and-drop is fastest on desktop. The manual assignment controls
-          below are the fallback for touch devices, keyboard users, or quick
-          spot fixes.
-        </Text>
-      </Alert>
+      <Notice label="Tip">
+        Drag-and-drop is fastest on desktop. The manual assignment controls
+        below are the fallback for touch devices, keyboard users, or quick spot
+        fixes.
+      </Notice>
 
       <DndContext
         sensors={sensors}

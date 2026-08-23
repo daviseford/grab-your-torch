@@ -36,8 +36,8 @@
   display: inline-block;
   padding: 4px 8px;
   border-radius: 3px;
-  background: var(--mantine-color-signal-5);
-  color: var(--mantine-color-navy-9);
+  background: var(--gyt-plate);
+  color: var(--mantine-color-dark-0);
   font-family: var(--mantine-headings-font-family);
   font-weight: 700;
   font-size: 0.6875rem;
@@ -46,6 +46,7 @@
   line-height: 1.2;
 }
 
+/* Live context (the on-air season, the current episode) keeps the signal. */
 .context {
   font-family: var(--mantine-headings-font-family);
   font-weight: 600;

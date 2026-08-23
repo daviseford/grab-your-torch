@@ -20,6 +20,8 @@ import { Logout } from "./components/Auth/Logout";
 import { BrandEmblem } from "./components/Brand";
 import { Footer } from "./components/Footer";
 import { Home } from "./components/Home/Home";
+import { useBugContextNode } from "./components/Layout/bugContext";
+import { BugContextProvider } from "./components/Layout/BugContextProvider";
 import { RouteLoading } from "./components/Layout/RouteLoading";
 import { Navbar } from "./components/Navbar";
 import { NotFound } from "./components/NotFound";
@@ -141,6 +143,13 @@ const Bug = () => (
   </Link>
 );
 
+/** The caps context beside the lockup: where the visitor is right now. */
+const BugContextSegment = () => {
+  const node = useBugContextNode();
+  if (!node) return null;
+  return <div className={classes.bugContext}>{node}</div>;
+};
+
 export const AppRoutes = () => {
   const [opened, { toggle, close }] = useDisclosure();
 
@@ -155,84 +164,93 @@ export const AppRoutes = () => {
         <ScrollToTop />
         <PageTracker />
         <ModalsProvider modals={modals}>
-          <AppShell
-            header={{
-              height: {
-                base: 56,
-                sm: 60,
-              },
-            }}
-            padding={{ base: "md", sm: "lg" }}
-          >
-            <a className={classes.skipLink} href="#main-content">
-              Skip to main content
-            </a>
-            <AppShell.Header>
-              <div className={classes.header}>
-                <Bug />
-                <Navbar id={NAV_ID} opened={opened} onClose={close} />
-                <Burger
-                  opened={opened}
-                  onClick={toggle}
-                  hiddenFrom="md"
-                  size="sm"
-                  className={classes.burger}
-                  aria-label="Toggle navigation"
-                  aria-controls={NAV_ID}
-                  aria-expanded={opened}
-                />
-              </div>
-            </AppShell.Header>
+          <BugContextProvider>
+            <AppShell
+              header={{
+                height: {
+                  base: 56,
+                  sm: 60,
+                },
+              }}
+              padding={{ base: "md", sm: "lg" }}
+            >
+              <a className={classes.skipLink} href="#main-content">
+                Skip to main content
+              </a>
+              <AppShell.Header>
+                <div className={classes.header}>
+                  <Bug />
+                  <BugContextSegment />
+                  <Navbar id={NAV_ID} opened={opened} onClose={close} />
+                  <Burger
+                    opened={opened}
+                    onClick={toggle}
+                    hiddenFrom="md"
+                    size="sm"
+                    className={classes.burger}
+                    aria-label="Toggle navigation"
+                    aria-controls={NAV_ID}
+                    aria-expanded={opened}
+                  />
+                </div>
+              </AppShell.Header>
 
-            <AppShell.Main id="main-content" className={classes.main}>
-              <RouteErrorBoundary>
-                <Suspense fallback={<RouteLoading />}>
-                  <Routes>
-                    <Route path="/" element={<Home />} />
+              <AppShell.Main id="main-content" className={classes.main}>
+                <RouteErrorBoundary>
+                  <Suspense fallback={<RouteLoading />}>
+                    <Routes>
+                      <Route path="/" element={<Home />} />
 
-                    {/* User stuff */}
-                    <Route path="/logout" element={<Logout />} />
-                    <Route path="/reset-password" element={<ResetPassword />} />
+                      {/* User stuff */}
+                      <Route path="/logout" element={<Logout />} />
+                      <Route
+                        path="/reset-password"
+                        element={<ResetPassword />}
+                      />
 
-                    {/* Drafting */}
-                    <Route
-                      path="/seasons/:seasonId/draft/:draftId"
-                      element={<DraftComponent />}
-                    />
+                      {/* Drafting */}
+                      <Route
+                        path="/seasons/:seasonId/draft/:draftId"
+                        element={<DraftComponent />}
+                      />
 
-                    {/* Seasons */}
-                    <Route
-                      path="/seasons/:seasonId/manage"
-                      element={<RedirectToAdmin />}
-                    />
-                    <Route
-                      path="/seasons/:seasonId"
-                      element={<SingleSeason />}
-                    />
-                    <Route path="/seasons" element={<Seasons />} />
+                      {/* Seasons */}
+                      <Route
+                        path="/seasons/:seasonId/manage"
+                        element={<RedirectToAdmin />}
+                      />
+                      <Route
+                        path="/seasons/:seasonId"
+                        element={<SingleSeason />}
+                      />
+                      <Route path="/seasons" element={<Seasons />} />
 
-                    {/* Competitions */}
-                    <Route
-                      path="/competitions/:competitionId"
-                      element={<SingleCompetition />}
-                    />
-                    <Route path="/competitions" element={<Competitions />} />
+                      {/* Competitions */}
+                      <Route
+                        path="/competitions/:competitionId"
+                        element={<SingleCompetition />}
+                      />
+                      <Route path="/competitions" element={<Competitions />} />
 
-                    {/* Scoring */}
-                    <Route path="/scoring" element={<ScoringReference />} />
+                      {/* Scoring */}
+                      <Route path="/scoring" element={<ScoringReference />} />
 
-                    {/* Admin */}
-                    <Route path="/admin/:seasonId" element={<SeasonAdmin />} />
-                    <Route path="/admin" element={<Admin />} />
+                      {/* Admin */}
+                      <Route
+                        path="/admin/:seasonId"
+                        element={<SeasonAdmin />}
+                      />
+                      <Route path="/admin" element={<Admin />} />
 
-                    {/* 404 catch-all, must be last */}
-                    <Route path="*" element={<NotFound />} />
-                  </Routes>
-                </Suspense>
-              </RouteErrorBoundary>
-              <Footer />
-            </AppShell.Main>
-          </AppShell>
+                      {/* 404 catch-all, must be last */}
+                      <Route path="*" element={<NotFound />} />
+                    </Routes>
+                  </Suspense>
+                </RouteErrorBoundary>
+                <Footer />
+              </AppShell.Main>
+            </AppShell>
+          </BugContextProvider>
         </ModalsProvider>
       </Router>
     </MantineProvider>

@@ -23,6 +23,7 @@ import {
   PageIntro,
   StandbySlate,
   StatusBadge,
+  useBugContext,
 } from "../components/Layout";
 import { useCompetitions } from "../hooks/useCompetitions";
 import { useIsMobile } from "../hooks/useIsMobile";
@@ -181,6 +182,8 @@ export const Competitions = () => {
     setSeasonFilter(null);
     setStatusFilter("all");
   };
+
+  useBugContext("Competitions");
 
   if (!slimUser) {
     return (

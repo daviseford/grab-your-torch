@@ -7,7 +7,12 @@ import {
 import { IconSearch } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { EmptySlate, PageIntro, StatusBadge } from "../components/Layout";
+import {
+  EmptySlate,
+  PageIntro,
+  StatusBadge,
+  useBugContext,
+} from "../components/Layout";
 import { SEASON_METADATA, type SeasonMeta } from "../data/season-metadata";
 import { SEASON_ERAS, type SeasonEraId } from "./SeasonEras";
 import classes from "./Seasons.module.css";
@@ -41,6 +46,7 @@ function matchesEra(meta: SeasonMeta, filter: EraFilter): boolean {
 }
 
 export const Seasons = () => {
+  useBugContext("Seasons");
   const [search, setSearch] = useState("");
   const [era, setEra] = useState<EraFilter>("all");
 

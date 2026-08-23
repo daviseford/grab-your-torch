@@ -82,6 +82,26 @@
   color: var(--mantine-color-signal-5);
 }
 
+.bugContext {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: var(--mantine-spacing-md);
+  border-left: 1px solid var(--gyt-plate-rule);
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: 0.6875rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dark-1);
+  white-space: nowrap;
+  min-width: 0;
+
+  @media (max-width: $mantine-breakpoint-md) {
+    display: none;
+  }
+}
+
 .burger {
   --burger-color: var(--mantine-color-dark-0);
   margin-left: auto;

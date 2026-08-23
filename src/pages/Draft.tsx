@@ -24,7 +24,7 @@ import { v4 } from "uuid";
 import { saveAuthIntent, type AuthIntent } from "../components/Auth/authIntent";
 import { DraftOrderReveal } from "../components/DraftOrderReveal";
 import { DraftTable } from "../components/DraftTable";
-import { Board, StatusBadge } from "../components/Layout";
+import { Board, StatusBadge, useBugContext } from "../components/Layout";
 import { PostDraftPropBetTable } from "../components/PropBetTables/PostDraftPropBetTable";
 import {
   PropBetQuestionKey,
@@ -456,6 +456,20 @@ export const DraftComponent = () => {
       ),
     });
   };
+
+  const draftLive = !!draft?.started && !draft?.finished;
+  useBugContext(
+    season ? (
+      <>
+        <span>S{season.order} · Draft</span>
+        {draftLive && (
+          <StatusBadge kind="live" size="xs">
+            {isCurrentDrafter ? "Your turn" : "Picking"}
+          </StatusBadge>
+        )}
+      </>
+    ) : null,
+  );
 
   if (!season) return <div>Error: Missing data</div>;
 

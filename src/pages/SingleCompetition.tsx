@@ -25,6 +25,7 @@ import {
   RevealStrip,
   StandbySlate,
   StatusBadge,
+  useBugContext,
 } from "../components/Layout";
 import { PlayerGroupGrid } from "../components/MyPlayers";
 import { MyTeamSection } from "../components/MyTeam";
@@ -143,6 +144,15 @@ export const SingleCompetition = () => {
     });
     return () => modals.close(modalId);
   }, [requiresSignIn]);
+
+  const bugContext = competition
+    ? `S${competition.season_num} · ${
+        competition.current_episode != null
+          ? `Ep ${competition.current_episode} · Watch-along`
+          : "Live"
+      }`
+    : null;
+  useBugContext(bugContext);
 
   if (requiresSignIn) {
     return (

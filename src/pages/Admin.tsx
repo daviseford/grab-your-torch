@@ -21,6 +21,7 @@ import {
   EmptySlate,
   PageIntro,
   StatusBadge,
+  useBugContext,
 } from "../components/Layout";
 import { SEASON_9_CHALLENGES, SEASON_9_ELIMINATIONS } from "../data/season_9";
 import { SEASONS } from "../data/seasons";
@@ -117,6 +118,15 @@ export const Admin = () => {
       },
     });
   };
+
+  useBugContext(
+    <>
+      <span>Admin</span>
+      <StatusBadge kind="admin" size="xs">
+        Admin
+      </StatusBadge>
+    </>,
+  );
 
   if (!slimUser?.isAdmin) {
     return <AdminAccessDenied />;
