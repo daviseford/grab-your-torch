@@ -45,7 +45,7 @@ export const Logout = () => {
         </>
       }
     >
-      <Title order={2}>You're signed out</Title>
+      <Title order={1}>You're signed out</Title>
       <Text c="dimmed" size="sm" maw={420}>
         Thanks for playing. Sign back in to pick up your drafts and
         competitions, or keep browsing seasons and castaways for free.
