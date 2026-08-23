@@ -141,8 +141,6 @@ export const DraftComponent = () => {
         color: "red",
         icon: <IconX size={16} />,
       });
-    } finally {
-      startingDraft.current = false;
     }
   };
 
@@ -326,10 +324,12 @@ export const DraftComponent = () => {
     execute: executeJoinIntent,
   });
 
-  const startingDraft = useRef(false);
+  // One start write at a time: each call shuffles a fresh order, so a
+  // double-click would race two different pick orders.
+  const [startingDraft, setStartingDraft] = useState(false);
   const startDraft = async () => {
-    if (!draft || !slimUser?.uid || startingDraft.current) return;
-    startingDraft.current = true;
+    if (!draft || !slimUser?.uid || startingDraft) return;
+    setStartingDraft(true);
 
     const draftOrder = shuffle(draft.participants);
     const turns = buildTurnsMap(draftOrder, draft.total_players);
@@ -352,13 +352,13 @@ export const DraftComponent = () => {
         icon: <IconX size={16} />,
       });
     } finally {
-      startingDraft.current = false;
+      setStartingDraft(false);
     }
   };
 
-  // One RTDB write at a time: the snapshot that advances the pick arrives
-  // after the update resolves, so a second click in that window would
-  // overwrite the pick just made with a different castaway.
+  // One pick write at a time: until the snapshot advances the pick number a
+  // second click would write the same pick slot again with a different
+  // castaway, so the grid is locked while the update is in flight.
   const [submittingPick, setSubmittingPick] = useState(false);
 
   const draftPlayer = async (player: {
@@ -681,6 +681,7 @@ export const DraftComponent = () => {
                       size="md"
                       onClick={startDraft}
                       disabled={draft.participants.length < 2}
+                      loading={startingDraft}
                     >
                       {draft.participants.length < 2
                         ? "Waiting for players..."

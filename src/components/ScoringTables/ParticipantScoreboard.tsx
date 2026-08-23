@@ -49,7 +49,7 @@ export const ParticipantScoreboard = () => {
 
   const rankOf = (total: number) =>
     1 + entries.filter((entry) => entry.total > total).length;
-  const hasPoints = entries.some((entry) => entry.total > 0);
+  const hasPoints = entries.some((entry) => entry.total !== 0);
 
   return (
     <section className={classes.root} aria-label="Scoreboard">
