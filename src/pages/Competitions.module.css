@@ -1,49 +1,215 @@
-.sortButton {
+/*
+ * Competitions list: lower-third with the filters on its right, then the
+ * board. On phones the board becomes stacked rows (name, slates, people).
+ */
+.page {
   display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-md);
+}
+
+.count {
+  margin-left: 0.35em;
+  font-weight: 500;
+  font-size: 0.6em;
+  color: var(--mantine-color-dimmed);
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: rem(4px);
+  gap: var(--mantine-spacing-sm);
+
+  @media (max-width: $mantine-breakpoint-sm) {
+    & > * {
+      flex: 1 1 100%;
+    }
+  }
+}
+
+.seasonSelect {
+  width: 180px;
+
+  @media (max-width: $mantine-breakpoint-sm) {
+    width: 100%;
+  }
+}
+
+.segmented {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: 0.6875rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  background: var(--gyt-panel);
+  border: 1px solid var(--gyt-rule-strong);
+}
+
+.segmentedIndicator {
+  background: var(--mantine-color-navy-9);
+  box-shadow: none;
+}
+
+[data-mantine-color-scheme="dark"] .segmentedIndicator {
+  background: var(--mantine-color-league-6);
+}
+
+.segmentedLabel {
+  color: var(--mantine-color-dimmed);
+
+  &[data-active] {
+    color: var(--mantine-color-white);
+  }
+
+  @media (max-width: 26em) {
+    padding-inline: 6px;
+    font-size: 0.625rem;
+  }
+}
+
+/* The board: a panel whose table head carries caps labels. */
+.board {
+  background: var(--gyt-panel);
+  border: 1px solid var(--gyt-rule);
+  border-radius: var(--mantine-radius-md);
+  overflow: hidden;
+}
+
+.board :global(.mantine-Table-table) {
+  --table-border-color: var(--gyt-rule);
+}
+
+.board :global(.mantine-Table-th) {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: 0.6875rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+  background: var(--gyt-panel-2);
+  white-space: nowrap;
+}
+
+.board :global(.mantine-Table-th[aria-sort]) {
+  color: var(--mantine-color-text);
+}
+
+.sortButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
 }
 
 .clickableRow {
   cursor: pointer;
 
   &:focus-visible {
-    outline: 2px solid var(--mantine-color-blue-6);
+    outline: 2px solid var(--mantine-color-league-6);
     outline-offset: -2px;
   }
 }
 
-.chevron {
-  color: light-dark(var(--mantine-color-gray-4), var(--mantine-color-dark-3));
+.name {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 0.9375rem;
+  line-height: 1.2;
 }
 
-/* Fix #1: Hide Type column on mobile */
-.typeCell {
-  @media (max-width: $mantine-breakpoint-sm) {
-    display: none;
-  }
+.creator {
+  margin-top: 2px;
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
 }
 
-/* Fix #8: Stack filter controls on mobile */
-.filterControls {
-  display: flex;
-  flex-direction: row;
-  gap: var(--mantine-spacing-sm);
+.people {
+  max-width: 420px;
+  font-size: var(--mantine-font-size-sm);
+  color: var(--mantine-color-dimmed);
+}
 
-  @media (max-width: $mantine-breakpoint-sm) {
-    flex-direction: column;
-  }
+.badgeCell {
+  white-space: nowrap;
 }
 
 /* Badges carry the season, type, and status, so they must never shrink to an
    ellipsis. Mantine's Badge label is a flex item with overflow hidden, which
    lets the table squeeze it to nothing; making the overflow visible gives it
-   its content width as a minimum, and nowrap on the cell keeps the column
-   from being wrapped around it. */
-.badgeCell {
-  white-space: nowrap;
-}
-
+   its content width as a minimum. */
 .badgeLabel {
   overflow: visible;
+}
+
+.chevronCell {
+  width: 36px;
+}
+
+.chevron {
+  color: var(--mantine-color-dimmed);
+}
+
+/* Stacked rows on phones. */
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "name chev"
+    "badges chev"
+    "people chev";
+  gap: 6px 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--gyt-rule);
+  color: inherit;
+  text-decoration: none;
+
+  &:last-child {
+    border-bottom: 0;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--mantine-color-league-6);
+    outline-offset: -2px;
+  }
+}
+
+.rowName {
+  grid-area: name;
+  min-width: 0;
+}
+
+.rowBadges {
+  grid-area: badges;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.rowPeople {
+  grid-area: people;
+  font-size: var(--mantine-font-size-sm);
+  color: var(--mantine-color-dimmed);
+}
+
+.rowChevron {
+  grid-area: chev;
+  align-self: center;
+  color: var(--mantine-color-dimmed);
+}
+
+.skeletons {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: var(--mantine-spacing-sm);
 }

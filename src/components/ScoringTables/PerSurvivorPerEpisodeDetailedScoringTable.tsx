@@ -1,15 +1,4 @@
-import {
-  Avatar,
-  Badge,
-  Box,
-  Group,
-  Select,
-  Stack,
-  Table,
-  Text,
-  Tooltip,
-  UnstyledButton,
-} from "@mantine/core";
+import { Badge, Select, Table, Tooltip, UnstyledButton } from "@mantine/core";
 import {
   IconArrowRight,
   IconArrowsExchange,
@@ -17,7 +6,7 @@ import {
   IconChevronUp,
 } from "@tabler/icons-react";
 import { useMemo, useRef, useState } from "react";
-import { BASE_PLAYER_SCORING } from "../../data/scoring";
+import { BASE_PLAYER_SCORING, ScoringCategory } from "../../data/scoring";
 import { useCompetition } from "../../hooks/useCompetition";
 import { useCompetitionMeta } from "../../hooks/useCompetitionMeta";
 import { useDragScroll } from "../../hooks/useDragScroll";
@@ -30,28 +19,53 @@ import {
   getAcquisitionLabel,
   getUpcomingMoveLabel,
 } from "../../utils/tradeUtils";
+import { Board } from "../Layout";
 import { PlayerHoverCard } from "./PlayerHoverCard";
 import classes from "./ScoringTables.module.css";
 
 type SortField = "rank" | "player" | "total" | "draft";
 type SortDir = "asc" | "desc";
 
-const STICKY_OFFSETS = { rank: 0, player: 70, total: 230, pick: 300 } as const;
+// Rank, castaway, total, and pick stay pinned while the episode columns
+// scroll beneath them (desktop only). Offsets are the summed fixed widths.
+const STICKY_OFFSETS = { rank: 0, player: 56, total: 256, pick: 324 } as const;
 
-const getBadgeColor = (action: string) => {
-  if (action === "eliminated") return "red";
-  if (action === "win_survivor") return "green";
-  if (action === "win_fire_making") return "orange";
-  if (action === "duel") return "blue";
-  if (action.includes("idol") || action.includes("advantage")) return "violet";
-  if (
-    action.includes("immunity") ||
-    action.includes("challenge") ||
-    action.includes("reward")
-  )
-    return "blue";
-  return "gray";
+// Scoring category colors stay semantic (the same five as the scoring
+// reference and the homepage): Challenges blue, Milestones teal, Idols
+// yellow, Advantages grape, Other gray.
+const CATEGORY_COLORS: Record<ScoringCategory, string> = {
+  Challenges: "blue",
+  Milestones: "teal",
+  Idols: "yellow",
+  Advantages: "grape",
+  Other: "gray",
 };
+const CATEGORY_ORDER: ScoringCategory[] = [
+  "Challenges",
+  "Milestones",
+  "Idols",
+  "Advantages",
+  "Other",
+];
+
+const categoryByAction = BASE_PLAYER_SCORING.reduce(
+  (accum, entry) => {
+    accum[entry.action] = entry.category;
+    return accum;
+  },
+  {} as Partial<Record<PlayerAction, ScoringCategory>>,
+);
+
+const getBadgeColor = (action: PlayerAction) =>
+  CATEGORY_COLORS[categoryByAction[action] ?? "Other"];
+
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part.charAt(0))
+    .join("")
+    .toUpperCase();
 
 const SortableHeader = ({
   label,
@@ -59,7 +73,6 @@ const SortableHeader = ({
   sortField,
   sortDir,
   onSort,
-  width,
   className,
   style,
 }: {
@@ -68,37 +81,40 @@ const SortableHeader = ({
   sortField: SortField;
   sortDir: SortDir;
   onSort: (field: SortField) => void;
-  width?: string;
   className?: string;
   style?: React.CSSProperties;
 }) => {
   const isActive = sortField === field;
   const Icon = isActive && sortDir === "desc" ? IconChevronDown : IconChevronUp;
-  const sorted = isActive;
-  const ariaSortValue = sorted
+  const ariaSortValue = isActive
     ? sortDir === "asc"
       ? "ascending"
       : "descending"
     : "none";
   return (
     <Table.Th
-      w={width}
+      scope="col"
       aria-sort={ariaSortValue}
       className={className}
       style={style}
     >
       <UnstyledButton
         onClick={() => onSort(field)}
-        style={{ display: "flex", alignItems: "center", gap: 4 }}
+        className={classes.sortButton}
         aria-label={`Sort by ${label}`}
       >
         {label}
-        {isActive && <Icon size={14} />}
+        {isActive && <Icon size={12} />}
       </UnstyledButton>
     </Table.Th>
   );
 };
 
+/**
+ * The Player Scores board: every drafted castaway with their points per
+ * revealed episode as category-colored event slates. Episode columns run only
+ * through the competition's current episode.
+ */
 export const PerSurvivorPerEpisodeDetailedScoringTable = () => {
   const { data: competition } = useCompetition();
   const { data: season } = useSeason(competition?.season_id);
@@ -297,33 +313,43 @@ export const PerSurvivorPerEpisodeDetailedScoringTable = () => {
     const isOwnedByCurrentUser =
       !!slimUser?.uid && displayOwners[castawayId] === slimUser.uid;
 
-    const trStyle = {
-      backgroundColor: isWinner
-        ? "var(--mantine-color-green-light)"
-        : playerElimination
-          ? "var(--mantine-color-gray-light)"
-          : isOwnedByCurrentUser
-            ? "var(--mantine-color-blue-light)"
-            : "var(--mantine-color-body)",
-    };
-    const avatarStyle = playerElimination ? { filter: "grayscale(1)" } : {};
+    const rowClass = [
+      classes.row,
+      isOwnedByCurrentUser && classes.rowMe,
+      playerElimination && !isWinner && classes.rowOut,
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    const portrait = playerData?.img ? (
+      <img
+        src={playerData.img}
+        alt=""
+        width={26}
+        height={32}
+        loading="lazy"
+        decoding="async"
+        className={`${classes.face} ${playerElimination ? classes.faceOut : ""}`}
+      />
+    ) : (
+      <span className={classes.facePlaceholder} aria-hidden="true">
+        {initials(displayName)}
+      </span>
+    );
 
     return (
-      <Table.Tr key={castawayId} style={trStyle}>
+      <Table.Tr key={castawayId} className={rowClass}>
         <Table.Td
-          ta="center"
-          className={classes.stickyCell}
+          className={`${classes.stickyCell} ${classes.colRankWide}`}
           style={{ left: STICKY_OFFSETS.rank }}
         >
-          <Text span size="sm" fw={500} c="dimmed">
-            {defaultRank}
-          </Text>
+          <span className={classes.rankPlain}>{defaultRank}</span>
         </Table.Td>
         <Table.Td
-          className={classes.stickyCell}
-          style={{ left: STICKY_OFFSETS.player, minWidth: 160 }}
+          className={`${classes.stickyCell} ${classes.colCastaway}`}
+          style={{ left: STICKY_OFFSETS.player }}
         >
-          <Group gap={8} wrap="nowrap" align="center">
+          <div className={classes.who}>
             <PlayerHoverCard
               playerData={playerData}
               castawayId={castawayId}
@@ -333,107 +359,102 @@ export const PerSurvivorPerEpisodeDetailedScoringTable = () => {
               eliminationLabel={eliminationLabel}
               isNonVotedOut={!!isNonVotedOut}
             >
-              <Avatar
-                size={28}
-                src={playerData?.img}
-                radius={28}
-                style={{ ...avatarStyle, flexShrink: 0, cursor: "pointer" }}
-              />
+              {portrait}
             </PlayerHoverCard>
-            <div style={{ minWidth: 0 }}>
-              <Text
-                fz="sm"
-                fw={500}
-                c={playerElimination ? "dimmed" : ""}
-                lh={1.2}
-                truncate
+            <div className={classes.whoText}>
+              <div
+                className={`${classes.name} ${playerElimination && !isWinner ? classes.struck : ""}`}
+                title={displayName}
               >
                 {displayName}
-              </Text>
-              {(ownedBy || playerElimination) && (
-                <Text fz="xs" c="dimmed" lh={1.2} truncate>
+              </div>
+              {(ownedBy || playerElimination || isWinner) && (
+                <div className={classes.caption}>
                   {ownedBy ?? ""}
                   {acquisitionLabel && (
                     <Tooltip label={acquisitionLabel}>
-                      <IconArrowsExchange
-                        size={11}
+                      <span
+                        className={classes.tradeMark}
                         role="img"
                         aria-label={acquisitionLabel}
-                        style={{ marginLeft: 3, verticalAlign: "-1px" }}
-                      />
+                      >
+                        <IconArrowsExchange size={9} stroke={2.5} />
+                      </span>
                     </Tooltip>
                   )}
                   {upcomingLabel && (
                     <Tooltip label={upcomingLabel}>
                       <IconArrowRight
-                        size={11}
+                        size={12}
                         role="img"
                         aria-label={upcomingLabel}
-                        color="var(--mantine-color-yellow-8)"
-                        style={{ marginLeft: 3, verticalAlign: "-1px" }}
+                        className={classes.moveMark}
                       />
                     </Tooltip>
                   )}
-                  {ownedBy && playerElimination && " · "}
-                  {eliminationLabel && (
-                    <Text
-                      span
-                      fz="xs"
-                      c={isNonVotedOut ? "red.6" : "dimmed"}
-                      fw={isNonVotedOut ? 600 : undefined}
+                  {isWinner && (
+                    <span className={classes.winnerTag}>Sole Survivor</span>
+                  )}
+                  {ownedBy && playerElimination && !isWinner && " · "}
+                  {eliminationLabel && !isWinner && (
+                    <span
+                      style={
+                        isNonVotedOut
+                          ? {
+                              color: "var(--mantine-color-red-6)",
+                              fontWeight: 600,
+                            }
+                          : undefined
+                      }
                     >
                       {eliminationLabel}
-                    </Text>
+                    </span>
                   )}
-                </Text>
+                </div>
               )}
             </div>
-          </Group>
+          </div>
         </Table.Td>
 
         <Table.Td
-          ta="center"
-          className={classes.stickyCell}
+          className={`${classes.stickyCell} ${classes.colTotal}`}
           style={{ left: STICKY_OFFSETS.total }}
         >
-          <Text span fw={700} size="sm">
+          <span className={`${classes.num} ${total === 0 ? classes.zero : ""}`}>
             {total}
-          </Text>
+          </span>
         </Table.Td>
 
         <Table.Td
-          ta="center"
-          className={`${classes.stickyCell} ${classes.stickyDivider}`}
+          className={`${classes.stickyCell} ${classes.stickyDivider} ${classes.colPick}`}
           style={{ left: STICKY_OFFSETS.pick }}
         >
-          <Text span size="sm" c="dimmed">
-            {getNumberWithOrdinal(draftOrder)}
-          </Text>
+          <span className={`${classes.num} ${classes.zero}`}>
+            {draftOrder === 999 ? "—" : getNumberWithOrdinal(draftOrder)}
+          </span>
         </Table.Td>
 
         {episodeScores.map((s, idx) => (
-          <Table.Td key={idx}>
-            <Stack gap={2}>
-              {s.actions.map((x, actionIdx) => {
-                return (
+          <Table.Td key={idx} className={classes.colEvents}>
+            {s.actions.length > 0 && (
+              <div className={classes.events}>
+                {s.actions.map((x, actionIdx) => (
                   <Tooltip
                     label={scoringDescriptionLookup[x.action]}
                     key={actionIdx}
                   >
                     <Badge
                       size="xs"
-                      variant="light"
+                      variant="filled"
                       color={getBadgeColor(x.action)}
-                      style={{
-                        cursor: "pointer",
-                      }}
+                      className={classes.eventBadge}
                     >
                       {x.action.replace(/_/g, " ")} +{x.points_awarded}
                     </Badge>
                   </Tooltip>
-                );
-              })}
-            </Stack>
+                ))}
+              </div>
+            )}
           </Table.Td>
         ))}
       </Table.Tr>
@@ -444,13 +465,15 @@ export const PerSurvivorPerEpisodeDetailedScoringTable = () => {
   useDragScroll(scrollRef);
 
   return (
-    <>
-      {userFilterOptions.length > 0 && (
-        <Group mb="xs" px="md">
+    <Board
+      title="Player Scores"
+      subtitle="Per castaway, per episode"
+      aside={
+        userFilterOptions.length > 0 ? (
           <Select
             size="xs"
-            w={240}
-            placeholder="Filter by roster"
+            w={180}
+            placeholder="All rosters"
             data={userFilterOptions}
             value={filterUserUid}
             onChange={handleFilterChange}
@@ -458,69 +481,38 @@ export const PerSurvivorPerEpisodeDetailedScoringTable = () => {
             allowDeselect
             aria-label="Filter players by roster owner"
           />
-        </Group>
-      )}
-      <Group gap="md" mb="xs" px="md" wrap="wrap">
-        <Group gap={4}>
-          <Box
-            aria-hidden="true"
-            w={12}
-            h={12}
-            style={{
-              backgroundColor: "var(--mantine-color-green-light)",
-              borderRadius: 2,
-              border: "1px solid var(--mantine-color-green-light-color)",
-            }}
-          />
-          <Text size="xs" c="dimmed">
-            Winner
-          </Text>
-        </Group>
-        <Group gap={4}>
-          <Box
-            aria-hidden="true"
-            w={12}
-            h={12}
-            style={{
-              backgroundColor: "var(--mantine-color-gray-light)",
-              borderRadius: 2,
-              border: "1px solid var(--mantine-color-default-border)",
-            }}
-          />
-          <Text size="xs" c="dimmed">
-            Eliminated
-          </Text>
-        </Group>
-        <Group gap={4}>
-          <Badge size="xs" variant="light" color="red">
-            Elimination
+        ) : undefined
+      }
+      dense
+      flush
+    >
+      <div className={classes.legend}>
+        {CATEGORY_ORDER.map((category) => (
+          <Badge
+            key={category}
+            size="xs"
+            variant="filled"
+            color={CATEGORY_COLORS[category]}
+          >
+            {category}
           </Badge>
-        </Group>
-        <Group gap={4}>
-          <Badge size="xs" variant="light" color="blue">
-            Challenge
-          </Badge>
-        </Group>
-        <Group gap={4}>
-          <Badge size="xs" variant="light" color="violet">
-            Idol / Advantage
-          </Badge>
-        </Group>
-        <Group gap={4}>
-          <Badge size="xs" variant="light" color="gray">
-            Other
-          </Badge>
-        </Group>
-      </Group>
+        ))}
+        <span className={classes.legendMark}>
+          <span className={classes.struck}>Eliminated</span>
+        </span>
+        <span className={classes.legendMark}>
+          <span className={classes.winnerTag}>Sole Survivor</span>
+        </span>
+      </div>
       <Table.ScrollContainer
-        minWidth={500 + filteredEpisodes.length * 170}
+        minWidth={356 + filteredEpisodes.length * 150}
         ref={scrollRef}
       >
         <Table
           highlightOnHover
           verticalSpacing="xs"
           horizontalSpacing="sm"
-          withColumnBorders
+          className={classes.table}
         >
           <Table.Thead>
             <Table.Tr>
@@ -530,18 +522,16 @@ export const PerSurvivorPerEpisodeDetailedScoringTable = () => {
                 sortField={sortField}
                 sortDir={sortDir}
                 onSort={handleSort}
-                width="70px"
-                className={classes.stickyHeaderCell}
+                className={`${classes.stickyHeaderCell} ${classes.colRankWide}`}
                 style={{ left: STICKY_OFFSETS.rank }}
               />
               <SortableHeader
-                label="Player"
+                label="Castaway"
                 field="player"
                 sortField={sortField}
                 sortDir={sortDir}
                 onSort={handleSort}
-                width="160px"
-                className={classes.stickyHeaderCell}
+                className={`${classes.stickyHeaderCell} ${classes.colCastaway}`}
                 style={{ left: STICKY_OFFSETS.player }}
               />
               <SortableHeader
@@ -550,8 +540,7 @@ export const PerSurvivorPerEpisodeDetailedScoringTable = () => {
                 sortField={sortField}
                 sortDir={sortDir}
                 onSort={handleSort}
-                width="70px"
-                className={classes.stickyHeaderCell}
+                className={`${classes.stickyHeaderCell} ${classes.colTotal}`}
                 style={{ left: STICKY_OFFSETS.total }}
               />
               <SortableHeader
@@ -560,12 +549,16 @@ export const PerSurvivorPerEpisodeDetailedScoringTable = () => {
                 sortField={sortField}
                 sortDir={sortDir}
                 onSort={handleSort}
-                width="60px"
-                className={`${classes.stickyHeaderCell} ${classes.stickyDivider}`}
+                className={`${classes.stickyHeaderCell} ${classes.stickyDivider} ${classes.colPick}`}
                 style={{ left: STICKY_OFFSETS.pick }}
               />
               {filteredEpisodes.map((x) => (
-                <Table.Th key={x.id} w={160}>
+                <Table.Th
+                  key={x.id}
+                  scope="col"
+                  className={classes.colEvents}
+                  title={x.name}
+                >
                   Ep {x.order}
                 </Table.Th>
               ))}
@@ -574,6 +567,6 @@ export const PerSurvivorPerEpisodeDetailedScoringTable = () => {
           <Table.Tbody>{rows}</Table.Tbody>
         </Table>
       </Table.ScrollContainer>
-    </>
+    </Board>
   );
 };

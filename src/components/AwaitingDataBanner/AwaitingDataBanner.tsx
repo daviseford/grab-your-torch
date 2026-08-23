@@ -15,8 +15,8 @@ const formatAirDate = (airDate: string): string =>
  */
 export const AwaitingDataBanner = ({ episode }: { episode: Episode }) => (
   <Alert
-    variant="light"
-    color="yellow"
+    variant="outline"
+    color="orange"
     title={`Awaiting data for Episode ${episode.order}`}
     icon={<IconClockExclamation size={20} />}
   >

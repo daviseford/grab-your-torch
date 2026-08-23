@@ -1,5 +1,379 @@
-/* ── Sticky column styles for per-episode scoring tables ── */
-/* Disabled on mobile (≤48em) to keep default scroll behavior */
+/*
+ * Shared board grammar for the competition's scoring tables: rank blocks,
+ * sticky identity columns (desktop only; phones scroll natively inside the
+ * board), row marks for "you", the leader, the winner, and the eliminated,
+ * and the category slates on per-episode event cells.
+ */
+
+/* Rank block: League Blue, or Victory Gold for first place. */
+.rankBlock {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 3px;
+  background: var(--mantine-color-league-6);
+  color: var(--mantine-color-white);
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 0.8125rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.rankFirst {
+  background: var(--mantine-color-gold-4);
+  color: var(--mantine-color-navy-9);
+}
+
+.rankPlain {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: 0.8125rem;
+  color: var(--mantine-color-dimmed);
+}
+
+.row {
+  background-color: var(--gyt-panel);
+}
+
+.rowMe :global(.mantine-Table-td):first-child {
+  box-shadow: inset 3px 0 0 var(--mantine-color-signal-5);
+}
+
+.rowOut {
+  color: var(--mantine-color-dimmed);
+}
+
+/* Identity cell: portrait plus name and a caption line. */
+.who {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.whoText {
+  min-width: 0;
+}
+
+.name {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: var(--mantine-font-size-sm);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.caption {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--mantine-font-size-xs);
+  line-height: 1.2;
+  color: var(--mantine-color-dimmed);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.struck {
+  text-decoration: line-through;
+  text-decoration-color: var(--mantine-color-ember-6);
+  text-decoration-thickness: 2px;
+  color: var(--mantine-color-dimmed);
+}
+
+.face {
+  display: block;
+  width: 26px;
+  height: 32px;
+  border-radius: 3px;
+  object-fit: cover;
+  object-position: top;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.faceOut {
+  filter: grayscale(1) brightness(0.55);
+  outline: 2px solid var(--mantine-color-ember-6);
+  outline-offset: -2px;
+}
+
+.facePlaceholder {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 32px;
+  border-radius: 3px;
+  background: var(--gyt-plate);
+  color: var(--mantine-color-dark-1);
+  font-family: var(--mantine-headings-font-family);
+  font-size: 0.625rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.youTag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--mantine-color-signal-5);
+  color: var(--mantine-color-navy-9);
+  font-family: var(--mantine-headings-font-family);
+  font-size: 0.5625rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.winnerTag {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--mantine-color-gold-4);
+  color: var(--mantine-color-navy-9);
+  font-family: var(--mantine-headings-font-family);
+  font-size: 0.5625rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.tradeMark {
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--mantine-color-signal-5);
+  color: var(--mantine-color-navy-9);
+  flex-shrink: 0;
+}
+
+.moveMark {
+  color: var(--mantine-color-gold-6);
+  flex-shrink: 0;
+}
+
+/* Numbers that matter. */
+.points {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 1.125rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.points small {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.5625rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+
+.num {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: var(--mantine-font-size-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.zero {
+  color: var(--mantine-color-dimmed);
+  font-weight: 500;
+}
+
+.numCell {
+  text-align: center;
+}
+
+.sortButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+}
+
+/* Column widths are fixed so the sticky offsets line up exactly. */
+.colRank {
+  width: 44px;
+  min-width: 44px;
+  max-width: 44px;
+  text-align: center;
+}
+
+.colRankWide {
+  width: 56px;
+  min-width: 56px;
+  max-width: 56px;
+  text-align: center;
+}
+
+.colParticipant {
+  width: 176px;
+  min-width: 176px;
+  max-width: 176px;
+}
+
+.colPoints {
+  width: 80px;
+  min-width: 80px;
+  max-width: 80px;
+  text-align: center;
+}
+
+.colCastaway {
+  width: 200px;
+  min-width: 200px;
+  max-width: 200px;
+}
+
+.colTotal {
+  width: 68px;
+  min-width: 68px;
+  max-width: 68px;
+  text-align: center;
+}
+
+.colPick {
+  width: 60px;
+  min-width: 60px;
+  max-width: 60px;
+  text-align: center;
+}
+
+.colEpisode {
+  min-width: 56px;
+  text-align: center;
+}
+
+.colEvents {
+  min-width: 150px;
+  vertical-align: top;
+}
+
+/* Event slates inside an episode cell: one category-colored slate per
+   scoring action, stacked. */
+.events {
+  display: grid;
+  gap: 3px;
+  justify-items: start;
+}
+
+.eventBadge {
+  cursor: default;
+  letter-spacing: 0.06em;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  padding: 8px var(--mantine-spacing-md);
+  border-bottom: 1px solid var(--gyt-rule);
+}
+
+.legendMark {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+}
+
+.table {
+  min-width: 0;
+}
+
+.note {
+  padding: var(--mantine-spacing-xl) var(--mantine-spacing-md);
+  text-align: center;
+  color: var(--mantine-color-dimmed);
+  font-size: var(--mantine-font-size-sm);
+}
+
+.propQuestion {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: 0.75rem;
+  line-height: 1.25;
+  white-space: normal;
+  min-width: 140px;
+  max-width: 180px;
+}
+
+.propValue {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+
+.propAnswer {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  min-width: 110px;
+}
+
+.propName {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: 0.75rem;
+  line-height: 1.25;
+}
+
+.propPending {
+  font-weight: 500;
+  color: var(--mantine-color-dimmed);
+}
+
+.propWrong {
+  text-decoration: line-through;
+  text-decoration-color: var(--mantine-color-red-6);
+  color: var(--mantine-color-dimmed);
+}
+
+.propLeading {
+  color: var(--mantine-color-yellow-8);
+}
+
+[data-mantine-color-scheme="dark"] .propLeading {
+  color: var(--mantine-color-yellow-4);
+}
+
+/* Row headers (prop bet questions) read as body text, not column labels. */
+.table :global(.mantine-Table-th).rowHeader {
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--mantine-color-text);
+  background: var(--gyt-panel);
+  font-weight: 600;
+  white-space: normal;
+  text-align: left;
+}
+
+.table .propTotalRow :global(.mantine-Table-td),
+.table .propTotalRow :global(.mantine-Table-th) {
+  background: var(--gyt-panel-2);
+}
 
 @media (min-width: 48.0625em) {
   .stickyCell {
@@ -8,15 +382,19 @@
     background-color: inherit;
   }
 
-  .stickyHeaderCell {
+  .table :global(.mantine-Table-th).stickyHeaderCell {
     position: sticky;
     z-index: 3;
-    background-color: var(--mantine-color-body);
+    background-color: var(--gyt-panel-2);
   }
 
-  /* Visual divider on the last sticky column */
+  /* Hairline on the last sticky column so the scrolling cells read as
+     sliding beneath it. */
   .stickyDivider {
-    box-shadow: 2px 0 4px rgba(0, 0, 0, 0.08);
-    clip-path: inset(0 -4px 0 0);
+    box-shadow: inset -1px 0 0 var(--gyt-rule-strong);
+  }
+
+  .rowMe .stickyDivider {
+    box-shadow: inset -1px 0 0 var(--gyt-rule-strong);
   }
 }

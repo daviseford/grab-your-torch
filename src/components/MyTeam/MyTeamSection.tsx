@@ -1,12 +1,8 @@
 import {
   ActionIcon,
-  Avatar,
   Badge,
   Button,
-  Divider,
   Group,
-  Paper,
-  Stack,
   Table,
   Text,
   TextInput,
@@ -14,13 +10,7 @@ import {
   Tooltip,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import {
-  IconArrowsExchange,
-  IconCheck,
-  IconFlame,
-  IconPencil,
-  IconTrophy,
-} from "@tabler/icons-react";
+import { IconPencil } from "@tabler/icons-react";
 import { sum } from "lodash-es";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
@@ -46,6 +36,7 @@ import {
   getUpcomingMoveLabel,
   UpcomingMove,
 } from "../../utils/tradeUtils";
+import { Board, StatusBadge } from "../Layout";
 import classes from "./MyTeamSection.module.css";
 
 const TRADES_TAB_LINK = "?tab=trades";
@@ -70,6 +61,14 @@ const getEliminationLabel = (elimination: Elimination): string => {
 
 const plural = (count: number, noun: string) =>
   `${count} ${noun}${count === 1 ? "" : "s"}`;
+
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part.charAt(0))
+    .join("")
+    .toUpperCase();
 
 type RosterRow = {
   player: Player;
@@ -126,12 +125,7 @@ const TeamNameEditor = ({
         disabled={saving}
       />
       <Group gap="xs" wrap="nowrap">
-        <Button
-          type="submit"
-          size="md"
-          loading={saving}
-          leftSection={<IconCheck size={16} />}
-        >
+        <Button type="submit" size="md" loading={saving}>
           Save
         </Button>
         <Button
@@ -361,280 +355,263 @@ export const MyTeamSection = ({ trades }: { trades: Trade[] }) => {
   ).length;
 
   return (
-    <Paper p={{ base: "sm", sm: "lg" }} radius="md" withBorder>
-      <Stack gap="lg">
-        <header className={classes.header}>
-          <div className={classes.identity}>
-            {editingName ? (
-              <TeamNameEditor
-                initialName={customName}
-                fallbackName={accountName}
-                onSave={saveName}
-                onCancel={() => setEditingName(false)}
-              />
-            ) : (
-              <Stack gap={4}>
-                <Group gap={6} align="center" wrap="nowrap">
-                  <Title order={3} className={classes.teamName}>
-                    {displayName}
-                  </Title>
-                  <ActionIcon
-                    variant="subtle"
-                    color="gray"
-                    size="md"
-                    onClick={() => setEditingName(true)}
-                    aria-label="Rename team"
-                  >
-                    <IconPencil size={16} />
-                  </ActionIcon>
-                </Group>
-                <Text size="sm" c="dimmed">
-                  {customName
-                    ? `Playing as ${accountName}`
-                    : "Using your account name. Rename your team to make it yours."}
-                </Text>
-              </Stack>
-            )}
-          </div>
-
-          <div className={classes.standing}>
-            {hasStandings ? (
-              <div className={classes.rankRow}>
-                {isLeader && (
-                  <IconTrophy
-                    size={20}
-                    color="var(--mantine-color-yellow-6)"
-                    aria-label="Leading"
-                    style={{ alignSelf: "center" }}
-                  />
-                )}
-                <Text fz={30} fw={800} className={classes.standingRank}>
-                  {getNumberWithOrdinal(rank)}
-                </Text>
-                <Text size="sm" c="dimmed">
-                  of {participants.length}
-                </Text>
-              </div>
-            ) : (
-              <Text
-                fz={30}
-                fw={800}
-                c="dimmed"
-                className={classes.standingRank}
-              >
-                —
-              </Text>
-            )}
-            <Text size="sm" fw={600} className={classes.numeric}>
-              {plural(myTotal, "pt")}
-              {activePropBetKeys.length > 0 && mine?.propBetPoints ? (
-                <Text span size="sm" c="dimmed" fw={400}>
-                  {" "}
-                  · {mine.propBetPoints} from prop bets
-                </Text>
-              ) : null}
-            </Text>
-            <Text size="sm" c="dimmed">
-              {standingDetail}
-            </Text>
-          </div>
-        </header>
-
-        <Divider />
-
-        <Stack gap="xs">
-          <Group justify="space-between" align="baseline">
-            <Title order={4}>Roster</Title>
-            {rows.length > 0 && (
+    <div className={classes.root}>
+      <header className={classes.header}>
+        <div className={classes.identity}>
+          {editingName ? (
+            <TeamNameEditor
+              initialName={customName}
+              fallbackName={accountName}
+              onSave={saveName}
+              onCancel={() => setEditingName(false)}
+            />
+          ) : (
+            <>
+              <Group gap={6} align="center" wrap="nowrap">
+                <Title order={3} className={classes.teamName}>
+                  {displayName}
+                </Title>
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  size="md"
+                  onClick={() => setEditingName(true)}
+                  aria-label="Rename team"
+                >
+                  <IconPencil size={16} />
+                </ActionIcon>
+              </Group>
               <Text size="sm" c="dimmed">
-                {plural(rows.length, "castaway")} · {activeCount} still in the
-                game
+                {customName
+                  ? `Playing as ${accountName}`
+                  : "Using your account name. Rename your team to make it yours."}
               </Text>
-            )}
-          </Group>
+            </>
+          )}
+        </div>
 
-          {rows.length === 0 && incoming.length === 0 ? (
+        <div className={classes.standing}>
+          {hasStandings ? (
+            <div className={classes.rankRow}>
+              {isLeader && <span className={classes.leading}>Leading</span>}
+              <span className={classes.standingRank}>
+                {getNumberWithOrdinal(rank)}
+              </span>
+              <span className={classes.standingOf}>
+                of {participants.length}
+              </span>
+            </div>
+          ) : (
+            <span className={`${classes.standingRank} ${classes.dim}`}>—</span>
+          )}
+          <div className={classes.standingPts}>
+            {plural(myTotal, "pt")}
+            {activePropBetKeys.length > 0 && mine?.propBetPoints ? (
+              <span> · {mine.propBetPoints} from prop bets</span>
+            ) : null}
+          </div>
+          <div className={classes.standingDetail}>{standingDetail}</div>
+        </div>
+      </header>
+
+      <Board
+        title="Roster"
+        titleAs="h4"
+        subtitle={
+          rows.length > 0
+            ? `${plural(rows.length, "castaway")} · ${activeCount} still in the game`
+            : undefined
+        }
+        dense
+        flush
+      >
+        {rows.length === 0 && incoming.length === 0 ? (
+          <p className={classes.note}>No castaways on your roster yet.</p>
+        ) : (
+          <Table.ScrollContainer minWidth={560}>
+            <Table verticalSpacing="xs" horizontalSpacing="sm" highlightOnHover>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th scope="col">Castaway</Table.Th>
+                  <Table.Th scope="col">Status</Table.Th>
+                  <Table.Th scope="col">Acquired</Table.Th>
+                  <Table.Th scope="col" ta="right">
+                    {lastEpisode ? `Ep ${lastEpisode.order}` : "Latest"}
+                  </Table.Th>
+                  <Table.Th scope="col" ta="right">
+                    Points
+                  </Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {rows.map((row) => (
+                  <RosterTableRow
+                    key={row.player.castaway_id}
+                    row={row}
+                    participants={participants}
+                    teamNames={teamNames}
+                    drafterUid={drafters[row.player.castaway_id]}
+                    hasEpisodes={!!lastEpisode}
+                  />
+                ))}
+                {incoming.map(({ player, fromUid, landsNextEpisode }) => (
+                  <Table.Tr
+                    key={`incoming_${player.castaway_id}`}
+                    className={classes.arriving}
+                  >
+                    <Table.Td>
+                      <div className={classes.castawayCell}>
+                        <Portrait
+                          player={player}
+                          className={classes.faceArriving}
+                        />
+                        <span className={classes.castawayName}>
+                          {player.full_name}
+                        </span>
+                      </div>
+                    </Table.Td>
+                    <Table.Td>
+                      <StatusBadge kind="pending" size="sm">
+                        {landsNextEpisode
+                          ? "Arriving next episode"
+                          : "Arriving soon"}
+                      </StatusBadge>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="sm">From {nameOf(fromUid)}</Text>
+                    </Table.Td>
+                    <Table.Td className={`${classes.numeric} ${classes.dim}`}>
+                      —
+                    </Table.Td>
+                    <Table.Td className={`${classes.numeric} ${classes.dim}`}>
+                      —
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Table.ScrollContainer>
+        )}
+        {rows.length > 0 && (
+          <p className={classes.footnote}>
+            Points count only while a castaway is on your roster, the same way
+            the Standings table scores trades.
+          </p>
+        )}
+      </Board>
+
+      <div className={classes.insights}>
+        <Board title="Highlights" titleAs="h4">
+          {!hasStandings ? (
             <Text size="sm" c="dimmed">
-              No castaways on your roster yet.
+              Highlights appear once Episode 1 has been scored.
             </Text>
           ) : (
-            <Table.ScrollContainer minWidth={560}>
-              <Table verticalSpacing="sm" highlightOnHover>
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th>Castaway</Table.Th>
-                    <Table.Th>Status</Table.Th>
-                    <Table.Th>Acquired</Table.Th>
-                    <Table.Th ta="right">
-                      {lastEpisode ? `Ep ${lastEpisode.order}` : "Latest"}
-                    </Table.Th>
-                    <Table.Th ta="right">Points</Table.Th>
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {rows.map((row) => (
-                    <RosterTableRow
-                      key={row.player.castaway_id}
-                      row={row}
-                      participants={participants}
-                      teamNames={teamNames}
-                      drafterUid={drafters[row.player.castaway_id]}
-                      hasEpisodes={!!lastEpisode}
-                    />
-                  ))}
-                  {incoming.map(({ player, fromUid, landsNextEpisode }) => (
-                    <Table.Tr
-                      key={`incoming_${player.castaway_id}`}
-                      className={classes.arriving}
-                    >
-                      <Table.Td>
-                        <Group gap="sm" wrap="nowrap">
-                          <Avatar
-                            src={player.img}
-                            alt=""
-                            size="sm"
-                            className={classes.arrivingAvatar}
-                            imageProps={{ loading: "lazy" }}
-                          />
-                          <Text size="sm" fw={500}>
-                            {player.full_name}
-                          </Text>
-                        </Group>
-                      </Table.Td>
-                      <Table.Td>
-                        <Badge variant="light" color="yellow" size="sm">
-                          {landsNextEpisode
-                            ? "Arriving next episode"
-                            : "Arriving soon"}
-                        </Badge>
-                      </Table.Td>
-                      <Table.Td>
-                        <Text size="sm">From {nameOf(fromUid)}</Text>
-                      </Table.Td>
-                      <Table.Td ta="right">
-                        <Text size="sm" c="dimmed">
-                          —
-                        </Text>
-                      </Table.Td>
-                      <Table.Td ta="right">
-                        <Text size="sm" c="dimmed">
-                          —
-                        </Text>
-                      </Table.Td>
-                    </Table.Tr>
-                  ))}
-                </Table.Tbody>
-              </Table>
-            </Table.ScrollContainer>
+            <dl className={classes.statList}>
+              <dt>Top scorer</dt>
+              <dd>
+                {topScorer
+                  ? `${topScorer.player.full_name} · ${plural(topScorer.points, "pt")}`
+                  : "No points yet"}
+              </dd>
+              <dt>Best episode</dt>
+              <dd>
+                {bestEpisode
+                  ? `Ep ${bestEpisode.episode.order} · ${plural(bestEpisode.points, "pt")}`
+                  : "No points yet"}
+              </dd>
+              <dt>Still in the game</dt>
+              <dd>
+                {activeCount} of {rows.length}
+              </dd>
+              {tradedInCount > 0 && (
+                <>
+                  <dt>Acquired by trade</dt>
+                  <dd>{tradedInCount}</dd>
+                </>
+              )}
+            </dl>
           )}
-          {rows.length > 0 && (
-            <Text size="xs" c="dimmed">
-              Points count only while a castaway is on your roster, the same way
-              the Standings table scores trades.
-            </Text>
-          )}
-        </Stack>
+        </Board>
 
-        <Divider />
-
-        <div className={classes.insights}>
-          <Stack gap="xs">
-            <Group gap={6} align="center">
-              <IconFlame size={18} color="var(--mantine-color-orange-6)" />
-              <Title order={4}>Highlights</Title>
-            </Group>
-            {!hasStandings ? (
+        <Board title="Trades" titleAs="h4">
+          {myTrades.length === 0 ? (
+            <div className={classes.stack}>
               <Text size="sm" c="dimmed">
-                Highlights appear once Episode 1 has been scored.
+                {competition.finished
+                  ? "You didn't trade this season."
+                  : "You haven't traded yet."}
               </Text>
-            ) : (
-              <dl className={classes.statList}>
-                <dt>Top scorer</dt>
-                <dd>
-                  {topScorer
-                    ? `${topScorer.player.full_name} · ${plural(topScorer.points, "pt")}`
-                    : "No points yet"}
-                </dd>
-                <dt>Best episode</dt>
-                <dd>
-                  {bestEpisode
-                    ? `Ep ${bestEpisode.episode.order} · ${plural(bestEpisode.points, "pt")}`
-                    : "No points yet"}
-                </dd>
-                <dt>Still in the game</dt>
-                <dd>
-                  {activeCount} of {rows.length}
-                </dd>
-                {tradedInCount > 0 && (
-                  <>
-                    <dt>Acquired by trade</dt>
-                    <dd>{tradedInCount}</dd>
-                  </>
-                )}
-              </dl>
-            )}
-          </Stack>
-
-          <Stack gap="xs">
-            <Group gap={6} align="center">
-              <IconArrowsExchange
-                size={18}
-                color="var(--mantine-color-grape-6)"
-              />
-              <Title order={4}>Trades</Title>
-            </Group>
-            {myTrades.length === 0 ? (
-              <Stack gap="xs" align="flex-start">
-                <Text size="sm" c="dimmed">
-                  {competition.finished
-                    ? "You didn't trade this season."
-                    : "You haven't traded yet."}
-                </Text>
-                {!competition.finished && (
-                  <Button
-                    component={Link}
-                    to={TRADES_TAB_LINK}
-                    variant="light"
-                    size="xs"
-                  >
-                    Open trades
-                  </Button>
-                )}
-              </Stack>
-            ) : (
-              <Stack gap="xs" align="flex-start">
-                <dl className={classes.statList}>
-                  {incomingOffers > 0 && (
-                    <>
-                      <dt>Waiting on you</dt>
-                      <dd>{plural(incomingOffers, "offer")}</dd>
-                    </>
-                  )}
-                  {outgoingOffers > 0 && (
-                    <>
-                      <dt>Waiting on others</dt>
-                      <dd>{plural(outgoingOffers, "offer")}</dd>
-                    </>
-                  )}
-                  <dt>Completed</dt>
-                  <dd>{plural(completedTrades, "trade")}</dd>
-                </dl>
+              {!competition.finished && (
                 <Button
                   component={Link}
                   to={TRADES_TAB_LINK}
-                  variant={incomingOffers > 0 ? "filled" : "light"}
+                  variant="default"
                   size="xs"
                 >
-                  {incomingOffers > 0 ? "Review offers" : "Open trades"}
+                  Open trades
                 </Button>
-              </Stack>
-            )}
-          </Stack>
-        </div>
-      </Stack>
-    </Paper>
+              )}
+            </div>
+          ) : (
+            <div className={classes.stack}>
+              <dl className={classes.statList}>
+                {incomingOffers > 0 && (
+                  <>
+                    <dt>Waiting on you</dt>
+                    <dd>{plural(incomingOffers, "offer")}</dd>
+                  </>
+                )}
+                {outgoingOffers > 0 && (
+                  <>
+                    <dt>Waiting on others</dt>
+                    <dd>{plural(outgoingOffers, "offer")}</dd>
+                  </>
+                )}
+                <dt>Completed</dt>
+                <dd>{plural(completedTrades, "trade")}</dd>
+              </dl>
+              <Button
+                component={Link}
+                to={TRADES_TAB_LINK}
+                variant={incomingOffers > 0 ? "filled" : "default"}
+                size="xs"
+              >
+                {incomingOffers > 0 ? "Review offers" : "Open trades"}
+              </Button>
+            </div>
+          )}
+        </Board>
+      </div>
+    </div>
   );
 };
+
+const Portrait = ({
+  player,
+  className,
+}: {
+  player: Player;
+  className?: string;
+}) =>
+  player.img ? (
+    <img
+      src={player.img}
+      alt=""
+      width={26}
+      height={32}
+      loading="lazy"
+      decoding="async"
+      className={`${classes.face} ${className ?? ""}`}
+    />
+  ) : (
+    <span
+      className={`${classes.facePlaceholder} ${className ?? ""}`}
+      aria-hidden="true"
+    >
+      {initials(player.full_name)}
+    </span>
+  );
 
 const RosterTableRow = ({
   row,
@@ -651,6 +628,7 @@ const RosterTableRow = ({
 }) => {
   const { player, elimination, isWinner, acquisition, upcomingMove } = row;
   const isEliminated = !!elimination;
+  const isOut = isEliminated && !isWinner;
 
   const acquisitionLabel = acquisition
     ? getAcquisitionLabel(acquisition, drafterUid, participants, teamNames)
@@ -660,28 +638,23 @@ const RosterTableRow = ({
     : null;
 
   return (
-    <Table.Tr className={isEliminated && !isWinner ? classes.eliminated : ""}>
+    <Table.Tr className={isOut ? classes.eliminated : undefined}>
       <Table.Td>
-        <Group gap="sm" wrap="nowrap">
-          <Avatar
-            src={player.img}
-            alt=""
-            size="sm"
-            className={isEliminated ? classes.eliminatedAvatar : undefined}
-            imageProps={{ loading: "lazy" }}
+        <div className={classes.castawayCell}>
+          <Portrait
+            player={player}
+            className={isOut ? classes.faceOut : undefined}
           />
-          <Text
-            size="sm"
-            fw={500}
-            td={isEliminated && !isWinner ? "line-through" : undefined}
+          <span
+            className={`${classes.castawayName} ${isOut ? classes.struck : ""}`}
           >
             {player.full_name}
-          </Text>
+          </span>
           {upcomingMove && upcomingLabel && (
             <Tooltip label={upcomingLabel}>
               <Badge
                 size="xs"
-                variant="light"
+                variant="outline"
                 color="yellow"
                 role="img"
                 aria-label={upcomingLabel}
@@ -696,24 +669,17 @@ const RosterTableRow = ({
               </Badge>
             </Tooltip>
           )}
-        </Group>
+        </div>
       </Table.Td>
       <Table.Td>
         {isWinner ? (
-          <Badge
-            variant="light"
-            color="orange"
-            size="sm"
-            leftSection={<IconFlame size={12} />}
-          >
-            Sole Survivor
-          </Badge>
+          <span className={classes.winnerTag}>Sole Survivor</span>
         ) : elimination ? (
           <Text size="sm">{getEliminationLabel(elimination)}</Text>
         ) : (
-          <Badge variant="light" color="green" size="sm">
+          <StatusBadge kind="in-progress" size="sm">
             Active
-          </Badge>
+          </StatusBadge>
         )}
       </Table.Td>
       <Table.Td>
@@ -730,18 +696,15 @@ const RosterTableRow = ({
           </Text>
         )}
       </Table.Td>
-      <Table.Td ta="right" className={classes.numeric}>
-        <Text
-          size="sm"
-          c={!hasEpisodes || row.lastEpisodePoints === 0 ? "dimmed" : undefined}
-        >
-          {hasEpisodes ? row.lastEpisodePoints : "—"}
-        </Text>
+      <Table.Td
+        className={`${classes.numeric} ${!hasEpisodes || row.lastEpisodePoints === 0 ? classes.dim : ""}`}
+      >
+        {hasEpisodes ? row.lastEpisodePoints : "—"}
       </Table.Td>
-      <Table.Td ta="right" className={classes.numeric}>
-        <Text size="sm" fw={700} c={row.points === 0 ? "dimmed" : undefined}>
-          {row.points}
-        </Text>
+      <Table.Td
+        className={`${classes.numeric} ${classes.total} ${row.points === 0 ? classes.dim : ""}`}
+      >
+        {row.points}
       </Table.Td>
     </Table.Tr>
   );

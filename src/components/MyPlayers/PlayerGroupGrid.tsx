@@ -3,11 +3,8 @@ import {
   Badge,
   Button,
   Card,
-  Collapse,
   Group,
-  SimpleGrid,
   Stack,
-  StyleProp,
   Text,
   TextInput,
   Title,
@@ -15,13 +12,7 @@ import {
 } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
-import {
-  IconArrowsExchange,
-  IconChevronDown,
-  IconChevronUp,
-  IconFlame,
-  IconPencil,
-} from "@tabler/icons-react";
+import { IconArrowsExchange, IconPencil } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
 import { useCompetition } from "../../hooks/useCompetition";
 import { useCompetitionMeta } from "../../hooks/useCompetitionMeta";
@@ -36,7 +27,16 @@ import {
   getUpcomingMoveLabel,
   UpcomingMove,
 } from "../../utils/tradeUtils";
-import { PlayerGroup } from "./PlayerGroup";
+import { StatusBadge } from "../Layout";
+import classes from "./PlayerGroupGrid.module.css";
+
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part.charAt(0))
+    .join("")
+    .toUpperCase();
 
 export const PlayerGroupGrid = () => {
   const { data: competition } = useCompetition();
@@ -52,8 +52,6 @@ export const PlayerGroupGrid = () => {
   } = useCompetitionMeta();
   const { data: events } = useEvents(competition?.season_id);
 
-  const [openUids, setOpenUids] = useState<ReadonlySet<string>>(new Set());
-
   const isFinished = competition?.finished ?? false;
 
   const winnerCastawayId = useMemo(() => {
@@ -64,96 +62,95 @@ export const PlayerGroupGrid = () => {
     );
   }, [isFinished, events]);
 
+  // Draft order is history, not ownership: it labels a pick on the drafter's
+  // roster and is replaced by the via-trade mark once the castaway moves.
+  const draftOrders = useMemo(
+    () =>
+      Object.fromEntries(
+        (competition?.draft_picks ?? []).map((pick) => [
+          pick.castaway_id,
+          pick.order,
+        ]),
+      ) as Partial<Record<CastawayId, number>>,
+    [competition?.draft_picks],
+  );
+
   if (!competition) return null;
 
-  const numParticipants = competition.participant_uids.length;
-  // A card can have names to show either from its current roster or from
-  // arrivals previewed on it, so both count for the show/hide-all toggle.
-  const participantsWithTeams = competition.participants.filter(
-    (p) =>
-      (survivorsByUserUid[p.uid]?.length ?? 0) > 0 ||
-      (incomingByUserUid[p.uid]?.length ?? 0) > 0,
-  );
-  const allOpen =
-    participantsWithTeams.length > 0 &&
-    participantsWithTeams.every((p) => openUids.has(p.uid));
-
-  const toggleAll = () => {
-    setOpenUids(
-      allOpen ? new Set() : new Set(participantsWithTeams.map((p) => p.uid)),
-    );
-  };
-
-  const toggleCard = (uid: string) => {
-    setOpenUids((prev) => {
-      const next = new Set(prev);
-      if (next.has(uid)) next.delete(uid);
-      else next.add(uid);
-      return next;
-    });
-  };
-
-  const cols = (
-    numParticipants === 3 || numParticipants === 2
-      ? {
-          base: 1,
-          lg: 2,
-        }
-      : {
-          base: 2,
-          md: 3,
-          lg: 4,
-          xl: 6,
-        }
-  ) satisfies StyleProp<number>;
-
   return (
-    <Stack gap="sm">
-      {participantsWithTeams.length > 1 && (
-        <Group justify="flex-end">
-          <Button
-            variant="subtle"
-            size="compact-sm"
-            color="gray"
-            onClick={toggleAll}
-            aria-expanded={allOpen}
-            rightSection={
-              allOpen ? (
-                <IconChevronUp size={14} />
-              ) : (
-                <IconChevronDown size={14} />
-              )
-            }
-          >
-            {allOpen ? "Hide all names" : "Show all names"}
-          </Button>
-        </Group>
+    <div className={classes.groups}>
+      {competition.participants.map((x) => (
+        <TeamCard
+          key={x.uid}
+          participant={x}
+          userSurvivors={survivorsByUserUid[x.uid] ?? []}
+          eliminatedSurvivors={eliminatedSurvivors}
+          participants={competition.participants}
+          teamNames={competition.team_names}
+          competitionId={competition.id}
+          // Only the team's owner or an admin may rename it; the creator
+          // has no say over other participants' names (see firestore.rules).
+          canEditTeamName={slimUser?.uid === x.uid || !!slimUser?.isAdmin}
+          drafters={drafters}
+          draftOrders={draftOrders}
+          acquisitions={acquisitions}
+          upcomingMoves={upcomingMoves}
+          incoming={incomingByUserUid[x.uid] ?? []}
+          winnerCastawayId={winnerCastawayId}
+          isFinished={isFinished}
+        />
+      ))}
+    </div>
+  );
+};
+
+const RosterCastaway = ({
+  player,
+  alt,
+  out = false,
+  leaving = false,
+  arriving = false,
+  meta,
+}: {
+  player: Player;
+  alt: string;
+  out?: boolean;
+  leaving?: boolean;
+  arriving?: boolean;
+  meta: React.ReactNode;
+}) => {
+  const rootClass = [
+    classes.castaway,
+    out && classes.castawayOut,
+    leaving && classes.castawayLeaving,
+    arriving && classes.castawayArriving,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return (
+    <div className={rootClass}>
+      {player.img ? (
+        <img
+          src={player.img}
+          alt={alt}
+          width={44}
+          height={56}
+          loading="lazy"
+          decoding="async"
+          className={classes.portrait}
+        />
+      ) : (
+        <span className={classes.portraitInitials} role="img" aria-label={alt}>
+          {initials(player.full_name)}
+        </span>
       )}
-      <SimpleGrid cols={cols}>
-        {competition.participants.map((x) => (
-          <TeamCard
-            key={x.uid}
-            participant={x}
-            userSurvivors={survivorsByUserUid[x.uid] ?? []}
-            eliminatedSurvivors={eliminatedSurvivors}
-            participants={competition.participants}
-            teamNames={competition.team_names}
-            competitionId={competition.id}
-            // Only the team's owner or an admin may rename it; the creator
-            // has no say over other participants' names (see firestore.rules).
-            canEditTeamName={slimUser?.uid === x.uid || !!slimUser?.isAdmin}
-            drafters={drafters}
-            acquisitions={acquisitions}
-            upcomingMoves={upcomingMoves}
-            incoming={incomingByUserUid[x.uid] ?? []}
-            winnerCastawayId={winnerCastawayId}
-            isFinished={isFinished}
-            isOpen={openUids.has(x.uid)}
-            onToggle={() => toggleCard(x.uid)}
-          />
-        ))}
-      </SimpleGrid>
-    </Stack>
+      <div className={classes.castawayBody}>
+        <div className={classes.castawayName} title={player.full_name}>
+          {player.full_name}
+        </div>
+        <div className={classes.castawayMeta}>{meta}</div>
+      </div>
+    </div>
   );
 };
 
@@ -166,13 +163,12 @@ const TeamCard = ({
   competitionId,
   canEditTeamName,
   drafters,
+  draftOrders,
   acquisitions,
   upcomingMoves,
   incoming,
   winnerCastawayId,
   isFinished,
-  isOpen,
-  onToggle,
 }: {
   participant: SlimUser;
   userSurvivors: Player[];
@@ -182,13 +178,12 @@ const TeamCard = ({
   competitionId: Competition["id"];
   canEditTeamName: boolean;
   drafters: Record<CastawayId, string>;
+  draftOrders: Partial<Record<CastawayId, number>>;
   acquisitions: Record<CastawayId, Acquisition>;
   upcomingMoves: Record<CastawayId, UpcomingMove>;
   incoming: { player: Player; fromUid: string; landsNextEpisode: boolean }[];
   winnerCastawayId: CastawayId | null;
   isFinished: boolean;
-  isOpen: boolean;
-  onToggle: () => void;
 }) => {
   // Everything on this card is about the roster as of the episode the
   // competition is on: a trade whose cutoff has not been revealed yet keeps
@@ -242,208 +237,200 @@ const TeamCard = ({
     });
   };
 
+  const displayName = getParticipantName(
+    participants,
+    participant.uid,
+    teamNames,
+  );
+
   return (
     <Card
-      shadow="sm"
-      padding="md"
+      padding={0}
       radius="md"
       withBorder
+      className={classes.group}
       style={{
         opacity: areAllEliminated && !isFinished ? 0.6 : 1,
       }}
     >
-      <Stack gap="xs">
-        <Group justify="space-between" align="center">
-          <Group gap={4} align="center" wrap="nowrap">
-            <Title order={4}>
-              {getParticipantName(participants, participant.uid, teamNames)}
-            </Title>
-            {canEditTeamName && (
-              <ActionIcon
-                variant="subtle"
-                color="gray"
-                size="sm"
-                onClick={openTeamNameEditor}
-                aria-label={`Edit team name for ${
-                  participant.displayName || participant.email
-                }`}
-              >
-                <IconPencil size={14} />
-              </ActionIcon>
-            )}
-          </Group>
+      <div className={classes.groupHead}>
+        <div className={classes.groupTitle}>
+          <Title order={4} className={classes.groupName}>
+            {displayName}
+          </Title>
+          <span className={classes.groupSub}>
+            {numOnRoster} on roster
+            {numAcquired > 0 ? ` · ${numAcquired} via trade` : ""} ·{" "}
+            {numEliminated} eliminated
+            {numMoving > 0
+              ? allMovesLandNext
+                ? " · trade lands next episode"
+                : " · trade pending"
+              : ""}
+          </span>
+        </div>
+        <div className={classes.groupAside}>
+          {canEditTeamName && (
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              size="sm"
+              onClick={openTeamNameEditor}
+              aria-label={`Edit team name for ${
+                participant.displayName || participant.email
+              }`}
+            >
+              <IconPencil size={14} />
+            </ActionIcon>
+          )}
           {isFinished ? (
             ownsWinner ? (
-              <Badge
-                variant="light"
-                color="orange"
-                size="sm"
-                leftSection={<IconFlame size={12} />}
-              >
-                Sole Survivor
-              </Badge>
+              <span className={classes.winnerTag}>Sole Survivor</span>
             ) : (
-              <Badge variant="light" color="gray" size="sm">
+              <StatusBadge kind="complete" size="sm">
                 Season over
-              </Badge>
+              </StatusBadge>
             )
-          ) : (
-            <Badge
-              variant="light"
-              color={areAllEliminated ? "red" : "green"}
-              size="sm"
-            >
+          ) : areAllEliminated ? (
+            <Badge variant="outline" color="red" size="sm">
               {numActive} active
             </Badge>
+          ) : (
+            <StatusBadge kind="in-progress" size="sm">
+              {numActive} active
+            </StatusBadge>
           )}
-        </Group>
+        </div>
+      </div>
 
-        <Text size="xs" c="dimmed">
-          {numOnRoster} on roster
-          {numAcquired > 0 ? ` · ${numAcquired} via trade` : ""} ·{" "}
-          {numEliminated} eliminated
-          {numMoving > 0
-            ? allMovesLandNext
-              ? " · trade lands next episode"
-              : " · trade pending"
-            : ""}
-        </Text>
-
-        <PlayerGroup uid={participant.uid} />
-
-        {(userSurvivors.length > 0 || incoming.length > 0) && (
-          <>
-            <Button
-              variant="subtle"
-              size="sm"
-              color="gray"
-              fullWidth
-              px="xs"
-              onClick={onToggle}
-              aria-expanded={isOpen}
-              styles={{ label: { overflow: "visible" } }}
-              rightSection={
-                isOpen ? (
-                  <IconChevronUp size={16} />
-                ) : (
-                  <IconChevronDown size={16} />
+      {(userSurvivors.length > 0 || incoming.length > 0) && (
+        <div className={classes.cast}>
+          {userSurvivors.map((p) => {
+            const isEliminated = eliminatedSurvivors.includes(p.castaway_id);
+            const isWinner = p.castaway_id === winnerCastawayId;
+            const acquisition = acquisitions[p.castaway_id];
+            const acquisitionLabel = acquisition
+              ? getAcquisitionLabel(
+                  acquisition,
+                  drafters[p.castaway_id],
+                  participants,
+                  teamNames,
                 )
-              }
-            >
-              {isOpen ? "Hide names" : "Show names"}
-            </Button>
-            <Collapse expanded={isOpen}>
-              <Stack gap={4}>
-                {userSurvivors.map((p) => {
-                  const isEliminated = eliminatedSurvivors.includes(
-                    p.castaway_id,
-                  );
-                  const acquisition = acquisitions[p.castaway_id];
-                  const acquisitionLabel = acquisition
-                    ? getAcquisitionLabel(
-                        acquisition,
-                        drafters[p.castaway_id],
-                        participants,
-                        teamNames,
-                      )
-                    : null;
-                  const upcomingMove = upcomingMoves[p.castaway_id];
-                  const upcomingLabel = upcomingMove
-                    ? getUpcomingMoveLabel(
-                        upcomingMove,
-                        participants,
-                        teamNames,
-                      )
-                    : null;
-                  return (
-                    <Group key={p.castaway_id} gap={4} wrap="nowrap">
-                      <Text
-                        fz={{ base: "xs", sm: "sm" }}
-                        truncate
-                        c={isEliminated ? "dimmed" : undefined}
-                        td={isEliminated ? "line-through" : undefined}
-                        title={p.full_name}
-                      >
-                        {p.full_name}
-                      </Text>
-                      {acquisitionLabel && (
+              : null;
+            const upcomingMove = upcomingMoves[p.castaway_id];
+            const upcomingLabel = upcomingMove
+              ? getUpcomingMoveLabel(upcomingMove, participants, teamNames)
+              : null;
+            const draftOrder = draftOrders[p.castaway_id];
+
+            return (
+              <RosterCastaway
+                key={p.castaway_id}
+                player={p}
+                alt={
+                  upcomingMove ? `${p.full_name} (trading away)` : p.full_name
+                }
+                out={isEliminated && !isWinner}
+                leaving={!!upcomingMove}
+                meta={
+                  <>
+                    {isWinner ? (
+                      <span className={classes.winnerTag}>Sole Survivor</span>
+                    ) : isEliminated ? (
+                      <span>Eliminated</span>
+                    ) : acquisitionLabel ? (
+                      <>
                         <Tooltip label={acquisitionLabel}>
-                          <IconArrowsExchange
-                            size={13}
+                          <span
+                            className={classes.tradeMark}
                             role="img"
                             aria-label={acquisitionLabel}
-                            color="var(--mantine-color-dimmed)"
-                            style={{ flexShrink: 0 }}
-                          />
-                        </Tooltip>
-                      )}
-                      {upcomingLabel && upcomingMove && (
-                        <Tooltip label={upcomingLabel}>
-                          <Badge
-                            size="xs"
-                            variant="light"
-                            color="yellow"
-                            role="img"
-                            aria-label={upcomingLabel}
-                            style={{ flexShrink: 0 }}
                           >
-                            →{" "}
-                            {getParticipantName(
-                              participants,
-                              upcomingMove.toUid,
-                              teamNames,
-                            )}
-                          </Badge>
+                            <IconArrowsExchange size={10} stroke={2.5} />
+                          </span>
                         </Tooltip>
-                      )}
-                    </Group>
-                  );
-                })}
-                {incoming.length > 0 && (
-                  <Stack gap={4} mt={4}>
-                    <Text fz="xs" fw={600} c="dimmed">
-                      {incoming.every((i) => i.landsNextEpisode)
-                        ? "Arriving next episode"
-                        : "Arriving in upcoming episodes"}
-                    </Text>
-                    {incoming.map(({ player, fromUid, landsNextEpisode }) => (
-                      <Group key={player.castaway_id} gap={4} wrap="nowrap">
-                        <Text
-                          fz={{ base: "xs", sm: "sm" }}
-                          truncate
-                          c="dimmed"
-                          title={player.full_name}
+                        <span>Via trade</span>
+                      </>
+                    ) : draftOrder != null ? (
+                      <span>Pick {draftOrder}</span>
+                    ) : (
+                      <span>Drafted</span>
+                    )}
+                    {acquisitionLabel && (isEliminated || isWinner) && (
+                      <Tooltip label={acquisitionLabel}>
+                        <span
+                          className={classes.tradeMark}
+                          role="img"
+                          aria-label={acquisitionLabel}
                         >
-                          {player.full_name}
-                        </Text>
+                          <IconArrowsExchange size={10} stroke={2.5} />
+                        </span>
+                      </Tooltip>
+                    )}
+                    {upcomingLabel && upcomingMove && (
+                      <Tooltip label={upcomingLabel}>
                         <Badge
                           size="xs"
-                          variant="light"
+                          variant="outline"
                           color="yellow"
                           role="img"
-                          aria-label={getUpcomingMoveLabel(
-                            {
-                              fromUid,
-                              toUid: participant.uid,
-                              landsNextEpisode,
-                            },
+                          aria-label={upcomingLabel}
+                        >
+                          →{" "}
+                          {getParticipantName(
                             participants,
+                            upcomingMove.toUid,
                             teamNames,
                           )}
-                          style={{ flexShrink: 0 }}
-                        >
-                          from{" "}
-                          {getParticipantName(participants, fromUid, teamNames)}
                         </Badge>
-                      </Group>
-                    ))}
-                  </Stack>
-                )}
-              </Stack>
-            </Collapse>
-          </>
-        )}
-      </Stack>
+                      </Tooltip>
+                    )}
+                  </>
+                }
+              />
+            );
+          })}
+          {incoming.map(({ player, fromUid, landsNextEpisode }) => {
+            const timing = landsNextEpisode
+              ? "next episode"
+              : "in an upcoming episode";
+            const label = getUpcomingMoveLabel(
+              { fromUid, toUid: participant.uid, landsNextEpisode },
+              participants,
+              teamNames,
+            );
+            return (
+              <RosterCastaway
+                key={`incoming_${player.castaway_id}`}
+                player={player}
+                alt={`${player.full_name} (arriving ${timing})`}
+                arriving
+                meta={
+                  <>
+                    <span>
+                      {landsNextEpisode
+                        ? "Arriving next episode"
+                        : "Arriving soon"}
+                    </span>
+                    <Tooltip label={label}>
+                      <Badge
+                        size="xs"
+                        variant="outline"
+                        color="yellow"
+                        role="img"
+                        aria-label={label}
+                      >
+                        from{" "}
+                        {getParticipantName(participants, fromUid, teamNames)}
+                      </Badge>
+                    </Tooltip>
+                  </>
+                }
+              />
+            );
+          })}
+        </div>
+      )}
     </Card>
   );
 };
@@ -474,7 +461,7 @@ const TeamNameModal = ({
         data-autofocus
       />
       <Group justify="flex-end" gap="xs">
-        <Button variant="light" color="gray" onClick={() => modals.closeAll()}>
+        <Button variant="default" onClick={() => modals.closeAll()}>
           Cancel
         </Button>
         <Button

@@ -1,54 +1,44 @@
 /*
- * The control is measured against its own width rather than the viewport:
- * on the competition page it shares a two-column header with the title, so
- * at narrower desktop widths its column can be far narrower than the screen.
+ * The control sits under the reveal strip in the competition header. It is
+ * measured against its own width: on wide screens its column is about 480px,
+ * on phones it spans the page.
  */
 .root {
   container-type: inline-size;
-}
-
-.modeControl {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--mantine-spacing-md);
-}
-
-.modeSummary {
   min-width: 0;
 }
 
-.modeActions,
-.primaryModeAction {
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--mantine-spacing-xs);
+}
+
+.actions > * {
   flex: 0 0 auto;
 }
 
-.episodeNavigation {
-  justify-content: flex-end;
+.switchModeAction {
+  margin-right: auto;
+  padding-inline: var(--mantine-spacing-xs);
 }
 
-.switchModeAction,
 .completionBadge {
-  align-self: center;
+  margin-right: auto;
 }
 
-/* Summary + actions side by side needs roughly 34em; below that, stack. */
-@container (max-width: 34em) {
-  .modeControl {
-    flex-direction: column;
-    align-items: stretch;
+/* Below roughly 26em the row cannot hold three controls; stack them. */
+@container (max-width: 26em) {
+  .actions > * {
+    flex: 1 1 auto;
   }
 
-  .modeActions,
-  .primaryModeAction {
-    width: 100%;
-  }
-
-  .episodeNavigation > button {
-    flex: 1 1 0;
-  }
-
-  .switchModeAction {
-    width: 100%;
+  .switchModeAction,
+  .completionBadge {
+    flex-basis: 100%;
+    margin-right: 0;
+    order: 1;
   }
 }

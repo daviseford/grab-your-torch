@@ -5,6 +5,8 @@ type CastawayCardProps = {
   name: string;
   /** Portrait URL; an empty string renders the initials plate instead. */
   img?: string;
+  /** Alt text for the portrait when it must say more than the name. */
+  imgAlt?: string;
   /** One short line under the name: age and hometown, pick number, points. */
   meta?: ReactNode;
   /** Struck out: eliminated (or otherwise out of play). */
@@ -38,6 +40,7 @@ const initials = (name: string) =>
 export const CastawayCard = ({
   name,
   img,
+  imgAlt,
   meta,
   out = false,
   picked = false,
@@ -60,7 +63,7 @@ export const CastawayCard = ({
     <article className={rootClass}>
       <div className={classes.portrait}>
         {img ? (
-          <img src={img} alt={name} loading="lazy" decoding="async" />
+          <img src={img} alt={imgAlt ?? name} loading="lazy" decoding="async" />
         ) : (
           <span className={classes.initials} aria-hidden="true">
             {initials(name)}

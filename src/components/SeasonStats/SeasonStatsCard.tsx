@@ -1,55 +1,81 @@
-import { Card, Stack, Text } from "@mantine/core";
 import { StatCard } from "../../utils/seasonStats";
 import classes from "./SeasonStatsSection.module.css";
 
-export const SeasonStatsCard = ({ card }: { card: StatCard }) => {
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part.charAt(0))
+    .join("")
+    .toUpperCase();
+
+export const SeasonStatsCard = ({
+  card,
+  portraits,
+}: {
+  card: StatCard;
+  /** Portrait URL by winner id (castaway cards only). */
+  portraits?: Record<string, string | undefined>;
+}) => {
   const isNegative = card.tone === "negative";
   const isTied = card.winners.length > 1;
 
   return (
-    <Card
-      padding="sm"
-      radius="md"
-      withBorder
+    <div
       className={`${classes.card} ${isNegative ? classes.cardNegative : ""}`}
     >
-      <Stack gap={4} h="100%" justify="space-between">
-        <div>
-          <Text size="xs" tt="uppercase" lts="0.4px" c="dimmed" fw={500}>
-            {card.title}
-          </Text>
-          {card.subtitle && (
-            <Text size="xs" c="dimmed" mt={-2}>
-              {card.subtitle}
-            </Text>
-          )}
-        </div>
-
-        {isTied ? (
-          <div>
-            <Text size="sm" fw={700} lh={1.3}>
-              {card.winners.map((w) => w.label).join(", ")}
-            </Text>
-            <Text size="xs" c="dimmed">
-              Tied: {card.winners[0].value} {card.unit}
-            </Text>
-          </div>
-        ) : (
-          <div>
-            {card.winners.map((w, idx) => (
-              <div key={`${w.id}_${idx}`}>
-                <Text size="lg" fw={700} lh={1.2}>
-                  {w.label}
-                </Text>
-                <Text size="xs" c="dimmed">
-                  {w.value} {card.unit}
-                  {w.detail ? ` · ${w.detail}` : ""}
-                </Text>
-              </div>
-            ))}
-          </div>
+      <div>
+        <h4 className={classes.cardTitle}>{card.title}</h4>
+        {card.subtitle && (
+          <div className={classes.cardSubtitle}>{card.subtitle}</div>
         )}
-      </Stack>
-    </Card>
+      </div>
+
+      {isTied ? (
+        <div>
+          <div className={classes.tied}>
+            {card.winners.map((w) => w.label).join(", ")}
+          </div>
+          <div className={classes.cardSubtitle}>
+            Tied: {card.winners[0].value} {card.unit}
+          </div>
+        </div>
+      ) : (
+        card.winners.map((w, idx) => {
+          const img = portraits?.[w.id];
+          const showPortrait = card.group === "castaway";
+          return (
+            <div key={`${w.id}_${idx}`} className={classes.winner}>
+              {showPortrait &&
+                (img ? (
+                  <img
+                    src={img}
+                    alt=""
+                    width={36}
+                    height={46}
+                    loading="lazy"
+                    decoding="async"
+                    className={classes.face}
+                  />
+                ) : (
+                  <span className={classes.facePlaceholder} aria-hidden="true">
+                    {initials(w.label)}
+                  </span>
+                ))}
+              <div>
+                <div className={classes.winnerName}>{w.label}</div>
+                <div className={classes.value}>
+                  {w.value}
+                  <small>
+                    {card.unit}
+                    {w.detail ? ` · ${w.detail}` : ""}
+                  </small>
+                </div>
+              </div>
+            </div>
+          );
+        })
+      )}
+    </div>
   );
 };
