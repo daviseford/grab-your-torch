@@ -151,6 +151,7 @@ e2e/.auth/
 data/scraped/*.json
 data/firestore-snapshots/
 data/migration-output/
+data/sample-competitions/
 
 # Sensitive data
 firebase-private-key.json
