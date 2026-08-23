@@ -330,7 +330,9 @@ export const DraftComponent = () => {
         pick_order_uids: buildPickOrderUidMap(draftOrder),
         turns,
         "state/started": true,
-        "state/finished": false,
+        // `state/finished` is already false from draft creation, and the RTDB
+        // rule for it only allows a false-to-true write, so re-writing false
+        // here made the whole multi-path update fail for non-admin creators.
         "state/current_pick_number": 1,
       });
     } catch (err) {
