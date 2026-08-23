@@ -115,6 +115,11 @@
     justify-self: start;
     width: 160px;
   }
+
+  /* The header bug already carries the mark on phones. */
+  @media (max-width: $mantine-breakpoint-sm) {
+    display: none;
+  }
 }
 
 /* ---------- Sections ---------- */

@@ -335,8 +335,8 @@ export const Competitions = () => {
                 { label: "Complete", value: "complete" },
               ]}
             />
-            <Button component={Link} to="/seasons" size="sm" variant="default">
-              Browse seasons
+            <Button component={Link} to="/seasons" size="sm">
+              Create a competition
             </Button>
           </div>
         }
@@ -371,7 +371,7 @@ export const Competitions = () => {
             title="No competitions yet"
             actions={
               <Button component={Link} to="/seasons" size="sm">
-                Browse seasons
+                Create a competition
               </Button>
             }
           >
