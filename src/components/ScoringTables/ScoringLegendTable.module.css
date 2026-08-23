@@ -54,7 +54,6 @@
 .categoryRow th.categoryCell {
   background-color: var(--gyt-plate);
   color: var(--mantine-color-dark-0);
-  border-left: 3px solid var(--category-color, var(--mantine-color-league-6));
   padding-block: 6px;
 }
 

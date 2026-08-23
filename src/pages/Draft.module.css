@@ -874,13 +874,13 @@
 
 .notice {
   padding: 10px 14px;
-  border-left: 3px solid var(--gyt-signal-text);
-  border-radius: 0 var(--mantine-radius-sm) var(--mantine-radius-sm) 0;
+  border: 1px solid var(--gyt-rule-strong);
+  border-radius: var(--mantine-radius-sm);
   background: var(--gyt-panel-2);
   font-size: var(--mantine-font-size-sm);
   color: var(--mantine-color-text);
 }
 
 .noticeWarn {
-  border-left-color: var(--mantine-color-orange-6);
+  border-color: var(--mantine-color-orange-6);
 }

@@ -45,8 +45,8 @@
   border-radius: var(--mantine-radius-md);
 }
 
-.cardNegative {
-  box-shadow: inset 3px 0 0 var(--mantine-color-red-6);
+.cardNegative .cardTitle {
+  color: var(--mantine-color-red-7);
 }
 
 .cardTitle {
@@ -147,11 +147,21 @@
 }
 
 .cellBest {
-  box-shadow: inset 0 -3px 0 var(--mantine-color-green-6);
+  color: var(--mantine-color-green-8);
+  font-weight: 700;
 }
 
 .cellWorst {
-  box-shadow: inset 0 -3px 0 var(--mantine-color-red-6);
+  color: var(--mantine-color-red-7);
+  font-weight: 700;
+}
+
+[data-mantine-color-scheme="dark"] .cellBest {
+  color: var(--mantine-color-green-4);
+}
+
+[data-mantine-color-scheme="dark"] .cellWorst {
+  color: var(--mantine-color-red-4);
 }
 
 .rank {
