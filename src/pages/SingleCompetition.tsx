@@ -320,7 +320,14 @@ export const SingleCompetition = () => {
 
       <PageIntro
         eyebrow="Competition"
-        context={`Season ${competition.season_num} · ${isWatchAlong ? "Watch-along" : "Live"}`}
+        // The cyan context is a signal: it names the mode only while the
+        // competition is still running; a finished one carries the facts in
+        // its badges instead.
+        context={
+          competition.finished
+            ? undefined
+            : `Season ${competition.season_num} · ${isWatchAlong ? "Watch-along" : "Live"}`
+        }
         title={competition.competition_name}
         meta={
           <>
