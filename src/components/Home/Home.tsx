@@ -10,6 +10,7 @@ import { SeasonTile } from "../../pages/SeasonTile";
 import { BrandEmblem } from "../Brand";
 import { Board, RevealStrip } from "../Layout";
 import classes from "./Home.module.css";
+import { HomeDraftExample } from "./HomeDraftExample";
 
 /** Scoring category colors, kept semantic app-wide. */
 const CATEGORY_COLORS: Record<ScoringCategory, string> = {
@@ -50,29 +51,9 @@ const EXAMPLE_BETS = [
  * no castaways, no season, no episode. The homepage never shows a real
  * competition's results.
  */
-const EXAMPLE_STANDINGS = [
-  { name: "Marisol", points: 184 },
-  { name: "Theo", points: 171 },
-  { name: "Priya", points: 158 },
-  { name: "Jordan", points: 142 },
-];
 
 /** Fictional per-episode points for the reveal-strip example (13 episodes). */
 const EXAMPLE_EPISODES = 13;
-const EXAMPLE_EPISODE_POINTS: Record<string, number[]> = {
-  Marisol: [31, 27, 36, 29, 33, 28, 24, 30, 22, 26, 19, 21, 25],
-  Theo: [28, 30, 25, 32, 27, 29, 31, 23, 26, 20, 24, 18, 22],
-  Priya: [26, 24, 29, 27, 25, 27, 22, 28, 21, 23, 20, 19, 17],
-  Jordan: [22, 25, 21, 26, 24, 24, 27, 19, 23, 18, 21, 16, 20],
-};
-
-const exampleTotalsThrough = (episode: number) =>
-  Object.entries(EXAMPLE_EPISODE_POINTS)
-    .map(([name, points]) => ({
-      name,
-      points: points.slice(0, episode).reduce((sum, p) => sum + p, 0),
-    }))
-    .sort((a, b) => b.points - a.points);
 
 const ACTION_COUNT = BASE_PLAYER_SCORING.length;
 const CATEGORY_COUNT = new Set(BASE_PLAYER_SCORING.map((s) => s.category)).size;
@@ -92,10 +73,6 @@ const scoringByAction = new Map(
 
 export const Home = () => {
   const [exampleRevealed, setExampleRevealed] = useState(6);
-  const exampleTotals = useMemo(
-    () => exampleTotalsThrough(exampleRevealed),
-    [exampleRevealed],
-  );
   const { slimUser } = useUser();
 
   const seasons = useMemo(
@@ -244,22 +221,6 @@ export const Home = () => {
                 ariaLabel="Example episode reveal"
                 onSelect={setExampleRevealed}
               />
-              <ol className={classes.exampleTotals} aria-live="polite">
-                {exampleTotals.map((row, index) => (
-                  <li key={row.name}>
-                    <span
-                      className={`${classes.rank} ${classes.pickRank} ${index === 0 ? classes.rankFirst : ""}`}
-                    >
-                      {index + 1}
-                    </span>
-                    <span>{row.name}</span>
-                    <span className={classes.exampleTotal}>
-                      {row.points}
-                      <small>pts</small>
-                    </span>
-                  </li>
-                ))}
-              </ol>
             </figure>
           </div>
         </section>
@@ -391,20 +352,7 @@ export const Home = () => {
                 castaways never needs an account.
               </p>
             </div>
-            <figure className={`${classes.example} ${classes.exampleNarrow}`}>
-              <ol className={classes.picks}>
-                {EXAMPLE_STANDINGS.map((row, index) => (
-                  <li key={row.name}>
-                    <span className={`${classes.rank} ${classes.pickRank}`}>
-                      {index + 1}
-                    </span>
-                    <span>
-                      {row.name} picks {ordinal(index + 1)}
-                    </span>
-                  </li>
-                ))}
-              </ol>
-            </figure>
+            <HomeDraftExample />
           </div>
         </section>
 
@@ -451,6 +399,3 @@ export const Home = () => {
     </div>
   );
 };
-
-const ORDINALS = ["first", "second", "third", "fourth", "fifth", "sixth"];
-const ordinal = (n: number) => ORDINALS[n - 1] ?? `${n}th`;
