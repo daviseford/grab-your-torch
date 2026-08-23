@@ -1,17 +1,7 @@
-import {
-  ActionIcon,
-  Alert,
-  Group,
-  NumberInput,
-  Select,
-  Stack,
-  Table,
-  TableScrollContainer,
-  Text,
-} from "@mantine/core";
+import { NumberInput, Select, Stack, Table, Text } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
-import { IconCheck, IconPencil, IconTrash, IconX } from "@tabler/icons-react";
+import { IconCheck, IconX } from "@tabler/icons-react";
 import { deleteField, doc, setDoc } from "firebase/firestore";
 import { useState } from "react";
 import { db } from "../../firebase";
@@ -19,11 +9,18 @@ import { useEliminations } from "../../hooks/useEliminations";
 import { useSeason } from "../../hooks/useSeason";
 import { useUser } from "../../hooks/useUser";
 import {
+  BoardEmpty,
+  EditRowActions,
+  RowActions,
+} from "../../pages/SeasonAdminParts";
+import adminParts from "../../pages/SeasonAdminParts.module.css";
+import {
   CastawayId,
   Elimination,
   EliminationVariant,
   EliminationVariants,
 } from "../../types";
+import { Board, EmptySlate } from "../Layout";
 
 type EditValues = {
   order: number;
@@ -141,10 +138,11 @@ export const EliminationCRUDTable = () => {
 
       if (isEditing && editValues) {
         return (
-          <Table.Tr key={e.id}>
+          <Table.Tr key={e.id} className={adminParts.editingRow}>
             <Table.Td>
               <NumberInput
                 size="xs"
+                aria-label="Order"
                 min={1}
                 value={editValues.order}
                 onChange={(val) =>
@@ -156,6 +154,7 @@ export const EliminationCRUDTable = () => {
             <Table.Td>
               <Select
                 size="xs"
+                aria-label="Variant"
                 data={variantOptions as unknown as string[]}
                 value={editValues.variant}
                 onChange={(val) =>
@@ -170,6 +169,7 @@ export const EliminationCRUDTable = () => {
             <Table.Td>
               <Select
                 size="xs"
+                aria-label="Player"
                 data={playerOptions}
                 value={editValues.castaway_id}
                 searchable
@@ -185,6 +185,7 @@ export const EliminationCRUDTable = () => {
             <Table.Td>
               <NumberInput
                 size="xs"
+                aria-label="Episode number"
                 min={1}
                 max={season?.episodes.length}
                 value={editValues.episode_num}
@@ -200,6 +201,7 @@ export const EliminationCRUDTable = () => {
             <Table.Td>
               <NumberInput
                 size="xs"
+                aria-label="Votes received"
                 min={0}
                 value={editValues.votes_received ?? ""}
                 placeholder="—"
@@ -213,25 +215,13 @@ export const EliminationCRUDTable = () => {
               />
             </Table.Td>
             {slimUser?.isAdmin && (
-              <Table.Td>
-                <Group gap="xs">
-                  <ActionIcon
-                    size="lg"
-                    color="green"
-                    onClick={() => saveEdit(e)}
-                    aria-label="Save elimination"
-                  >
-                    <IconCheck />
-                  </ActionIcon>
-                  <ActionIcon
-                    size="lg"
-                    color="gray"
-                    onClick={cancelEdit}
-                    aria-label="Cancel editing elimination"
-                  >
-                    <IconX />
-                  </ActionIcon>
-                </Group>
+              <Table.Td className={adminParts.actionsCell}>
+                <EditRowActions
+                  onSave={() => saveEdit(e)}
+                  onCancel={cancelEdit}
+                  saveLabel="Save elimination"
+                  cancelLabel="Cancel editing elimination"
+                />
               </Table.Td>
             )}
           </Table.Tr>
@@ -240,34 +230,24 @@ export const EliminationCRUDTable = () => {
 
       return (
         <Table.Tr key={e.id}>
-          <Table.Td>{e.order}</Table.Td>
-          <Table.Td>{e.variant}</Table.Td>
-          <Table.Td>
+          <Table.Td className={adminParts.num}>{e.order}</Table.Td>
+          <Table.Td className={adminParts.name}>{e.variant}</Table.Td>
+          <Table.Td className={adminParts.nowrap}>
             {season?.castawayLookup?.[e.castaway_id]?.full_name ??
               e.castaway_id}
           </Table.Td>
-          <Table.Td>episode_{e.episode_num}</Table.Td>
-          <Table.Td>{e.votes_received ?? "—"}</Table.Td>
+          <Table.Td className={adminParts.id}>episode_{e.episode_num}</Table.Td>
+          <Table.Td className={adminParts.num}>
+            {e.votes_received ?? <span className={adminParts.muted}>—</span>}
+          </Table.Td>
           {slimUser?.isAdmin && (
-            <Table.Td>
-              <Group gap="xs">
-                <ActionIcon
-                  size="lg"
-                  color="blue"
-                  onClick={() => startEdit(e)}
-                  aria-label={`Edit elimination ${e.order}`}
-                >
-                  <IconPencil />
-                </ActionIcon>
-                <ActionIcon
-                  size="lg"
-                  color="red"
-                  onClick={() => handleDelete(e)}
-                  aria-label={`Delete elimination ${e.order}`}
-                >
-                  <IconTrash />
-                </ActionIcon>
-              </Group>
+            <Table.Td className={adminParts.actionsCell}>
+              <RowActions
+                onEdit={() => startEdit(e)}
+                onDelete={() => handleDelete(e)}
+                editLabel={`Edit elimination ${e.order}`}
+                deleteLabel={`Delete elimination ${e.order}`}
+              />
             </Table.Td>
           )}
         </Table.Tr>
@@ -275,8 +255,15 @@ export const EliminationCRUDTable = () => {
     });
 
   return (
-    <TableScrollContainer minWidth={300}>
-      <Table>
+    <Board
+      title="Eliminations"
+      subtitle={`· ${rows.length}`}
+      titleAs="h2"
+      dense
+      flush
+      scroll
+    >
+      <Table highlightOnHover className={adminParts.tableWide}>
         <Table.Thead>
           <Table.Tr>
             <Table.Th>Order</Table.Th>
@@ -284,23 +271,18 @@ export const EliminationCRUDTable = () => {
             <Table.Th>Player</Table.Th>
             <Table.Th>Episode</Table.Th>
             <Table.Th>Votes</Table.Th>
-            {slimUser?.isAdmin && <Table.Th>Actions</Table.Th>}
+            {slimUser?.isAdmin && (
+              <Table.Th className={adminParts.actionsHead}>Actions</Table.Th>
+            )}
           </Table.Tr>
         </Table.Thead>
-        <Table.Tbody>
-          {rows.length > 0 ? (
-            rows
-          ) : (
-            <Table.Tr>
-              <Table.Td colSpan={6}>
-                <Alert color="blue" variant="light">
-                  No eliminations recorded yet.
-                </Alert>
-              </Table.Td>
-            </Table.Tr>
-          )}
-        </Table.Tbody>
+        <Table.Tbody>{rows}</Table.Tbody>
       </Table>
-    </TableScrollContainer>
+      {rows.length === 0 && (
+        <BoardEmpty>
+          <EmptySlate title="No eliminations recorded yet." />
+        </BoardEmpty>
+      )}
+    </Board>
   );
 };

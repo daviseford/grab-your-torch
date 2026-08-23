@@ -6,7 +6,8 @@
   background: var(--gyt-panel);
   border: 1px solid var(--gyt-rule);
   border-radius: var(--mantine-radius-md);
-  overflow: hidden;
+  /* clip, not hidden: a sticky table header inside must stick to the page. */
+  overflow: clip;
 }
 
 .head {
@@ -16,6 +17,10 @@
   gap: var(--mantine-spacing-sm);
   padding: 10px var(--mantine-spacing-md);
   border-bottom: 1px solid var(--gyt-rule);
+
+  @media (max-width: $mantine-breakpoint-sm) {
+    flex-wrap: wrap;
+  }
 }
 
 .titleGroup {
@@ -51,6 +56,12 @@
   align-items: center;
   gap: var(--mantine-spacing-xs);
   flex-shrink: 0;
+
+  /* Find bars and controls in the head take the full width on phones. */
+  @media (max-width: $mantine-breakpoint-sm) {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
 }
 
 .body {

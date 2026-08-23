@@ -1,18 +1,10 @@
 import {
-  Accordion,
   Alert,
-  Box,
   Button,
-  Center,
-  Group,
-  Loader,
   NumberInput,
-  Paper,
   Select,
-  SimpleGrid,
   Text,
   TextInput,
-  Title,
 } from "@mantine/core";
 import { isNotEmpty, useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
@@ -24,7 +16,16 @@ import { BASE_PLAYER_SCORING } from "../../data/scoring";
 import { db } from "../../firebase";
 import { useEliminations } from "../../hooks/useEliminations";
 import { useSeason } from "../../hooks/useSeason";
+import {
+  CreatePanel,
+  FormActions,
+  FormRow,
+  FormStack,
+  LoadingRow,
+  PanelAside,
+} from "../../pages/SeasonAdminParts";
 import { CastawayId, GameEvent, GameEventActions } from "../../types";
+import { EmptySlate } from "../Layout";
 
 export const CreateGameEvent = () => {
   const { data: season, isLoading } = useSeason();
@@ -70,19 +71,11 @@ export const CreateGameEvent = () => {
   }, [season]);
 
   if (isLoading) {
-    return (
-      <Center>
-        <Loader size="xl" />
-      </Center>
-    );
+    return <LoadingRow label="Loading season" />;
   }
 
   if (!season?.episodes?.length) {
-    return (
-      <Center>
-        <Text>Create an Episode first before adding events</Text>
-      </Center>
-    );
+    return <EmptySlate title="Create an Episode first before adding events" />;
   }
 
   const currentAction = BASE_PLAYER_SCORING.find(
@@ -131,80 +124,76 @@ export const CreateGameEvent = () => {
     .map((x) => ({ value: x.castaway_id, label: x.full_name }));
 
   return (
-    <Accordion defaultValue="create-event">
-      <Accordion.Item value="create-event">
-        <Accordion.Control>
-          <Title order={4}>Add Scoring Event</Title>
-        </Accordion.Control>
-        <Accordion.Panel>
-          <SimpleGrid cols={{ base: 1, md: 2 }}>
-            <Box maw={420} mx="auto">
-              <form onSubmit={form.onSubmit((values) => handleSubmit(values))}>
-                <TextInput
-                  withAsterisk
-                  readOnly
-                  label="Season #"
-                  value={form.values.season_num}
-                />
+    <CreatePanel
+      id="create-event"
+      title="Add Scoring Event"
+      aside={
+        <PanelAside title="Use this for player moments">
+          <Text size="sm" c="dimmed">
+            This form records scoring actions like idol finds, advantages, and
+            other player events tied to a specific episode.
+          </Text>
+          {currentAction?.multiplier && (
+            <Alert color="league" variant="light" mt="xs">
+              This action supports a count. Use <strong>How many?</strong> when
+              the same action happened multiple times.
+            </Alert>
+          )}
+        </PanelAside>
+      }
+    >
+      <form
+        onSubmit={form.onSubmit((values) => handleSubmit(values))}
+        aria-label="Add scoring event"
+      >
+        <FormStack>
+          <FormRow short>
+            <TextInput
+              withAsterisk
+              readOnly
+              label="Season #"
+              value={form.values.season_num}
+            />
 
-                <NumberInput
-                  withAsterisk
-                  label="Episode #"
-                  min={1}
-                  max={season?.episodes.length}
-                  {...form.getInputProps("episode_num")}
-                />
+            <NumberInput
+              withAsterisk
+              label="Episode #"
+              min={1}
+              max={season?.episodes.length}
+              {...form.getInputProps("episode_num")}
+            />
+          </FormRow>
 
-                <Select
-                  withAsterisk
-                  label="Player"
-                  data={playerOptions}
-                  searchable
-                  {...form.getInputProps("castaway_id")}
-                />
+          <Select
+            withAsterisk
+            label="Player"
+            data={playerOptions}
+            searchable
+            {...form.getInputProps("castaway_id")}
+          />
 
-                <Select
-                  withAsterisk
-                  label="Scoring Action"
-                  data={GameEventActions}
-                  searchable
-                  {...form.getInputProps("action")}
-                  description={currentAction?.description}
-                />
+          <Select
+            withAsterisk
+            label="Scoring Action"
+            data={GameEventActions}
+            searchable
+            {...form.getInputProps("action")}
+            description={currentAction?.description}
+          />
 
-                {currentAction?.multiplier && (
-                  <NumberInput
-                    withAsterisk
-                    label="How many?"
-                    {...form.getInputProps("multiplier")}
-                  />
-                )}
+          {currentAction?.multiplier && (
+            <NumberInput
+              withAsterisk
+              label="How many?"
+              {...form.getInputProps("multiplier")}
+            />
+          )}
 
-                <Group justify="flex-end" mt="md">
-                  <Button type="submit">Save Event</Button>
-                </Group>
-              </form>
-            </Box>
-            <Box>
-              <Paper withBorder p="md" radius="md">
-                <Title order={5} mb="xs">
-                  Use this for player moments
-                </Title>
-                <Text size="sm" c="dimmed">
-                  This form records scoring actions like idol finds, advantages,
-                  and other player events tied to a specific episode.
-                </Text>
-                {currentAction?.multiplier && (
-                  <Alert color="blue" variant="light" mt="md">
-                    This action supports a count. Use <strong>How many?</strong>{" "}
-                    when the same action happened multiple times.
-                  </Alert>
-                )}
-              </Paper>
-            </Box>
-          </SimpleGrid>
-        </Accordion.Panel>
-      </Accordion.Item>
-    </Accordion>
+          <FormActions>
+            <Button type="submit">Save Event</Button>
+          </FormActions>
+        </FormStack>
+      </form>
+    </CreatePanel>
   );
 };

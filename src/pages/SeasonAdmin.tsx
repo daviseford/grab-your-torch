@@ -1,27 +1,13 @@
 import {
   Alert,
-  Badge,
+  Anchor,
   Button,
-  Center,
-  Group,
   Loader,
-  Paper,
   Select,
-  Stack,
   Tabs,
-  Text,
   Title,
-  rem,
 } from "@mantine/core";
-import {
-  IconAlertCircle,
-  IconArrowLeft,
-  IconCalendar,
-  IconKarate,
-  IconList,
-  IconUserX,
-  IconUsersGroup,
-} from "@tabler/icons-react";
+import { IconAlertCircle, IconArrowLeft } from "@tabler/icons-react";
 import {
   Link,
   useNavigate,
@@ -35,14 +21,21 @@ import {
 } from "../components/Eliminations";
 import { CreateEpisode, EpisodeCRUDTable } from "../components/Episodes";
 import { CreateGameEvent, GameEventsCRUDTable } from "../components/GameEvents";
+import { RevealStrip } from "../components/Layout";
 import {
   CreateTeam,
   TeamCRUDTable,
   TeamPlayerManager,
 } from "../components/Teams";
+import { useChallenges } from "../hooks/useChallenges";
+import { useEliminations } from "../hooks/useEliminations";
+import { useEvents } from "../hooks/useEvents";
 import { useSeason } from "../hooks/useSeason";
 import { useSeasons } from "../hooks/useSeasons";
+import { useTeams } from "../hooks/useTeams";
 import { useUser } from "../hooks/useUser";
+import { AdminAccessDenied } from "./AdminAccessDenied";
+import classes from "./SeasonAdmin.module.css";
 
 const VALID_TABS = [
   "episodes",
@@ -54,7 +47,27 @@ const VALID_TABS = [
 type TabValue = (typeof VALID_TABS)[number];
 const DEFAULT_TAB: TabValue = "episodes";
 
-const iconStyle = { width: rem(16), height: rem(16) };
+const TAB_LABELS: Record<TabValue, string> = {
+  episodes: "Episodes",
+  events: "Events",
+  challenges: "Challenges",
+  eliminations: "Eliminations",
+  teams: "Teams",
+};
+
+/** Highest episode number that has any entered result, capped to the season. */
+const highestEpisodeWithResults = (
+  total: number,
+  ...collections: Record<string, { episode_num: number }>[]
+) => {
+  let highest = 0;
+  for (const collection of collections) {
+    for (const record of Object.values(collection)) {
+      if (record.episode_num > highest) highest = record.episode_num;
+    }
+  }
+  return Math.min(total, highest);
+};
 
 export const SeasonAdmin = () => {
   const { slimUser } = useUser();
@@ -70,26 +83,26 @@ export const SeasonAdmin = () => {
 
   const { data: season, isLoading: isSeasonLoading } = useSeason();
   const { data: seasons, isLoading: isSeasonsLoading } = useSeasons();
+  const { data: events } = useEvents(season?.id);
+  const { data: challenges } = useChallenges(season?.id);
+  const { data: eliminations } = useEliminations(season?.id);
+  const { data: teams } = useTeams(season?.id);
 
   if (!slimUser?.isAdmin) {
-    return (
-      <Center py="xl">
-        <Text c="dimmed">You need admin access to view this page.</Text>
-      </Center>
-    );
+    return <AdminAccessDenied />;
   }
 
   if (isSeasonLoading || isSeasonsLoading) {
     return (
-      <Center>
+      <div className={classes.loading} role="status" aria-live="polite">
         <Loader size="lg" />
-      </Center>
+      </div>
     );
   }
 
   if (!season) {
     return (
-      <Stack gap="md" p="md">
+      <div className={classes.page}>
         <Alert
           color="red"
           icon={<IconAlertCircle size={16} />}
@@ -97,10 +110,10 @@ export const SeasonAdmin = () => {
         >
           No season matched "{seasonId}".
         </Alert>
-        <Button component={Link} to="/admin" variant="light" w="fit-content">
+        <Button component={Link} to="/admin" variant="default" w="fit-content">
           Back to dashboard
         </Button>
-      </Stack>
+      </div>
     );
   }
 
@@ -125,121 +138,136 @@ export const SeasonAdmin = () => {
     }
   };
 
+  const episodeCount = season.episodes?.length ?? 0;
+  const castawayCount = season.players?.length ?? 0;
+  const counts: Record<TabValue, number> = {
+    episodes: episodeCount,
+    events: Object.keys(events).length,
+    challenges: Object.keys(challenges).length,
+    eliminations: Object.keys(eliminations).length,
+    teams: Object.keys(teams).length,
+  };
+  const resultsThrough = highestEpisodeWithResults(
+    episodeCount,
+    events,
+    challenges,
+    eliminations,
+  );
+  const stripStatus =
+    resultsThrough === 0
+      ? "Nothing entered yet"
+      : resultsThrough >= episodeCount
+        ? `Through episode ${resultsThrough}`
+        : `Through episode ${resultsThrough} · Next up: ${resultsThrough + 1}`;
+
   return (
-    <Stack gap="md" p="md">
-      <Button
-        component={Link}
-        to="/admin"
-        variant="subtle"
-        leftSection={<IconArrowLeft size={16} />}
-        w="fit-content"
-        px={0}
-      >
+    <div className={classes.page}>
+      <Anchor component={Link} to="/admin" className={classes.back}>
+        <IconArrowLeft size={14} aria-hidden="true" />
         Back to admin dashboard
-      </Button>
+      </Anchor>
 
-      <Paper withBorder p="lg" radius="md">
-        <Stack gap="lg">
-          <Group justify="space-between" align="flex-start" wrap="wrap">
-            <div>
-              <Badge variant="light" size="sm" mb={4}>
-                Season {season.order}
-              </Badge>
-              <Title order={2}>Manage {season.name}</Title>
-              <Text c="dimmed" size="sm" mt={4}>
-                Update the season in order: episodes first, then events,
-                challenges, eliminations, and team state.
-              </Text>
-            </div>
-            <Select
-              label="Switch season"
-              placeholder="Switch season"
-              data={seasonOptions}
-              value={seasonId ?? null}
-              onChange={handleSeasonChange}
-              w={260}
-              size="sm"
-              clearable={false}
-            />
-          </Group>
-        </Stack>
-      </Paper>
+      <header className={classes.plate}>
+        <div className={classes.logoPlate} aria-hidden="true">
+          {season.img ? (
+            <img src={season.img} alt="" decoding="async" />
+          ) : (
+            <span className={classes.logoNumber}>{season.order}</span>
+          )}
+        </div>
+        <div className={classes.plateText}>
+          <span className={classes.plateLabel}>
+            Season {season.order} · Workspace
+          </span>
+          <Title order={1} className={classes.plateTitle}>
+            Manage {season.name}
+          </Title>
+          <div className={classes.plateMeta}>
+            <span>
+              <b>{episodeCount}</b> episodes
+            </span>
+            <span>
+              <b>{castawayCount}</b> castaways
+            </span>
+            <span>
+              <b>{counts.teams}</b> tribes
+            </span>
+            <span>
+              <b>{resultsThrough}</b> episodes with results
+            </span>
+          </div>
+        </div>
+        <Select
+          className={classes.plateSwitch}
+          label="Switch season"
+          placeholder="Switch season"
+          data={seasonOptions}
+          value={seasonId ?? null}
+          onChange={handleSeasonChange}
+          size="sm"
+          clearable={false}
+        />
+      </header>
 
-      <Tabs value={activeTab} onChange={handleTabChange}>
-        <Tabs.List grow aria-label="Season data management">
-          <Tabs.Tab
-            value="episodes"
-            leftSection={<IconList style={iconStyle} />}
-            aria-label="Episodes"
-          >
-            <Text visibleFrom="sm">Episodes</Text>
-          </Tabs.Tab>
-          <Tabs.Tab
-            value="events"
-            leftSection={<IconCalendar style={iconStyle} />}
-            aria-label="Events"
-          >
-            <Text visibleFrom="sm">Events</Text>
-          </Tabs.Tab>
-          <Tabs.Tab
-            value="challenges"
-            leftSection={<IconKarate style={iconStyle} />}
-            aria-label="Challenges"
-          >
-            <Text visibleFrom="sm">Challenges</Text>
-          </Tabs.Tab>
-          <Tabs.Tab
-            value="eliminations"
-            leftSection={<IconUserX style={iconStyle} />}
-            aria-label="Eliminations"
-          >
-            <Text visibleFrom="sm">Eliminations</Text>
-          </Tabs.Tab>
-          <Tabs.Tab
-            value="teams"
-            leftSection={<IconUsersGroup style={iconStyle} />}
-            aria-label="Teams"
-          >
-            <Text visibleFrom="sm">Teams</Text>
-          </Tabs.Tab>
+      {episodeCount > 0 && (
+        <div className={classes.strip}>
+          <RevealStrip
+            total={episodeCount}
+            revealedThrough={resultsThrough}
+            label="Results entered"
+            status={stripStatus}
+            size="sm"
+            ariaLabel="Episodes with results entered"
+          />
+        </div>
+      )}
+
+      <p className={classes.note}>
+        Update the season in order: <b>episodes first</b>, then events,
+        challenges, eliminations, and team state.
+      </p>
+
+      <Tabs
+        value={activeTab}
+        onChange={handleTabChange}
+        color="signal"
+        classNames={{ list: classes.tabList, tab: classes.tab }}
+      >
+        <Tabs.List aria-label="Season data management">
+          {VALID_TABS.map((tab) => (
+            <Tabs.Tab key={tab} value={tab} aria-label={TAB_LABELS[tab]}>
+              {TAB_LABELS[tab]}
+              <span className={classes.count}>{counts[tab]}</span>
+            </Tabs.Tab>
+          ))}
         </Tabs.List>
 
-        <Tabs.Panel value="episodes" pt="lg">
-          <Stack gap="xl">
-            <CreateEpisode />
-            <EpisodeCRUDTable />
-          </Stack>
+        <Tabs.Panel value="episodes" className={classes.panel}>
+          <CreateEpisode />
+          <EpisodeCRUDTable />
         </Tabs.Panel>
 
-        <Tabs.Panel value="events" pt="lg">
-          <Stack gap="xl">
-            <CreateGameEvent />
-            <GameEventsCRUDTable />
-          </Stack>
+        <Tabs.Panel value="events" className={classes.panel}>
+          <CreateGameEvent />
+          <GameEventsCRUDTable />
         </Tabs.Panel>
 
-        <Tabs.Panel value="challenges" pt="lg">
-          <Stack gap="xl">
-            <CreateChallenge />
-            <ChallengeCRUDTable />
-          </Stack>
+        <Tabs.Panel value="challenges" className={classes.panel}>
+          <CreateChallenge />
+          <ChallengeCRUDTable />
         </Tabs.Panel>
 
-        <Tabs.Panel value="eliminations" pt="lg">
-          <Stack gap="xl">
-            <CreateElimination />
-            <EliminationCRUDTable />
-          </Stack>
+        <Tabs.Panel value="eliminations" className={classes.panel}>
+          <CreateElimination />
+          <EliminationCRUDTable />
         </Tabs.Panel>
 
-        <Tabs.Panel value="teams" pt="lg">
-          <Stack gap="xl">
-            <CreateTeam />
-            <TeamCRUDTable />
-            <TeamPlayerManager />
-          </Stack>
+        <Tabs.Panel value="teams" className={classes.panel}>
+          <CreateTeam />
+          <TeamCRUDTable />
+          <TeamPlayerManager />
         </Tabs.Panel>
       </Tabs>
-    </Stack>
+    </div>
   );
 };

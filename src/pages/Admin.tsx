@@ -1,41 +1,27 @@
 import {
   Accordion,
-  ActionIcon,
-  Alert,
-  Badge,
-  Box,
+  Anchor,
   Button,
-  Card,
-  Center,
-  Divider,
-  Group,
-  Image,
   Loader,
-  Paper,
-  SimpleGrid,
   Stack,
   Table,
   Text,
   TextInput,
-  Title,
+  VisuallyHidden,
 } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
-import {
-  IconCheck,
-  IconChevronRight,
-  IconDatabase,
-  IconList,
-  IconSearch,
-  IconSettings,
-  IconTrash,
-  IconUsers,
-  IconX,
-} from "@tabler/icons-react";
+import { IconCheck, IconSearch, IconX } from "@tabler/icons-react";
 import { ref, remove } from "firebase/database";
 import { deleteDoc, doc, setDoc } from "firebase/firestore";
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import {
+  Board,
+  EmptySlate,
+  PageIntro,
+  StatusBadge,
+} from "../components/Layout";
 import { SEASON_9_CHALLENGES, SEASON_9_ELIMINATIONS } from "../data/season_9";
 import { SEASONS } from "../data/seasons";
 import { db, rt_db } from "../firebase";
@@ -43,6 +29,8 @@ import { useCompetitions } from "../hooks/useCompetitions";
 import { useSeasons } from "../hooks/useSeasons";
 import { useUser } from "../hooks/useUser";
 import { Competition } from "../types";
+import classes from "./Admin.module.css";
+import { AdminAccessDenied } from "./AdminAccessDenied";
 
 const upload = async (label: string, fn: () => Promise<void>) => {
   try {
@@ -95,7 +83,10 @@ export const Admin = () => {
       children: (
         <Stack gap="xs">
           <Text size="sm">
-            This removes the competition and its linked live draft data.
+            This removes the competition and its linked live draft data.{" "}
+            <Text component="strong" fw={700} inherit>
+              This action is permanent.
+            </Text>
           </Text>
           <Text size="sm" c="dimmed">
             Season {competition.season_num} · {competition.participants.length}{" "}
@@ -128,319 +119,287 @@ export const Admin = () => {
   };
 
   if (!slimUser?.isAdmin) {
-    return (
-      <Center py="xl">
-        <Text c="dimmed">You need admin access to view this page.</Text>
-      </Center>
-    );
+    return <AdminAccessDenied />;
   }
 
   return (
-    <Stack gap="xl" p="md">
-      <Paper withBorder p="lg" radius="md">
-        <Stack gap="md">
-          <div>
-            <Group gap="xs" mb={4}>
-              <Box component="span" c="blue.6" display="inline-flex">
-                <IconSettings size={22} />
-              </Box>
-              <Title order={2}>Admin Dashboard</Title>
-            </Group>
-            <Text c="dimmed" size="sm">
-              Choose a season, update game data, and keep league operations in
-              sync.
-            </Text>
-          </div>
-
-          <SimpleGrid cols={{ base: 1, sm: 3 }}>
-            <Paper withBorder radius="md" p="md">
-              <Text size="sm" tt="uppercase" c="dimmed" fw={700}>
-                Latest Season
-              </Text>
-              <Text fw={700} mt={6}>
-                {latestSeason?.name ?? "No seasons"}
-              </Text>
-              <Text size="sm" c="dimmed" mt={4}>
-                {latestSeason
-                  ? `${latestSeason.episodes?.length ?? 0} episodes · ${latestSeason.players?.length ?? 0} players`
-                  : "Add season data to get started."}
-              </Text>
-            </Paper>
-
-            <Paper withBorder radius="md" p="md">
-              <Text size="sm" tt="uppercase" c="dimmed" fw={700}>
-                Competition Count
-              </Text>
-              <Text fw={700} mt={6}>
-                {competitions.length}
-              </Text>
-              <Text size="sm" c="dimmed" mt={4}>
-                Active and archived competitions visible to admins.
-              </Text>
-            </Paper>
-
-            <Paper withBorder radius="md" p="md">
-              <Text size="sm" tt="uppercase" c="dimmed" fw={700}>
-                Recommended Next Step
-              </Text>
-              <Text fw={700} mt={6}>
-                {latestSeason ? `Open ${latestSeason.name}` : "Review seasons"}
-              </Text>
-              <Text size="sm" c="dimmed" mt={4}>
-                Start with episodes, then events, challenges, eliminations, and
-                teams.
-              </Text>
-            </Paper>
-          </SimpleGrid>
-
-          {latestSeason && (
-            <Group>
+    <div className={classes.page}>
+      <PageIntro
+        eyebrow="Control room"
+        title="Admin Dashboard"
+        description="Choose a season, update game data, and keep league operations in sync."
+        actions={
+          latestSeason ? (
+            <>
               <Button
-                component={Link}
-                to={`/admin/${latestSeason.id}`}
-                rightSection={<IconChevronRight size={16} />}
-              >
-                Open Latest Season
-              </Button>
-              <Button
-                variant="light"
+                variant="default"
                 component={Link}
                 to={`/admin/${latestSeason.id}?tab=events`}
               >
                 Jump to S{latestSeason.order} Events
               </Button>
-            </Group>
-          )}
-        </Stack>
-      </Paper>
+              <Button component={Link} to={`/admin/${latestSeason.id}`}>
+                Open Latest Season
+              </Button>
+            </>
+          ) : undefined
+        }
+      />
 
-      <div>
-        <Group justify="space-between" align="end" mb="md" wrap="wrap">
-          <div>
-            <Title order={3}>Seasons</Title>
-            <Text c="dimmed" size="sm" mt={4}>
-              Pick a season to manage its weekly data and roster state.
-            </Text>
+      <section aria-labelledby="admin-status-heading">
+        <VisuallyHidden>
+          <h2 id="admin-status-heading">Status</h2>
+        </VisuallyHidden>
+        <div className={classes.status}>
+          <div className={classes.statusCell}>
+            <span className={classes.statusLabel}>Latest Season</span>
+            <div className={classes.statusValue}>
+              {latestSeason?.name ?? "No seasons"}
+            </div>
+            <div className={classes.statusSub}>
+              {latestSeason
+                ? `${latestSeason.episodes?.length ?? 0} episodes · ${latestSeason.players?.length ?? 0} castaways`
+                : "Add season data to get started."}
+            </div>
           </div>
-          <TextInput
-            placeholder="Search by season name, number, or id"
-            leftSection={<IconSearch size={16} />}
-            value={seasonSearch}
-            onChange={(e) => setSeasonSearch(e.currentTarget.value)}
-            maw={360}
-          />
-        </Group>
+          <div className={classes.statusCell}>
+            <span className={classes.statusLabel}>Competition Count</span>
+            <div className={classes.statusValue}>{competitions.length}</div>
+            <div className={classes.statusSub}>
+              Active and archived competitions visible to admins.
+            </div>
+          </div>
+          <div className={classes.statusCell}>
+            <span className={classes.statusLabel}>Recommended Next Step</span>
+            <div className={classes.statusValue}>
+              {latestSeason ? `Open ${latestSeason.name}` : "Review seasons"}
+              {latestSeason && (
+                <Anchor
+                  component={Link}
+                  to={`/admin/${latestSeason.id}`}
+                  className={classes.statusLink}
+                >
+                  Open workspace
+                </Anchor>
+              )}
+            </div>
+            <div className={classes.statusSub}>
+              Start with episodes, then events, challenges, eliminations, and
+              teams.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <Board
+        title="Seasons"
+        subtitle={isLoading ? undefined : `· ${sortedSeasons.length}`}
+        titleAs="h2"
+        dense
+        flush
+        scroll
+        className={classes.seasonsBoard}
+        aside={
+          <div className={classes.tools}>
+            <span className={classes.sortNote}>Newest first</span>
+            <TextInput
+              className={classes.find}
+              size="xs"
+              aria-label="Search by season name, number, or id"
+              placeholder="Search by season name, number, or id"
+              leftSection={<IconSearch size={14} />}
+              value={seasonSearch}
+              onChange={(e) => setSeasonSearch(e.currentTarget.value)}
+            />
+          </div>
+        }
+      >
         {isLoading ? (
-          <Center>
-            <Loader size="lg" />
-          </Center>
+          <div className={classes.loadingRow} role="status" aria-live="polite">
+            <Loader size="xs" />
+            Loading seasons
+          </div>
         ) : (
-          <Stack gap="md">
-            {latestSeason && (
-              <Card
-                component={Link}
-                to={`/admin/${latestSeason.id}`}
-                shadow="sm"
-                padding="lg"
-                radius="md"
-                withBorder
-                maw={450}
-              >
-                {latestSeason.img && (
-                  <Card.Section pos="relative">
-                    <Image
-                      src={latestSeason.img}
-                      height={100}
-                      alt=""
-                      fit="cover"
-                    />
-                    <Badge
-                      color="dark"
-                      variant="filled"
-                      size="sm"
-                      pos="absolute"
-                      top={12}
-                      right={12}
-                    >
-                      S{latestSeason.order}
-                    </Badge>
-                  </Card.Section>
-                )}
-                <Text fw={600} mt="md" mb="xs">
-                  {latestSeason.name}
-                </Text>
-                <Text size="sm" c="dimmed" mb="md">
-                  Best place to continue live season maintenance.
-                </Text>
-                <Group gap="lg">
-                  <Group gap={4}>
-                    <IconList size={14} color="gray" />
-                    <Text size="xs" c="dimmed">
-                      {latestSeason.episodes?.length ?? 0} episodes
-                    </Text>
-                  </Group>
-                  <Group gap={4}>
-                    <IconUsers size={14} color="gray" />
-                    <Text size="xs" c="dimmed">
-                      {latestSeason.players?.length ?? 0} players
-                    </Text>
-                  </Group>
-                </Group>
-                <Divider my="md" />
-                <Group justify="space-between">
-                  <Text size="sm" fw={600}>
-                    Open season workspace
-                  </Text>
-                  <IconChevronRight size={16} />
-                </Group>
-              </Card>
-            )}
-
-            <Table.ScrollContainer minWidth={400}>
-              <Table highlightOnHover verticalSpacing="xs">
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th>Season</Table.Th>
-                    <Table.Th>Episodes</Table.Th>
-                    <Table.Th>Players</Table.Th>
-                    <Table.Th>Actions</Table.Th>
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {filteredSeasons.length > 0 ? (
-                    filteredSeasons.map((season) => (
-                      <Table.Tr key={season.id}>
-                        <Table.Td>
-                          <Group gap="xs">
-                            <Badge variant="light" size="sm">
-                              S{season.order}
-                            </Badge>
-                            <Text size="sm" fw={500}>
-                              {season.name}
-                            </Text>
-                          </Group>
-                        </Table.Td>
-                        <Table.Td>
-                          <Text size="sm">{season.episodes?.length ?? 0}</Text>
-                        </Table.Td>
-                        <Table.Td>
-                          <Text size="sm">{season.players?.length ?? 0}</Text>
-                        </Table.Td>
-                        <Table.Td>
-                          <Button
-                            size="xs"
-                            variant="light"
-                            onClick={() => navigate(`/admin/${season.id}`)}
-                            rightSection={<IconChevronRight size={14} />}
-                          >
-                            Manage
-                          </Button>
-                        </Table.Td>
-                      </Table.Tr>
-                    ))
-                  ) : (
-                    <Table.Tr>
-                      <Table.Td colSpan={4}>
-                        <Alert
-                          color="blue"
-                          variant="light"
-                          icon={<IconSearch size={16} />}
-                        >
-                          No seasons match "{seasonSearch}". Try a season number
-                          or clear the search.
-                        </Alert>
-                      </Table.Td>
-                    </Table.Tr>
-                  )}
-                </Table.Tbody>
-              </Table>
-            </Table.ScrollContainer>
-          </Stack>
-        )}
-      </div>
-
-      <div>
-        <Title order={3} mb="xs">
-          Competitions
-        </Title>
-        <Text c="dimmed" size="sm" mb="md">
-          Delete competitions and their associated draft data. This action is
-          permanent.
-        </Text>
-        {competitions.length === 0 ? (
-          <Text c="dimmed" size="sm">
-            No competitions found.
-          </Text>
-        ) : (
-          <Table.ScrollContainer minWidth={400}>
-            <Table highlightOnHover verticalSpacing="sm">
+          <>
+            <Table highlightOnHover className={classes.tableMid}>
               <Table.Thead>
                 <Table.Tr>
-                  <Table.Th>Name</Table.Th>
                   <Table.Th>Season</Table.Th>
-                  <Table.Th>Participants</Table.Th>
-                  <Table.Th>Actions</Table.Th>
+                  <Table.Th className={classes.numHead}>Episodes</Table.Th>
+                  <Table.Th className={classes.numHead}>Castaways</Table.Th>
+                  <Table.Th className={classes.actionsHead}>Actions</Table.Th>
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
-                {competitions.map((c) => (
-                  <Table.Tr key={c.id}>
-                    <Table.Td fw={600}>
-                      <Text fw={600} lineClamp={1}>
-                        {c.competition_name}
-                      </Text>
-                    </Table.Td>
+                {filteredSeasons.map((season) => (
+                  <Table.Tr
+                    key={season.id}
+                    className={
+                      season.id === latestSeason?.id
+                        ? classes.latestRow
+                        : undefined
+                    }
+                  >
                     <Table.Td>
-                      <Badge variant="light" size="sm">
-                        S{c.season_num}
-                      </Badge>
+                      <div className={classes.seasonCell}>
+                        <span className={classes.logoChip} aria-hidden="true">
+                          {season.img ? (
+                            <img
+                              src={season.img}
+                              alt=""
+                              loading="lazy"
+                              decoding="async"
+                            />
+                          ) : (
+                            <span className={classes.logoChipText}>
+                              {season.order}
+                            </span>
+                          )}
+                        </span>
+                        <StatusBadge kind="season" size="sm">
+                          S{season.order}
+                        </StatusBadge>
+                        <span className={classes.seasonName}>
+                          {season.name}
+                        </span>
+                      </div>
                     </Table.Td>
-                    <Table.Td>
-                      <Text size="sm">
-                        {c.participants
-                          .map(
-                            (p) =>
-                              c.team_names?.[p.uid] ?? p.displayName ?? p.email,
-                          )
-                          .join(", ")}
-                      </Text>
+                    <Table.Td className={classes.num}>
+                      {season.episodes?.length ?? 0}
                     </Table.Td>
-                    <Table.Td>
-                      <ActionIcon
-                        color="red"
-                        variant="subtle"
-                        onClick={() => handleDeleteCompetition(c)}
-                        aria-label={`Delete ${c.competition_name}`}
+                    <Table.Td className={classes.num}>
+                      {season.players?.length ?? 0}
+                    </Table.Td>
+                    <Table.Td className={classes.actionsCell}>
+                      <Button
+                        size="xs"
+                        variant="default"
+                        onClick={() => navigate(`/admin/${season.id}`)}
+                        aria-label={`Manage ${season.name}`}
                       >
-                        <IconTrash size={16} />
-                      </ActionIcon>
+                        Manage
+                      </Button>
                     </Table.Td>
                   </Table.Tr>
                 ))}
               </Table.Tbody>
             </Table>
-          </Table.ScrollContainer>
+            {filteredSeasons.length === 0 && (
+              <div className={classes.boardEmpty}>
+                <EmptySlate
+                  title={`No seasons match "${seasonSearch}"`}
+                  actions={
+                    <Button
+                      size="xs"
+                      variant="default"
+                      onClick={() => setSeasonSearch("")}
+                    >
+                      Clear search
+                    </Button>
+                  }
+                >
+                  Try a season number or clear the search.
+                </EmptySlate>
+              </div>
+            )}
+          </>
         )}
-      </div>
+      </Board>
 
-      <Accordion variant="subtle">
+      <Board
+        title="Competitions"
+        subtitle={`· ${competitions.length}`}
+        titleAs="h2"
+        dense
+        flush
+        scroll
+      >
+        <p className={classes.boardNote}>
+          Delete competitions and their associated draft data. This action is
+          permanent.
+        </p>
+        {competitions.length === 0 ? (
+          <div className={classes.boardEmpty}>
+            <EmptySlate title="No competitions found." />
+          </div>
+        ) : (
+          <Table highlightOnHover className={classes.tableMid}>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Name</Table.Th>
+                <Table.Th>Season</Table.Th>
+                <Table.Th>Participants</Table.Th>
+                <Table.Th className={classes.actionsHead}>Actions</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {competitions.map((c) => (
+                <Table.Tr key={c.id}>
+                  <Table.Td>
+                    <Text fw={600} size="sm" lineClamp={1}>
+                      {c.competition_name}
+                    </Text>
+                  </Table.Td>
+                  <Table.Td>
+                    <StatusBadge kind="season" size="sm">
+                      S{c.season_num}
+                    </StatusBadge>
+                  </Table.Td>
+                  <Table.Td>
+                    <span className={classes.participants}>
+                      {c.participants
+                        .map(
+                          (p) =>
+                            c.team_names?.[p.uid] ?? p.displayName ?? p.email,
+                        )
+                        .join(", ")}
+                    </span>
+                  </Table.Td>
+                  <Table.Td className={classes.actionsCell}>
+                    <Button
+                      size="xs"
+                      variant="subtle"
+                      color="red"
+                      className={classes.deleteBtn}
+                      onClick={() => handleDeleteCompetition(c)}
+                      aria-label={`Delete ${c.competition_name}`}
+                    >
+                      Delete
+                    </Button>
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        )}
+      </Board>
+
+      <Accordion
+        order={2}
+        classNames={{
+          root: classes.collapse,
+          item: classes.collapseItem,
+          control: classes.collapseControl,
+          label: classes.collapseLabel,
+          chevron: classes.collapseChevron,
+          panel: classes.collapsePanel,
+          content: classes.collapseContent,
+        }}
+      >
         <Accordion.Item value="data-tools">
           <Accordion.Control>
-            <Group gap="xs">
-              <IconDatabase size={16} />
-              <Title order={4} c="dimmed">
-                Data Tools
-              </Title>
-            </Group>
+            <span className={classes.collapseTitle}>Data Tools</span>
+            <span className={classes.collapseHint}>· 3 one-off actions</span>
           </Accordion.Control>
           <Accordion.Panel>
-            <Text c="dimmed" size="sm" mb="md">
+            <Text c="dimmed" size="sm">
               One-off maintenance actions for known season uploads. Use these
               when a season record needs to be restored or refreshed.
             </Text>
-            <SimpleGrid cols={{ base: 1, md: 3 }}>
+            <div className={classes.toolRow}>
               <Button
-                variant="light"
+                size="xs"
+                variant="default"
                 onClick={() =>
                   upload("Season 9", async () => {
                     await setDoc(
@@ -464,7 +423,8 @@ export const Admin = () => {
                 Restore Season 9
               </Button>
               <Button
-                variant="light"
+                size="xs"
+                variant="default"
                 onClick={() =>
                   upload("Season 46", async () => {
                     await setDoc(
@@ -478,7 +438,8 @@ export const Admin = () => {
                 Restore Season 46
               </Button>
               <Button
-                variant="light"
+                size="xs"
+                variant="default"
                 onClick={() =>
                   upload("Season 50", async () => {
                     await setDoc(
@@ -491,10 +452,10 @@ export const Admin = () => {
               >
                 Restore Season 50
               </Button>
-            </SimpleGrid>
+            </div>
           </Accordion.Panel>
         </Accordion.Item>
       </Accordion>
-    </Stack>
+    </div>
   );
 };

@@ -1,18 +1,10 @@
 import {
-  Accordion,
   Alert,
-  Box,
   Button,
-  Center,
   Checkbox,
-  Group,
-  Loader,
   NumberInput,
-  Paper,
-  SimpleGrid,
   Text,
   TextInput,
-  Title,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
@@ -20,6 +12,15 @@ import { IconCheck, IconX } from "@tabler/icons-react";
 import { arrayUnion, doc, updateDoc } from "firebase/firestore";
 import { db } from "../../firebase";
 import { useSeason } from "../../hooks/useSeason";
+import {
+  CreatePanel,
+  FormActions,
+  FormRow,
+  FormStack,
+  LoadingRow,
+  PanelAside,
+} from "../../pages/SeasonAdminParts";
+import adminParts from "../../pages/SeasonAdminParts.module.css";
 import { Episode } from "../../types";
 
 export const CreateEpisode = () => {
@@ -38,11 +39,7 @@ export const CreateEpisode = () => {
   });
 
   if (isLoading) {
-    return (
-      <Center>
-        <Loader size="xl" />
-      </Center>
-    );
+    return <LoadingRow label="Loading season" />;
   }
 
   if (!season) return null;
@@ -87,78 +84,77 @@ export const CreateEpisode = () => {
   };
 
   return (
-    <Accordion defaultValue="create-episode">
-      <Accordion.Item value="create-episode">
-        <Accordion.Control>
-          <Title order={4}>Add Episode</Title>
-        </Accordion.Control>
-        <Accordion.Panel>
-          <SimpleGrid cols={{ base: 1, md: 2 }}>
-            <Box maw={420} mx="auto">
-              <form onSubmit={form.onSubmit((values) => handleSubmit(values))}>
-                <TextInput
-                  withAsterisk
-                  readOnly
-                  label="Season"
-                  value={`${season.name} (${season.id})`}
-                />
+    <CreatePanel
+      id="create-episode"
+      title="Add Episode"
+      hint={`· next is episode ${nextOrder}`}
+      aside={
+        <PanelAside title="Before you save">
+          <Text size="sm" c="dimmed">
+            Start here whenever a new episode airs. The episode record sets the
+            context for events, challenges, and eliminations.
+          </Text>
+          <Alert color="league" variant="light" mt="xs">
+            If the merge happens in this episode, turn on{" "}
+            <strong>Merge occurs</strong>. If the merge has already happened,
+            keep <strong>Post-merge</strong> on for future episodes.
+          </Alert>
+        </PanelAside>
+      }
+    >
+      <form
+        onSubmit={form.onSubmit((values) => handleSubmit(values))}
+        aria-label="Add episode"
+      >
+        <FormStack>
+          <TextInput
+            withAsterisk
+            readOnly
+            label="Season"
+            value={`${season.name} (${season.id})`}
+          />
 
-                <NumberInput
-                  withAsterisk
-                  label="Episode #"
-                  min={1}
-                  {...form.getInputProps("order")}
-                />
+          <FormRow short>
+            <NumberInput
+              withAsterisk
+              label="Episode #"
+              min={1}
+              {...form.getInputProps("order")}
+            />
 
-                <TextInput
-                  label="Episode Name"
-                  placeholder="e.g. The Marooning"
-                  description="Optional, but useful for keeping the season timeline readable."
-                  {...form.getInputProps("name")}
-                />
+            <TextInput
+              label="Episode Name"
+              placeholder="e.g. The Marooning"
+              description="Optional, but useful for keeping the season timeline readable."
+              {...form.getInputProps("name")}
+            />
+          </FormRow>
 
-                <Group mt="md" gap="lg">
-                  <Checkbox
-                    label="Merge occurs"
-                    {...form.getInputProps("merge_occurs", {
-                      type: "checkbox",
-                    })}
-                  />
-                  <Checkbox
-                    label="Post-merge"
-                    {...form.getInputProps("post_merge", { type: "checkbox" })}
-                  />
-                  <Checkbox
-                    label="Finale"
-                    {...form.getInputProps("finale", { type: "checkbox" })}
-                  />
-                </Group>
+          <fieldset className={adminParts.fieldset}>
+            <legend className={adminParts.legend}>Flags</legend>
+            <div className={adminParts.checks}>
+              <Checkbox
+                label="Merge occurs"
+                {...form.getInputProps("merge_occurs", {
+                  type: "checkbox",
+                })}
+              />
+              <Checkbox
+                label="Post-merge"
+                {...form.getInputProps("post_merge", { type: "checkbox" })}
+              />
+              <Checkbox
+                label="Finale"
+                {...form.getInputProps("finale", { type: "checkbox" })}
+              />
+            </div>
+          </fieldset>
 
-                <Group justify="flex-end" mt="md">
-                  <Button type="submit">Save Episode</Button>
-                </Group>
-              </form>
-            </Box>
-            <Box>
-              <Paper withBorder p="md" radius="md">
-                <Title order={5} mb="xs">
-                  Before you save
-                </Title>
-                <Text size="sm" c="dimmed">
-                  Start here whenever a new episode airs. The episode record
-                  sets the context for events, challenges, and eliminations.
-                </Text>
-                <Alert color="blue" variant="light" mt="md">
-                  If the merge happens in this episode, turn on{" "}
-                  <strong>Merge occurs</strong>. If the merge has already
-                  happened, keep <strong>Post-merge</strong> on for future
-                  episodes.
-                </Alert>
-              </Paper>
-            </Box>
-          </SimpleGrid>
-        </Accordion.Panel>
-      </Accordion.Item>
-    </Accordion>
+          <FormActions>
+            <Button type="submit">Save Episode</Button>
+          </FormActions>
+        </FormStack>
+      </form>
+    </CreatePanel>
   );
 };

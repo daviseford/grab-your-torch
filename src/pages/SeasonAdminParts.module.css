@@ -1,0 +1,282 @@
+/*
+ * Season workspace chrome shared by every CRUD family (episodes, events,
+ * challenges, eliminations, teams): the collapsible create panel, the form
+ * grid, touch-safe row actions, and cell classes for dense boards.
+ */
+
+/* ---------- Collapsible create panel (Accordion restyled as a panel) ---------- */
+.panel {
+  background: var(--gyt-panel);
+  border: 1px solid var(--gyt-rule);
+  border-radius: var(--mantine-radius-md);
+  overflow: hidden;
+}
+
+.panelItem {
+  border: 0;
+  background: transparent;
+}
+
+.panelControl {
+  padding: 10px var(--mantine-spacing-md);
+  min-height: 44px;
+
+  &:hover {
+    background: var(--gyt-panel-2);
+  }
+}
+
+.panelLabel {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  padding: 0;
+}
+
+.panelTitle {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-text);
+}
+
+.panelHint {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 500;
+  font-size: 0.6875rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+
+.panelChevron {
+  color: var(--mantine-color-dimmed);
+}
+
+.panelBody {
+  border-top: 1px solid var(--gyt-rule);
+}
+
+.panelContent {
+  padding: var(--mantine-spacing-md);
+}
+
+/* Form on the left, guidance on the right; stacks under md. */
+.twoUp {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--mantine-spacing-lg);
+  align-items: start;
+
+  @media (max-width: $mantine-breakpoint-md) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.formCol {
+  min-width: 0;
+}
+
+/* ---------- Guidance aside ---------- */
+.asideCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-xs);
+  padding: var(--mantine-spacing-md);
+  border: 1px solid var(--gyt-rule);
+  border-radius: var(--mantine-radius-md);
+  background: var(--gyt-panel-2);
+}
+
+.asideTitle {
+  font-size: 0.9375rem;
+  line-height: 1.3;
+}
+
+/* ---------- Form grid ---------- */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-sm);
+}
+
+.formRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--mantine-spacing-sm);
+  align-items: start;
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* A short numeric field beside a long text field. */
+.formRowShort {
+  grid-template-columns: minmax(96px, 120px) minmax(0, 1fr);
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    grid-template-columns: minmax(96px, 120px) minmax(0, 1fr);
+  }
+}
+
+.formActions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--mantine-spacing-sm);
+  margin-top: var(--mantine-spacing-xs);
+}
+
+/* Checkbox groups read as a labeled fieldset. */
+.fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.legend {
+  padding: 0;
+  margin-bottom: 6px;
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: 0.6875rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+
+.checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mantine-spacing-xs) var(--mantine-spacing-lg);
+}
+
+/* ---------- Row actions: edit left, delete right, a rule between ---------- */
+.rowActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--mantine-spacing-xs);
+  white-space: nowrap;
+}
+
+.rowDelete {
+  margin-left: 4px;
+  padding-left: 12px;
+  border-left: 1px solid var(--gyt-rule);
+  border-radius: 0;
+}
+
+/* Phones: 40 px targets and a wider gap before the destructive control. */
+@media (max-width: $mantine-breakpoint-sm) {
+  .rowActions {
+    gap: var(--mantine-spacing-sm);
+  }
+
+  .rowBtn {
+    min-height: 40px;
+    min-width: 40px;
+    padding-inline: 12px;
+  }
+
+  .rowDelete {
+    margin-left: 12px;
+    padding-left: 16px;
+  }
+}
+
+/* ---------- Board cells ---------- */
+.actionsHead {
+  text-align: right;
+}
+
+.actionsCell {
+  text-align: right;
+}
+
+.num {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.name {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.id {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+  white-space: nowrap;
+}
+
+.muted {
+  color: var(--mantine-color-dimmed);
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+/*
+ * Flag slates never truncate: the board scrolls instead. Mantine's Badge is
+ * a grid with an overflow-hidden label, so it reports a near-zero min-content
+ * width to the table's auto layout; max-content restores its real width.
+ */
+.flags {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.flags > * {
+  flex-shrink: 0;
+  width: max-content;
+  min-width: max-content;
+  max-width: none;
+}
+
+.tableNarrow {
+  min-width: 420px;
+}
+
+.tableMid {
+  min-width: 520px;
+}
+
+.tableWide {
+  min-width: 640px;
+}
+
+/* Rows in edit mode carry a League Blue band on the identity edge. */
+.editingRow td {
+  background: color-mix(in srgb, var(--mantine-color-league-6) 7%, transparent);
+  vertical-align: top;
+}
+
+.editingRow td:first-child {
+  box-shadow: inset 3px 0 0 var(--mantine-color-league-6);
+}
+
+/* Empty and prerequisite states sit inside the board body. */
+.boardEmpty {
+  padding: var(--mantine-spacing-sm);
+}
+
+.loadingRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px var(--mantine-spacing-md);
+  font-size: var(--mantine-font-size-sm);
+  color: var(--mantine-color-dimmed);
+}

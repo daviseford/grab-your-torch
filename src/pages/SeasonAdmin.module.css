@@ -1,0 +1,220 @@
+/*
+ * Season workspace: a navy season plate (logo, name, counts, switcher), the
+ * results-entered strip, the ordering note, the rundown tabs, and one panel
+ * per CRUD family. Operate mode inside the broadcast world.
+ */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-md);
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding-bottom: var(--mantine-spacing-xl);
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: 0.75rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+  text-decoration: none;
+
+  &:hover {
+    color: var(--mantine-color-text);
+    text-decoration: none;
+  }
+}
+
+/* ---------- Season plate ---------- */
+.plate {
+  --mantine-color-text: var(--mantine-color-dark-0);
+  --mantine-color-dimmed: var(--mantine-color-dark-1);
+
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--mantine-spacing-lg);
+  align-items: center;
+  padding: var(--mantine-spacing-md) var(--mantine-spacing-lg);
+  border-radius: var(--mantine-radius-md);
+  background: var(--gyt-plate);
+  color: var(--mantine-color-dark-0);
+
+  @media (max-width: $mantine-breakpoint-sm) {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: var(--mantine-spacing-sm);
+    padding: var(--mantine-spacing-sm);
+  }
+}
+
+.logoPlate {
+  display: grid;
+  place-items: center;
+  width: 128px;
+  height: 72px;
+  border-radius: var(--mantine-radius-sm);
+  background: var(--mantine-color-dark-6);
+  overflow: hidden;
+
+  @media (max-width: $mantine-breakpoint-sm) {
+    width: 84px;
+    height: 52px;
+  }
+}
+
+.logoPlate img {
+  max-width: 110px;
+  max-height: 58px;
+  object-fit: contain;
+  display: block;
+
+  @media (max-width: $mantine-breakpoint-sm) {
+    max-width: 72px;
+    max-height: 40px;
+  }
+}
+
+.logoNumber {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 1.5rem;
+  color: var(--mantine-color-dark-0);
+}
+
+.plateText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.plateLabel {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: 0.6875rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--gyt-signal-text);
+}
+
+[data-mantine-color-scheme="light"] .plateLabel {
+  color: var(--mantine-color-signal-5);
+}
+
+.plateTitle {
+  font-size: clamp(1.375rem, 1rem + 1.4vw, 1.75rem);
+  line-height: 1.1;
+  color: var(--mantine-color-dark-0);
+  overflow-wrap: anywhere;
+}
+
+.plateMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px var(--mantine-spacing-md);
+  margin-top: 4px;
+  font-size: var(--mantine-font-size-sm);
+  color: var(--mantine-color-dark-1);
+}
+
+.plateMeta b {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--mantine-color-dark-0);
+}
+
+.plateSwitch {
+  min-width: 220px;
+
+  @media (max-width: $mantine-breakpoint-sm) {
+    grid-column: 1 / -1;
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+.plateSwitch :global(.mantine-InputWrapper-label) {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: 0.6875rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dark-1);
+}
+
+.plateSwitch :global(.mantine-Input-input) {
+  background: var(--mantine-color-dark-6);
+  color: var(--mantine-color-dark-0);
+  border-color: var(--gyt-plate-rule);
+}
+
+.plateSwitch :global(.mantine-Input-section) {
+  color: var(--mantine-color-dark-1);
+}
+
+/* ---------- Strip and ordering note ---------- */
+.strip {
+  padding-top: 4px;
+}
+
+.note {
+  font-size: var(--mantine-font-size-sm);
+  color: var(--mantine-color-dimmed);
+}
+
+.note b {
+  font-weight: 600;
+  color: var(--mantine-color-text);
+}
+
+/* ---------- Rundown tabs ---------- */
+.tabList {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tab {
+  flex-shrink: 0;
+  white-space: nowrap;
+  padding-inline: var(--mantine-spacing-sm);
+}
+
+.tab[data-active] {
+  color: var(--mantine-color-text);
+}
+
+.count {
+  margin-left: 6px;
+  font-weight: 600;
+  font-size: 0.6875rem;
+  letter-spacing: 0;
+  color: var(--mantine-color-dimmed);
+  font-variant-numeric: tabular-nums;
+}
+
+.tab[data-active] .count {
+  color: var(--gyt-signal-text);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-lg);
+  padding-top: var(--mantine-spacing-lg);
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  padding: var(--mantine-spacing-xl) 0;
+}

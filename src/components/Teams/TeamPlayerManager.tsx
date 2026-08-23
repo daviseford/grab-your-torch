@@ -12,43 +12,35 @@ import {
 } from "@dnd-kit/core";
 import {
   Alert,
-  Box,
   Button,
-  Card,
   Group,
   NumberInput,
-  Paper,
   Select,
-  SimpleGrid,
-  Stack,
   Text,
   Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import {
-  IconAlertCircle,
-  IconCheck,
-  IconCopy,
-  IconDeviceFloppy,
-  IconX,
-} from "@tabler/icons-react";
+import { IconAlertCircle, IconCheck, IconX } from "@tabler/icons-react";
 import { doc, setDoc } from "firebase/firestore";
-import { useState } from "react";
+import { CSSProperties, useId, useState } from "react";
 import { db } from "../../firebase";
 import { useEliminations } from "../../hooks/useEliminations";
 import { useSeason } from "../../hooks/useSeason";
 import { useTeamAssignments } from "../../hooks/useTeamAssignments";
 import { useTeams } from "../../hooks/useTeams";
 import { CastawayId, Team, TeamAssignmentSnapshot } from "../../types";
+import classes from "./Teams.module.css";
 
 const NO_TEAM_ID = "__no_team__";
 
 const DraggablePlayerCard = ({
   castawayId,
   displayName,
+  img,
 }: {
   castawayId: CastawayId;
   displayName: string;
+  img?: string;
 }) => {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({ id: castawayId });
@@ -57,34 +49,39 @@ const DraggablePlayerCard = ({
     transform: transform
       ? `translate(${transform.x}px, ${transform.y}px)`
       : undefined,
-    opacity: isDragging ? 0.4 : 1,
   };
 
   return (
-    <Paper
+    <div
       ref={setNodeRef}
       style={style}
       {...attributes}
       {...listeners}
-      p="xs"
-      mb={4}
-      withBorder
-      shadow="xs"
-      styles={{
-        root: { cursor: "grab", userSelect: "none" },
-      }}
+      className={[classes.chip, isDragging && classes.chipDragging]
+        .filter(Boolean)
+        .join(" ")}
     >
-      <Text size="sm">{displayName}</Text>
-    </Paper>
+      <span className={classes.grip} aria-hidden="true" />
+      {img && (
+        <img
+          src={img}
+          alt=""
+          className={classes.chipImg}
+          loading="lazy"
+          decoding="async"
+          draggable={false}
+        />
+      )}
+      <span className={classes.chipName}>{displayName}</span>
+    </div>
   );
 };
 
 const PlayerDragOverlay = ({ displayName }: { displayName: string }) => (
-  <Paper p="xs" withBorder shadow="md">
-    <Text size="sm" fw={600}>
-      {displayName}
-    </Text>
-  </Paper>
+  <div className={`${classes.chip} ${classes.chipOverlay}`}>
+    <span className={classes.grip} aria-hidden="true" />
+    <span className={classes.chipName}>{displayName}</span>
+  </div>
 );
 
 type DroppableColumnProps = {
@@ -93,6 +90,7 @@ type DroppableColumnProps = {
   color: string | null;
   players: CastawayId[];
   resolveName: (id: CastawayId) => string;
+  resolveImg: (id: CastawayId) => string | undefined;
 };
 
 const DroppableColumn = ({
@@ -101,56 +99,51 @@ const DroppableColumn = ({
   color,
   players,
   resolveName,
+  resolveImg,
 }: DroppableColumnProps) => {
   const { setNodeRef, isOver } = useDroppable({ id });
 
   return (
-    <Card
+    <div
       ref={setNodeRef}
-      withBorder
-      padding="sm"
-      style={{
-        borderColor: isOver
-          ? "var(--mantine-color-blue-light-color)"
-          : (color ?? undefined),
-        borderWidth: color ? 2 : 1,
-        minHeight: 120,
-        backgroundColor: isOver ? "var(--mantine-color-blue-light)" : undefined,
-      }}
+      role="group"
+      aria-label={title}
+      className={[
+        classes.col,
+        color ? classes.colTribe : classes.colNone,
+        isOver && classes.colOver,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      style={{ "--tribe": color ?? undefined } as CSSProperties}
     >
-      <Group gap="xs" mb="sm">
+      <div className={classes.colHead}>
         {color && (
-          <Box
-            w={14}
-            h={14}
-            style={{
-              borderRadius: 3,
-              backgroundColor: color,
-            }}
+          <span
+            className={classes.swatch}
+            style={{ backgroundColor: color }}
+            aria-hidden="true"
           />
         )}
-        <Text fw={600} size="sm">
-          {title}
-        </Text>
-        <Text size="xs" c="dimmed">
-          ({players.length})
-        </Text>
-      </Group>
+        {title}
+        <span className={classes.colCount}>{players.length}</span>
+      </div>
 
-      {players.map((cid) => (
-        <DraggablePlayerCard
-          key={cid}
-          castawayId={cid}
-          displayName={resolveName(cid)}
-        />
-      ))}
+      <div className={classes.colList}>
+        {players.map((cid) => (
+          <DraggablePlayerCard
+            key={cid}
+            castawayId={cid}
+            displayName={resolveName(cid)}
+            img={resolveImg(cid)}
+          />
+        ))}
 
-      {players.length === 0 && (
-        <Text size="xs" c="dimmed" ta="center" py="md">
-          Drop players here
-        </Text>
-      )}
-    </Card>
+        {players.length === 0 && (
+          <div className={classes.colEmpty}>Drop players here</div>
+        )}
+      </div>
+    </div>
   );
 };
 
@@ -159,6 +152,7 @@ export const TeamPlayerManager = () => {
   const { data: teams } = useTeams(season?.id);
   const { data: assignments } = useTeamAssignments(season?.id);
   const { data: eliminations } = useEliminations(season?.id);
+  const headingId = useId();
 
   const [episodeNum, setEpisodeNum] = useState<number>(1);
   const [localAssignments, setLocalAssignments] =
@@ -185,6 +179,9 @@ export const TeamPlayerManager = () => {
 
   const resolveName = (cid: CastawayId): string =>
     season?.castawayLookup?.[cid]?.full_name ?? cid;
+
+  const resolveImg = (cid: CastawayId): string | undefined =>
+    season?.players.find((p) => p.castaway_id === cid)?.img || undefined;
 
   // Build snapshot: prefer local edits, then saved data, then all null
   const getSnapshot = (): TeamAssignmentSnapshot => {
@@ -316,7 +313,7 @@ export const TeamPlayerManager = () => {
 
   if (teamList.length === 0) {
     return (
-      <Alert icon={<IconAlertCircle />} title="No Teams" color="blue">
+      <Alert icon={<IconAlertCircle />} title="No Teams" color="league">
         Create teams above before assigning players.
       </Alert>
     );
@@ -327,153 +324,150 @@ export const TeamPlayerManager = () => {
     currentEpisode?.merge_occurs || currentEpisode?.post_merge;
 
   return (
-    <Card withBorder>
-      <Card.Section p="md">
-        <Title order={4}>Team Assignments by Episode</Title>
-        <Text size="sm" c="dimmed" mt="xs">
+    <section className={classes.section} aria-labelledby={headingId}>
+      <div className={classes.head}>
+        <Title order={2} id={headingId} className={classes.headTitle}>
+          Team Assignments by Episode
+        </Title>
+        <p className={classes.sub}>
           Drag players between columns or use the manual assignment list below,
           then save when done.
-        </Text>
-      </Card.Section>
+        </p>
+      </div>
 
-      <Card.Section p="md">
-        <Group mb="md" align="flex-end">
-          <NumberInput
-            label="Episode #"
-            min={1}
-            max={season.episodes.length || undefined}
-            value={episodeNum}
-            onChange={handleEpisodeChange}
-            w={120}
-          />
-          <Button
-            variant="light"
-            leftSection={<IconCopy size={16} />}
-            onClick={handleCopyPreviousEpisode}
-            disabled={episodeNum <= 1 || !assignments[String(episodeNum - 1)]}
-          >
-            Copy from Ep {episodeNum - 1}
-          </Button>
-          <Button
-            variant="filled"
-            leftSection={<IconDeviceFloppy size={16} />}
-            onClick={handleSave}
-            loading={saving}
-          >
-            Save
-          </Button>
-        </Group>
+      <div className={classes.tools}>
+        <NumberInput
+          label="Episode #"
+          min={1}
+          max={season.episodes.length || undefined}
+          value={episodeNum}
+          onChange={handleEpisodeChange}
+          className={classes.episodeInput}
+        />
+        <Button
+          variant="default"
+          onClick={handleCopyPreviousEpisode}
+          disabled={episodeNum <= 1 || !assignments[String(episodeNum - 1)]}
+        >
+          Copy from Ep {episodeNum - 1}
+        </Button>
+        <Button onClick={handleSave} loading={saving}>
+          Save
+        </Button>
+      </div>
 
-        {isMergeEpisode && (
-          <Alert
-            icon={<IconAlertCircle />}
-            title="Merge Episode"
-            color="orange"
-            mb="md"
-          >
-            <Group>
-              <Text size="sm">
-                This is a merge/post-merge episode. Players typically have no
-                team.
-              </Text>
-              <Button
-                size="xs"
-                variant="light"
-                color="orange"
-                onClick={handleMoveAllToNoTeam}
-              >
-                Move all to No Team
-              </Button>
-            </Group>
-          </Alert>
-        )}
-
-        {assignments[String(episodeNum)] && !localAssignments && (
-          <Alert color="green" mb="md">
+      {isMergeEpisode && (
+        <Alert
+          icon={<IconAlertCircle />}
+          title="Merge Episode"
+          color="orange"
+          variant="light"
+        >
+          <Group>
             <Text size="sm">
-              Saved assignments loaded for episode {episodeNum}.
+              This is a merge/post-merge episode. Players typically have no
+              team.
             </Text>
-          </Alert>
-        )}
+            <Button
+              size="xs"
+              variant="light"
+              color="orange"
+              onClick={handleMoveAllToNoTeam}
+            >
+              Move all to No Team
+            </Button>
+          </Group>
+        </Alert>
+      )}
 
-        {localAssignments && (
-          <Alert color="yellow" mb="md">
-            <Text size="sm">You have unsaved changes.</Text>
-          </Alert>
-        )}
-
-        <Alert color="blue" variant="light" mb="md">
+      {assignments[String(episodeNum)] && !localAssignments && (
+        <Alert color="green" variant="light">
           <Text size="sm">
-            Drag-and-drop is fastest on desktop. The manual assignment controls
-            below are the fallback for touch devices, keyboard users, or quick
-            spot fixes.
+            Saved assignments loaded for episode {episodeNum}.
           </Text>
         </Alert>
+      )}
 
-        <DndContext
-          sensors={sensors}
-          collisionDetection={rectIntersection}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-        >
-          <SimpleGrid cols={{ base: 1, sm: 2, md: teamList.length + 1 }}>
-            {teamList.map((team) => (
-              <DroppableColumn
-                key={team.id}
-                id={team.id}
-                title={team.name}
-                color={team.color}
-                players={playersByContainer[team.id] || []}
-                resolveName={resolveName}
-              />
-            ))}
+      {localAssignments && (
+        <Alert color="yellow" variant="light">
+          <Text size="sm">You have unsaved changes.</Text>
+        </Alert>
+      )}
+
+      <Alert color="league" variant="light">
+        <Text size="sm">
+          Drag-and-drop is fastest on desktop. The manual assignment controls
+          below are the fallback for touch devices, keyboard users, or quick
+          spot fixes.
+        </Text>
+      </Alert>
+
+      <DndContext
+        sensors={sensors}
+        collisionDetection={rectIntersection}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+      >
+        <div className={classes.columns}>
+          {teamList.map((team) => (
             <DroppableColumn
-              id={NO_TEAM_ID}
-              title="No Team"
-              color={null}
-              players={playersByContainer[NO_TEAM_ID] || []}
+              key={team.id}
+              id={team.id}
+              title={team.name}
+              color={team.color}
+              players={playersByContainer[team.id] || []}
               resolveName={resolveName}
+              resolveImg={resolveImg}
             />
-          </SimpleGrid>
+          ))}
+          <DroppableColumn
+            id={NO_TEAM_ID}
+            title="No Team"
+            color={null}
+            players={playersByContainer[NO_TEAM_ID] || []}
+            resolveName={resolveName}
+            resolveImg={resolveImg}
+          />
+        </div>
 
-          <DragOverlay>
-            {activePlayer ? (
-              <PlayerDragOverlay displayName={resolveName(activePlayer)} />
-            ) : null}
-          </DragOverlay>
-        </DndContext>
+        <DragOverlay>
+          {activePlayer ? (
+            <PlayerDragOverlay displayName={resolveName(activePlayer)} />
+          ) : null}
+        </DragOverlay>
+      </DndContext>
 
-        <Paper withBorder radius="md" p="md" mt="md">
-          <Stack gap="md">
-            <div>
-              <Title order={5}>Manual Assignment</Title>
-              <Text size="sm" c="dimmed" mt={4}>
-                Assign players one by one without dragging.
-              </Text>
-            </div>
+      <div className={classes.manual}>
+        <div className={classes.head}>
+          <Title order={3} className={classes.headTitle}>
+            Manual Assignment
+          </Title>
+          <p className={classes.sub}>
+            Assign players one by one without dragging.
+          </p>
+        </div>
 
-            <SimpleGrid cols={{ base: 1, md: 2 }}>
-              {castawayIds.map((cid) => (
-                <Select
-                  key={cid}
-                  label={resolveName(cid)}
-                  data={[
-                    ...teamList.map((team) => ({
-                      value: team.id,
-                      label: team.name,
-                    })),
-                    { value: NO_TEAM_ID, label: "No Team" },
-                  ]}
-                  value={snapshot[cid] ?? NO_TEAM_ID}
-                  onChange={(value) => handleManualAssignmentChange(cid, value)}
-                  searchable
-                  clearable={false}
-                />
-              ))}
-            </SimpleGrid>
-          </Stack>
-        </Paper>
-      </Card.Section>
-    </Card>
+        <div className={classes.manualGrid}>
+          {castawayIds.map((cid) => (
+            <Select
+              key={cid}
+              label={resolveName(cid)}
+              size="sm"
+              data={[
+                ...teamList.map((team) => ({
+                  value: team.id,
+                  label: team.name,
+                })),
+                { value: NO_TEAM_ID, label: "No Team" },
+              ]}
+              value={snapshot[cid] ?? NO_TEAM_ID}
+              onChange={(value) => handleManualAssignmentChange(cid, value)}
+              searchable
+              clearable={false}
+            />
+          ))}
+        </div>
+      </div>
+    </section>
   );
 };

@@ -1,18 +1,10 @@
 import {
-  Accordion,
   Alert,
-  Box,
   Button,
-  Center,
-  Group,
-  Loader,
   NumberInput,
-  Paper,
   Select,
-  SimpleGrid,
   Text,
   TextInput,
-  Title,
 } from "@mantine/core";
 import { hasLength, useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
@@ -25,11 +17,20 @@ import { db } from "../../firebase";
 import { useEliminations } from "../../hooks/useEliminations";
 import { useSeason } from "../../hooks/useSeason";
 import {
+  CreatePanel,
+  FormActions,
+  FormRow,
+  FormStack,
+  LoadingRow,
+  PanelAside,
+} from "../../pages/SeasonAdminParts";
+import {
   CastawayId,
   Elimination,
   EliminationVariants,
   TeamAssignments,
 } from "../../types";
+import { EmptySlate } from "../Layout";
 
 const dropdownOptions = EliminationVariants.slice().reverse();
 
@@ -81,18 +82,12 @@ export const CreateElimination = () => {
   }, [season, eliminations]);
 
   if (isLoading) {
-    return (
-      <Center>
-        <Loader size="xl" />
-      </Center>
-    );
+    return <LoadingRow label="Loading season" />;
   }
 
   if (!season?.episodes?.length) {
     return (
-      <Center>
-        <Text>Create an Episode first before adding eliminations</Text>
-      </Center>
+      <EmptySlate title="Create an Episode first before adding eliminations" />
     );
   }
 
@@ -163,76 +158,74 @@ export const CreateElimination = () => {
     .map((x) => ({ value: x.castaway_id, label: x.full_name }));
 
   return (
-    <Accordion defaultValue="create-elimination">
-      <Accordion.Item value="create-elimination">
-        <Accordion.Control>
-          <Title order={4}>Add Elimination</Title>
-        </Accordion.Control>
-        <Accordion.Panel>
-          <SimpleGrid cols={{ base: 1, md: 2 }}>
-            <Box maw={420} mx="auto">
-              <form onSubmit={form.onSubmit((values) => handleSubmit(values))}>
-                <TextInput
-                  withAsterisk
-                  readOnly
-                  label="Season #"
-                  value={form.values.season_num}
-                />
+    <CreatePanel
+      id="create-elimination"
+      title="Add Elimination"
+      aside={
+        <PanelAside title="What happens next">
+          <Text size="sm" c="dimmed">
+            Saving an elimination also removes that player from team assignments
+            for this episode onward.
+          </Text>
+          <Alert color="league" variant="light" mt="xs">
+            Enter eliminations in season order. This keeps prop bets, scoring,
+            and team state aligned.
+          </Alert>
+        </PanelAside>
+      }
+    >
+      <form
+        onSubmit={form.onSubmit((values) => handleSubmit(values))}
+        aria-label="Add elimination"
+      >
+        <FormStack>
+          <FormRow short>
+            <TextInput
+              withAsterisk
+              readOnly
+              label="Season #"
+              value={form.values.season_num}
+            />
 
-                <NumberInput
-                  withAsterisk
-                  label="Episode #"
-                  min={1}
-                  max={season?.episodes.length}
-                  {...form.getInputProps("episode_num")}
-                />
+            <FormRow>
+              <NumberInput
+                withAsterisk
+                label="Episode #"
+                min={1}
+                max={season?.episodes.length}
+                {...form.getInputProps("episode_num")}
+              />
 
-                <Select
-                  withAsterisk
-                  label="Elimination Type"
-                  data={dropdownOptions}
-                  searchable
-                  {...form.getInputProps("variant")}
-                />
+              <NumberInput
+                withAsterisk
+                label="Order"
+                min={1}
+                {...form.getInputProps("order")}
+              />
+            </FormRow>
+          </FormRow>
 
-                <Select
-                  withAsterisk
-                  label="Eliminated Player"
-                  data={playerOptions}
-                  searchable
-                  {...form.getInputProps("castaway_id")}
-                />
+          <Select
+            withAsterisk
+            label="Elimination Type"
+            data={dropdownOptions}
+            searchable
+            {...form.getInputProps("variant")}
+          />
 
-                <NumberInput
-                  withAsterisk
-                  label="Order"
-                  min={1}
-                  {...form.getInputProps("order")}
-                />
+          <Select
+            withAsterisk
+            label="Eliminated Player"
+            data={playerOptions}
+            searchable
+            {...form.getInputProps("castaway_id")}
+          />
 
-                <Group justify="flex-end" mt="md">
-                  <Button type="submit">Save Elimination</Button>
-                </Group>
-              </form>
-            </Box>
-            <Box>
-              <Paper withBorder p="md" radius="md">
-                <Title order={5} mb="xs">
-                  What happens next
-                </Title>
-                <Text size="sm" c="dimmed">
-                  Saving an elimination also removes that player from team
-                  assignments for this episode onward.
-                </Text>
-                <Alert color="blue" variant="light" mt="md">
-                  Enter eliminations in season order. This keeps prop bets,
-                  scoring, and team state aligned.
-                </Alert>
-              </Paper>
-            </Box>
-          </SimpleGrid>
-        </Accordion.Panel>
-      </Accordion.Item>
-    </Accordion>
+          <FormActions>
+            <Button type="submit">Save Elimination</Button>
+          </FormActions>
+        </FormStack>
+      </form>
+    </CreatePanel>
   );
 };

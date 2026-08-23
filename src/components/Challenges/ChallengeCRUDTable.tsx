@@ -1,18 +1,14 @@
 import {
-  ActionIcon,
-  Alert,
-  Group,
   MultiSelect,
   NumberInput,
   Select,
   Stack,
   Table,
-  TableScrollContainer,
   Text,
 } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
-import { IconCheck, IconPencil, IconTrash, IconX } from "@tabler/icons-react";
+import { IconCheck, IconX } from "@tabler/icons-react";
 import { doc, setDoc } from "firebase/firestore";
 import { useState } from "react";
 import { db } from "../../firebase";
@@ -20,7 +16,14 @@ import { useChallenges } from "../../hooks/useChallenges";
 import { useEliminations } from "../../hooks/useEliminations";
 import { useSeason } from "../../hooks/useSeason";
 import { useUser } from "../../hooks/useUser";
+import {
+  BoardEmpty,
+  EditRowActions,
+  RowActions,
+} from "../../pages/SeasonAdminParts";
+import adminParts from "../../pages/SeasonAdminParts.module.css";
 import { CastawayId, Challenge, ChallengeWinActions } from "../../types";
+import { Board, EmptySlate } from "../Layout";
 
 export const ChallengeCRUDTable = () => {
   const { data: season } = useSeason();
@@ -117,10 +120,11 @@ export const ChallengeCRUDTable = () => {
         const playerOptions = getPlayerOptions(editValues.episode_num);
 
         return (
-          <Table.Tr key={e.id}>
+          <Table.Tr key={e.id} className={adminParts.editingRow}>
             <Table.Td>
               <NumberInput
                 size="xs"
+                aria-label="Order"
                 min={1}
                 value={editValues.order}
                 onChange={(val) =>
@@ -131,6 +135,7 @@ export const ChallengeCRUDTable = () => {
             <Table.Td>
               <Select
                 size="xs"
+                aria-label="Variant"
                 data={[...ChallengeWinActions]}
                 value={editValues.variant}
                 onChange={(val) =>
@@ -145,6 +150,7 @@ export const ChallengeCRUDTable = () => {
             <Table.Td>
               <MultiSelect
                 size="xs"
+                aria-label="Winning players"
                 data={playerOptions}
                 value={editValues.winning_castaways}
                 searchable
@@ -159,6 +165,7 @@ export const ChallengeCRUDTable = () => {
             <Table.Td>
               <NumberInput
                 size="xs"
+                aria-label="Episode number"
                 min={1}
                 max={season?.episodes.length}
                 value={editValues.episode_num}
@@ -173,25 +180,13 @@ export const ChallengeCRUDTable = () => {
               />
             </Table.Td>
             {slimUser?.isAdmin && (
-              <Table.Td>
-                <Group gap="xs">
-                  <ActionIcon
-                    size="lg"
-                    color="green"
-                    onClick={saveEdit}
-                    aria-label="Save challenge"
-                  >
-                    <IconCheck />
-                  </ActionIcon>
-                  <ActionIcon
-                    size="lg"
-                    color="gray"
-                    onClick={cancelEdit}
-                    aria-label="Cancel editing challenge"
-                  >
-                    <IconX />
-                  </ActionIcon>
-                </Group>
+              <Table.Td className={adminParts.actionsCell}>
+                <EditRowActions
+                  onSave={saveEdit}
+                  onCancel={cancelEdit}
+                  saveLabel="Save challenge"
+                  cancelLabel="Cancel editing challenge"
+                />
               </Table.Td>
             )}
           </Table.Tr>
@@ -200,34 +195,22 @@ export const ChallengeCRUDTable = () => {
 
       return (
         <Table.Tr key={e.id}>
-          <Table.Td>{e.order}</Table.Td>
-          <Table.Td>{e.variant}</Table.Td>
+          <Table.Td className={adminParts.num}>{e.order}</Table.Td>
+          <Table.Td className={adminParts.name}>{e.variant}</Table.Td>
           <Table.Td>
             {e.winning_castaways
               .map((id) => season?.castawayLookup?.[id]?.full_name ?? id)
               .join(", ")}
           </Table.Td>
-          <Table.Td>{e.episode_id}</Table.Td>
+          <Table.Td className={adminParts.id}>{e.episode_id}</Table.Td>
           {slimUser?.isAdmin && (
-            <Table.Td>
-              <Group gap="xs">
-                <ActionIcon
-                  size="lg"
-                  color="blue"
-                  onClick={() => startEdit(e)}
-                  aria-label={`Edit challenge ${e.order}`}
-                >
-                  <IconPencil />
-                </ActionIcon>
-                <ActionIcon
-                  size="lg"
-                  color="red"
-                  onClick={() => handleDelete(e)}
-                  aria-label={`Delete challenge ${e.order}`}
-                >
-                  <IconTrash />
-                </ActionIcon>
-              </Group>
+            <Table.Td className={adminParts.actionsCell}>
+              <RowActions
+                onEdit={() => startEdit(e)}
+                onDelete={() => handleDelete(e)}
+                editLabel={`Edit challenge ${e.order}`}
+                deleteLabel={`Delete challenge ${e.order}`}
+              />
             </Table.Td>
           )}
         </Table.Tr>
@@ -235,31 +218,33 @@ export const ChallengeCRUDTable = () => {
     });
 
   return (
-    <TableScrollContainer minWidth={300}>
-      <Table>
+    <Board
+      title="Challenges"
+      subtitle={`· ${rows.length}`}
+      titleAs="h2"
+      dense
+      flush
+      scroll
+    >
+      <Table highlightOnHover className={adminParts.tableWide}>
         <Table.Thead>
           <Table.Tr>
             <Table.Th>Order</Table.Th>
             <Table.Th>Variant</Table.Th>
             <Table.Th>Winning Player(s)</Table.Th>
             <Table.Th>Episode</Table.Th>
-            {slimUser?.isAdmin && <Table.Th>Actions</Table.Th>}
+            {slimUser?.isAdmin && (
+              <Table.Th className={adminParts.actionsHead}>Actions</Table.Th>
+            )}
           </Table.Tr>
         </Table.Thead>
-        <Table.Tbody>
-          {rows.length > 0 ? (
-            rows
-          ) : (
-            <Table.Tr>
-              <Table.Td colSpan={5}>
-                <Alert color="blue" variant="light">
-                  No challenge results recorded yet.
-                </Alert>
-              </Table.Td>
-            </Table.Tr>
-          )}
-        </Table.Tbody>
+        <Table.Tbody>{rows}</Table.Tbody>
       </Table>
-    </TableScrollContainer>
+      {rows.length === 0 && (
+        <BoardEmpty>
+          <EmptySlate title="No challenge results recorded yet." />
+        </BoardEmpty>
+      )}
+    </Board>
   );
 };
