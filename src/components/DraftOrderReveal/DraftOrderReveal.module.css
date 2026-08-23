@@ -1,116 +1,174 @@
-.container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--mantine-spacing-md);
-  padding: var(--mantine-spacing-xl) var(--mantine-spacing-md);
-}
-
-.title {
-  margin-bottom: var(--mantine-spacing-sm);
-}
-
-.slotList {
-  display: flex;
-  flex-direction: column;
-  gap: var(--mantine-spacing-xs);
+/*
+ * Draft order reveal: one panel, centered. Slots are a pick-order list;
+ * shuffling slots are dashed, locked slots carry the League Blue rank, and
+ * the first picker is ringed in Victory Gold.
+ */
+.root {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
   width: 100%;
-  max-width: 400px;
-}
-
-.slot {
-  display: flex;
-  align-items: center;
-  gap: var(--mantine-spacing-sm);
-  padding: var(--mantine-spacing-sm) var(--mantine-spacing-md);
+  max-width: 560px;
+  margin: var(--mantine-spacing-xl) auto var(--mantine-spacing-sm);
+  padding: var(--mantine-spacing-xl) var(--mantine-spacing-lg);
+  background: var(--gyt-panel);
+  border: 1px solid var(--gyt-rule);
   border-radius: var(--mantine-radius-md);
-  border: 1px solid var(--mantine-color-default-border);
-  background: var(--mantine-color-body);
-  min-height: 52px;
-  transition:
-    transform 200ms ease,
-    border-color 200ms ease,
-    background 200ms ease,
-    box-shadow 200ms ease;
-}
+  text-align: center;
 
-.slot.shuffling {
-  border-color: var(--mantine-color-blue-light-color);
-}
-
-.slot.locked {
-  transform: scale(1.03);
-  border-color: var(--mantine-color-blue-6);
-  background: var(--mantine-color-blue-light);
-  animation: lockPop 300ms ease-out;
-}
-
-.slot.firstPicker {
-  border-color: var(--mantine-color-yellow-6);
-  background: linear-gradient(
-    135deg,
-    var(--mantine-color-yellow-1),
-    var(--mantine-color-orange-1)
-  );
-  box-shadow: 0 0 12px rgba(255, 193, 7, 0.3);
-  transform: scale(1.05);
-}
-
-@media (prefers-color-scheme: dark) {
-  .slot.firstPicker {
-    background: linear-gradient(
-      135deg,
-      var(--mantine-color-yellow-9),
-      var(--mantine-color-orange-9)
-    );
+  @media (max-width: $mantine-breakpoint-xs) {
+    margin-top: var(--mantine-spacing-md);
+    padding: var(--mantine-spacing-lg) var(--mantine-spacing-md);
   }
 }
 
-.slotNumber {
-  flex-shrink: 0;
-}
-
-.slotName {
-  flex: 1;
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-family: var(--mantine-headings-font-family);
   font-weight: 600;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  font-size: 0.6875rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--gyt-signal-text);
 }
 
-.slotName.shufflingText {
-  opacity: 0.7;
+.liveDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--mantine-color-signal-5);
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(1.5rem, 1.2rem + 1.4vw, 2rem);
+  line-height: 1.1;
+}
+
+.sub {
+  margin: 0;
   color: var(--mantine-color-dimmed);
 }
 
-.slotName.lockedText {
-  opacity: 1;
+.slots {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  margin: var(--mantine-spacing-md) 0 var(--mantine-spacing-xs);
+  padding: 0;
+  list-style: none;
+  text-align: left;
 }
 
-@keyframes lockPop {
+.slot {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 46px;
+  padding: 8px 10px;
+  border: 1px solid var(--gyt-rule);
+  border-radius: var(--mantine-radius-sm);
+  font-size: var(--mantine-font-size-sm);
+  transition:
+    border-color 200ms ease,
+    background 200ms ease;
+}
+
+.rank {
+  display: grid;
+  place-items: center;
+  min-width: 28px;
+  height: 28px;
+  border-radius: var(--mantine-radius-sm);
+  background: var(--mantine-color-league-6);
+  color: var(--mantine-color-white);
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+
+.name small {
+  font-weight: 500;
+  color: var(--mantine-color-dimmed);
+}
+
+.state {
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+  white-space: nowrap;
+}
+
+.shuffling {
+  border-style: dashed;
+  color: var(--mantine-color-dimmed);
+}
+
+.shuffling .rank {
+  background: transparent;
+  border: 1px dashed var(--gyt-rule-strong);
+  color: var(--mantine-color-dimmed);
+}
+
+.shuffling .name {
+  animation: flicker 0.8s steps(2) infinite;
+}
+
+.locked {
+  border-color: var(--gyt-rule-strong);
+  background: var(--gyt-panel-2);
+  animation: lockIn 300ms ease-out 1;
+}
+
+.first {
+  border-color: var(--mantine-color-gold-4);
+  box-shadow: inset 3px 0 0 var(--mantine-color-gold-4);
+}
+
+.first .rank {
+  background: var(--mantine-color-gold-4);
+  color: var(--mantine-color-navy-9);
+}
+
+.note {
+  margin: 0;
+  font-size: var(--mantine-font-size-sm);
+  color: var(--mantine-color-dimmed);
+}
+
+@keyframes flicker {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes lockIn {
   0% {
     transform: scale(1);
   }
   50% {
-    transform: scale(1.06);
+    transform: scale(1.03);
   }
   100% {
-    transform: scale(1.03);
+    transform: scale(1);
   }
 }
 
-@keyframes firstPickerPop {
-  0% {
-    transform: scale(1.03);
+@media (prefers-reduced-motion: reduce) {
+  .shuffling .name,
+  .locked {
+    animation: none;
   }
-  40% {
-    transform: scale(1.1);
-  }
-  100% {
-    transform: scale(1.05);
-  }
-}
-
-.slot.firstPicker {
-  animation: firstPickerPop 400ms ease-out;
 }

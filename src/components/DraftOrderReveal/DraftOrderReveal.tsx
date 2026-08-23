@@ -1,12 +1,15 @@
-import { Badge, Paper, Stack, Text, ThemeIcon, Title } from "@mantine/core";
-import { IconCrown, IconDice5 } from "@tabler/icons-react";
+import { Title } from "@mantine/core";
+import { useReducedMotion } from "@mantine/hooks";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { SlimUser } from "../../types";
+import { StatusBadge } from "../Layout";
 import classes from "./DraftOrderReveal.module.css";
 
 type Props = {
   pickOrder: SlimUser[];
   onComplete: () => void;
+  /** The viewer, marked "(you)" in the list. */
+  viewerUid?: string;
 };
 
 /** How often names shuffle (ms) */
@@ -34,7 +37,18 @@ function shuffleNames(names: string[]): string[] {
   return next;
 }
 
-export const DraftOrderReveal = ({ pickOrder, onComplete }: Props) => {
+/**
+ * The draft order reveal. Slots lock in from the top on a fixed schedule;
+ * under reduced motion the names do not cycle (unlocked slots stay blank)
+ * but every slot still prints on the same schedule, so the reveal keeps its
+ * timing without the shuffle.
+ */
+export const DraftOrderReveal = ({
+  pickOrder,
+  onComplete,
+  viewerUid,
+}: Props) => {
+  const reduceMotion = useReducedMotion();
   const [lockedSlots, setLockedSlots] = useState<boolean[]>(
     () => new Array(pickOrder.length).fill(false) as boolean[],
   );
@@ -61,34 +75,41 @@ export const DraftOrderReveal = ({ pickOrder, onComplete }: Props) => {
     const initialLockedSlots = new Array(slotCount).fill(false) as boolean[];
     lockedSlotsRef.current = initialLockedSlots;
     setLockedSlots(initialLockedSlots);
-    setDisplayNames(shuffleNames(allNames));
+    setDisplayNames(
+      reduceMotion
+        ? (new Array(slotCount).fill("") as string[])
+        : shuffleNames(allNames),
+    );
 
     // Compute stagger so lock-in phase scales with group size
     const stagger = Math.min(MAX_STAGGER, 3000 / slotCount);
 
     // Shuffle all unlocked slots together so each frame shows a unique order.
+    // Reduced motion: no cycling at all; unlocked slots stay blank.
     const intervals: ReturnType<typeof setInterval>[] = [];
-    const shuffleInterval = setInterval(() => {
-      setDisplayNames((prev) => {
-        const next = [...prev];
-        const currentLockedSlots = lockedSlotsRef.current;
-        const unlockedIndexes = currentLockedSlots
-          .map((isLocked, index) => (!isLocked ? index : -1))
-          .filter((index) => index >= 0);
-        const unlockedNames = allNames.filter(
-          (_, index) => !currentLockedSlots[index],
-        );
-        const shuffledUnlockedNames = shuffleNames(unlockedNames);
+    if (!reduceMotion) {
+      const shuffleInterval = setInterval(() => {
+        setDisplayNames((prev) => {
+          const next = [...prev];
+          const currentLockedSlots = lockedSlotsRef.current;
+          const unlockedIndexes = currentLockedSlots
+            .map((isLocked, index) => (!isLocked ? index : -1))
+            .filter((index) => index >= 0);
+          const unlockedNames = allNames.filter(
+            (_, index) => !currentLockedSlots[index],
+          );
+          const shuffledUnlockedNames = shuffleNames(unlockedNames);
 
-        unlockedIndexes.forEach((slotIndex, orderIndex) => {
-          next[slotIndex] =
-            shuffledUnlockedNames[orderIndex] ?? next[slotIndex];
+          unlockedIndexes.forEach((slotIndex, orderIndex) => {
+            next[slotIndex] =
+              shuffledUnlockedNames[orderIndex] ?? next[slotIndex];
+          });
+
+          return next;
         });
-
-        return next;
-      });
-    }, SHUFFLE_INTERVAL);
-    intervals.push(shuffleInterval);
+      }, SHUFFLE_INTERVAL);
+      intervals.push(shuffleInterval);
+    }
     intervalsRef.current = intervals;
 
     // Stagger the lock-in for each slot
@@ -130,73 +151,63 @@ export const DraftOrderReveal = ({ pickOrder, onComplete }: Props) => {
       intervals.forEach(clearInterval);
       timeouts.forEach(clearTimeout);
     };
-  }, [allNames, onComplete, pickOrder]);
+  }, [allNames, onComplete, pickOrder, reduceMotion]);
+
+  const allLocked = lockedSlots.every(Boolean);
 
   return (
-    <Paper p="xl" radius="md" withBorder>
-      <Stack gap="lg" align="center" className={classes.container}>
-        <ThemeIcon size={56} radius="xl" variant="light" color="blue">
-          <IconDice5 size={30} />
-        </ThemeIcon>
-        <div className={classes.title}>
-          <Title order={2} ta="center">
-            Shuffling draft order...
-          </Title>
-          <Text size="sm" c="dimmed" ta="center" mt={4}>
-            Who picks first? Let's find out!
-          </Text>
-        </div>
+    <section className={classes.root} aria-labelledby="draft-reveal-title">
+      <p className={classes.eyebrow}>
+        <span className={classes.liveDot} aria-hidden="true" />
+        Draft order
+      </p>
+      <Title order={1} id="draft-reveal-title" className={classes.title}>
+        Shuffling draft order...
+      </Title>
+      <p className={classes.sub}>Who picks first? Let's find out!</p>
 
-        <div className={classes.slotList}>
-          {pickOrder.map((_, index) => {
-            const isLocked = lockedSlots[index];
-            const isFirst = isLocked && index === 0;
-            const allLocked = lockedSlots.every(Boolean);
-            const isFirstPicker = isFirst && allLocked;
+      <ol className={classes.slots} aria-live="polite">
+        {pickOrder.map((user, index) => {
+          const isLocked = lockedSlots[index];
+          const isFirstPicker = isLocked && index === 0 && allLocked;
+          const slotClasses = [
+            classes.slot,
+            !isLocked && classes.shuffling,
+            isLocked && classes.locked,
+            isFirstPicker && classes.first,
+          ]
+            .filter(Boolean)
+            .join(" ");
 
-            const slotClasses = [
-              classes.slot,
-              !isLocked ? classes.shuffling : "",
-              isLocked && !isFirstPicker ? classes.locked : "",
-              isFirstPicker ? classes.firstPicker : "",
-            ]
-              .filter(Boolean)
-              .join(" ");
-
-            const nameClasses = [
-              classes.slotName,
-              !isLocked ? classes.shufflingText : classes.lockedText,
-            ].join(" ");
-
-            return (
-              <div key={index} className={slotClasses}>
-                <Badge
-                  className={classes.slotNumber}
-                  variant={isFirstPicker ? "filled" : "light"}
-                  color={isFirstPicker ? "yellow" : isLocked ? "blue" : "gray"}
-                  size="lg"
-                  circle
-                >
-                  {index + 1}
-                </Badge>
-                <span className={nameClasses}>
-                  {displayNames[index] || "\u00A0"}
-                </span>
-                {isFirstPicker && (
-                  <ThemeIcon
-                    size={28}
-                    radius="xl"
-                    variant="filled"
-                    color="yellow"
-                  >
-                    <IconCrown size={16} />
-                  </ThemeIcon>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </Stack>
-    </Paper>
+          return (
+            <li
+              key={user.uid}
+              className={slotClasses}
+              aria-hidden={!isLocked ? "true" : undefined}
+            >
+              <span className={classes.rank}>{index + 1}</span>
+              <span className={classes.name}>
+                {displayNames[index] || " "}
+                {isLocked && user.uid === viewerUid && <small> (you)</small>}
+              </span>
+              {isFirstPicker ? (
+                <StatusBadge kind="watch-along" size="sm">
+                  Picks first
+                </StatusBadge>
+              ) : isLocked ? (
+                <StatusBadge kind="season" size="sm">
+                  Locked
+                </StatusBadge>
+              ) : (
+                <span className={classes.state}>shuffling</span>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+      <p className={classes.note}>
+        Slots lock in from the top. Round 1 starts when the last slot locks.
+      </p>
+    </section>
   );
 };
