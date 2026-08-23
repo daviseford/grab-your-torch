@@ -334,7 +334,11 @@ export const SingleCompetition = () => {
             <StatusBadge kind="season">
               Season {competition.season_num}
             </StatusBadge>
-            <StatusBadge kind={isWatchAlong ? "watch-along" : "live"} />
+            {/* "Live" is a signal, so it only shows while the competition
+                is unfinished; watch-along is a mode and always applies. */}
+            {(isWatchAlong || !competition.finished) && (
+              <StatusBadge kind={isWatchAlong ? "watch-along" : "live"} />
+            )}
             <StatusBadge
               kind={competition.finished ? "complete" : "in-progress"}
             />

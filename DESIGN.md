@@ -46,6 +46,18 @@ typography:
     fontWeight: 400
     lineHeight: 1.55
     letterSpacing: "normal"
+  boardTitle:
+    fontFamily: "Space Grotesk Variable, Space Grotesk, Inter Variable, Inter, system-ui, sans-serif"
+    fontSize: "0.75rem"
+    fontWeight: 700
+    lineHeight: 1.2
+    letterSpacing: "0.12em"
+  wordmark:
+    fontFamily: "Space Grotesk Variable, Space Grotesk, Inter Variable, Inter, system-ui, sans-serif"
+    fontSize: "1rem"
+    fontWeight: 700
+    lineHeight: 1
+    letterSpacing: "0.02em"
   label:
     fontFamily: "Space Grotesk Variable, Space Grotesk, Inter Variable, Inter, system-ui, sans-serif"
     fontSize: "0.6875rem"
@@ -221,7 +233,8 @@ Semantic colors stay outside the brand system: Mantine green for success, orange
 - **Display** (700, clamp(2.75rem, 2rem + 2.5vw, 3.5rem), 1.05): the homepage headline only.
 - **Headline** (700, clamp(1.75rem, 1.3rem + 2vw, 2.5rem), 1.08): the page title inside a lower-third; one h1 per page.
 - **Title** (700, 1.25rem to 1.75rem, 1.2 to 1.3): section headings (h2, h3) and the standby slate's title.
-- **Board title** (700, 0.75rem, 0.12em tracking, uppercase): the caps title row of every board.
+- **Board title** (700, 0.75rem, 0.12em tracking, uppercase): the caps title row of every board; tabs share the size at 600 and 0.1em tracking.
+- **Wordmark** (700, 1rem, 0.02em tracking): the header bug's text wordmark, shown only below 26em where the lockup image would not fit.
 - **Body** (400, 0.875rem to 0.9375rem, 1.5 to 1.55): copy and table cells; running text stays under 65ch.
 - **Label** (600, 0.6875rem, 0.12em tracking, uppercase): eyebrows, table headers, badges, the bug context, strip labels.
 - **Numeral** (700, 1.5rem to 2.5rem, tabular-nums, -0.02em): points, ranks, pick numbers.
