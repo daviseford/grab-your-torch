@@ -370,26 +370,6 @@
 }
 
 /* ---------- Draft: a short pick order ---------- */
-.picks {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  max-width: 420px;
-  display: grid;
-  gap: 4px;
-}
-
-.picks li {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
-  align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  border: 1px solid var(--gyt-rule);
-  border-radius: var(--mantine-radius-sm);
-  background: var(--gyt-panel);
-  font-size: 0.9375rem;
-}
 
 .pickRank {
   width: 28px;
@@ -434,30 +414,6 @@
   color: var(--mantine-color-dark-1);
 }
 
-.exampleTotals {
-  display: grid;
-  gap: 6px;
-  margin: var(--mantine-spacing-md) 0 0;
-  padding: 0;
-  list-style: none;
-  max-width: 360px;
-}
-
-.exampleTotals li {
-  display: grid;
-  grid-template-columns: 28px 1fr auto;
-  align-items: center;
-  gap: 10px;
-  font-size: var(--mantine-font-size-sm);
-}
-
-.exampleTotal {
-  font-family: var(--mantine-headings-font-family);
-  font-weight: 700;
-  font-size: 1.125rem;
-  letter-spacing: -0.02em;
-}
-
 .exampleTotal small {
   margin-left: 3px;
   font-size: 0.625rem;
@@ -465,4 +421,37 @@
   text-transform: uppercase;
   color: var(--mantine-color-dimmed);
   font-weight: 500;
+}
+
+/* ---------- Draft example: the real board inside a plate ---------- */
+.draftExample {
+  margin: 0;
+  display: grid;
+  /* Track at most the figure's width: on phones the board scrolls inside
+     the plate instead of widening the page. */
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  gap: 10px;
+  /* The spine bleeds to the app padding on the draft page; here it fills
+     the figure instead. */
+  --app-shell-padding: 0px;
+}
+
+.draftExample > div {
+  min-width: 0;
+  overflow: hidden;
+  padding-left: var(--mantine-spacing-lg);
+  padding-right: var(--mantine-spacing-lg);
+  border: 1px solid var(--gyt-plate-rule);
+  border-radius: var(--mantine-radius-sm);
+
+  @media (max-width: $mantine-breakpoint-sm) {
+    padding-left: var(--mantine-spacing-md);
+    padding-right: var(--mantine-spacing-md);
+  }
+}
+
+.draftExampleCaption {
+  font-size: var(--mantine-font-size-sm);
+  color: var(--mantine-color-dimmed);
 }
