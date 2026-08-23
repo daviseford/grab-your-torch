@@ -101,7 +101,7 @@ export const Seasons = () => {
       <section aria-labelledby="seasons-onair" className={classes.section}>
         <div className={classes.sectionLabel}>
           <h2 id="seasons-onair" className={classes.sectionTitle}>
-            On air
+            {liveSeason ? "On air" : "Latest"}
           </h2>
           {liveSeason && <StatusBadge kind="live" size="sm" />}
         </div>

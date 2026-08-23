@@ -1,6 +1,10 @@
+/*
+ * Footer: one quiet row under a hairline. The lockup and the tagline read as
+ * a single signature, divided the way the header bug divides its context;
+ * the links sit on the same baseline at the far edge.
+ */
 .footer {
   margin-top: auto;
-  padding-top: var(--mantine-spacing-xl);
   border-top: 1px solid var(--gyt-rule);
 }
 
@@ -8,11 +12,11 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: var(--mantine-spacing-md);
-  padding-top: var(--mantine-spacing-md);
-  padding-bottom: var(--mantine-spacing-md);
+  gap: var(--mantine-spacing-md) var(--mantine-spacing-xl);
+  padding-top: var(--mantine-spacing-lg);
+  padding-bottom: var(--mantine-spacing-lg);
 
-  @media (max-width: $mantine-breakpoint-xs) {
+  @media (max-width: $mantine-breakpoint-sm) {
     flex-direction: column;
     align-items: flex-start;
   }
@@ -20,20 +24,49 @@
 
 .brand {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    flex-wrap: wrap;
+    gap: 8px 14px;
+  }
 }
 
 .lockup {
   display: block;
-  width: 160px;
+  flex-shrink: 0;
+  width: 150px;
   height: auto;
-  opacity: 0.85;
+  opacity: 0.9;
+}
+
+.divider {
+  flex-shrink: 0;
+  width: 1px;
+  height: 20px;
+  background: var(--gyt-rule-strong);
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    display: none;
+  }
+}
+
+.tagline {
+  white-space: nowrap;
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    flex-basis: 100%;
+    white-space: normal;
+  }
 }
 
 .links {
   display: flex;
-  gap: var(--mantine-spacing-md);
+  align-items: center;
+  gap: var(--mantine-spacing-lg);
+  flex-shrink: 0;
 }
 
 .link {
@@ -42,10 +75,5 @@
   font-size: 0.75rem;
   letter-spacing: var(--gyt-label-tracking);
   text-transform: uppercase;
-}
-
-.disclaimer {
-  padding-top: var(--mantine-spacing-sm);
-  padding-bottom: var(--mantine-spacing-lg);
-  border-top: 1px solid var(--gyt-rule);
+  white-space: nowrap;
 }

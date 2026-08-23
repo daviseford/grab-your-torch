@@ -150,44 +150,6 @@ export const Home = () => {
       </section>
 
       <div className={classes.sections}>
-        {/* Example standings: fictional participants and points only */}
-        <section aria-labelledby="home-standings" className={classes.section}>
-          <div className={classes.inner}>
-            <div className={classes.head}>
-              <h2 id="home-standings" className={classes.h2}>
-                A competition in progress
-              </h2>
-              <p className={classes.lead}>
-                Example standings for a four-person competition. The names and
-                points are made up; your board fills in as your group watches.
-              </p>
-            </div>
-            <Board
-              title="Example standings"
-              subtitle="Four participants"
-              flush
-              className={classes.boardNarrow}
-            >
-              <ol className={classes.standings}>
-                {EXAMPLE_STANDINGS.map((row, index) => (
-                  <li key={row.name}>
-                    <span
-                      className={`${classes.rank} ${index === 0 ? classes.rankFirst : ""}`}
-                    >
-                      {index + 1}
-                    </span>
-                    <span className={classes.standingName}>{row.name}</span>
-                    <span className={classes.points}>
-                      {row.points}
-                      <small>pts</small>
-                    </span>
-                  </li>
-                ))}
-              </ol>
-            </Board>
-          </div>
-        </section>
-
         {/* How it works */}
         <section aria-labelledby="home-how" className={classes.section}>
           <div className={classes.inner}>
@@ -275,11 +237,6 @@ export const Home = () => {
               </p>
             </div>
             <figure className={`${classes.example} ${classes.exampleStrip}`}>
-              <figcaption className={classes.caption}>
-                Example: a competition that has revealed episodes 1 to{" "}
-                {exampleRevealed}. Select an episode to move the reveal; the
-                names and points are made up.
-              </figcaption>
               <RevealStrip
                 total={EXAMPLE_EPISODES}
                 revealedThrough={exampleRevealed}
@@ -334,9 +291,6 @@ export const Home = () => {
               </div>
             </div>
             <figure className={`${classes.example} ${classes.exampleNarrow}`}>
-              <figcaption className={classes.caption}>
-                Example: 4 of the {ACTION_COUNT} actions
-              </figcaption>
               <Board title="Sample actions" flush scroll>
                 <Table className={classes.table}>
                   <Table.Thead>
@@ -405,9 +359,6 @@ export const Home = () => {
               </p>
             </div>
             <figure className={`${classes.example} ${classes.exampleNarrow}`}>
-              <figcaption className={classes.caption}>
-                Example: {EXAMPLE_BETS.length} of the {BET_COUNT} predictions
-              </figcaption>
               <ol className={classes.bets}>
                 {EXAMPLE_BETS.map((key) => {
                   const bet = PropBetsQuestions[key];
@@ -441,9 +392,6 @@ export const Home = () => {
               </p>
             </div>
             <figure className={`${classes.example} ${classes.exampleNarrow}`}>
-              <figcaption className={classes.caption}>
-                Example: the draft order for a four-person draft
-              </figcaption>
               <ol className={classes.picks}>
                 {EXAMPLE_STANDINGS.map((row, index) => (
                   <li key={row.name}>

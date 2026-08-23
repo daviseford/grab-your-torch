@@ -15,12 +15,13 @@ export const Footer = () => {
     <footer className={classes.footer}>
       <Container className={classes.inner}>
         <div className={classes.brand}>
-          <BrandLockup width={160} className={classes.lockup} decorative />
-          <Text c="dimmed" size="sm">
+          <BrandLockup width={150} className={classes.lockup} decorative />
+          <span className={classes.divider} aria-hidden="true" />
+          <Text c="dimmed" size="sm" className={classes.tagline}>
             Built for draft night chaos by Davis Ford
           </Text>
         </div>
-        <div className={classes.links}>
+        <nav aria-label="Footer" className={classes.links}>
           {links.map((link) => (
             <Anchor
               c="dimmed"
@@ -34,14 +35,7 @@ export const Footer = () => {
               <VisuallyHidden> (opens in a new tab)</VisuallyHidden>
             </Anchor>
           ))}
-        </div>
-      </Container>
-      <Container className={classes.disclaimer}>
-        <Text c="dimmed" size="xs" ta="center">
-          Grab Your Torch is not affiliated with, endorsed by, or connected to
-          CBS, SEG, or the Survivor TV show. Survivor® is a registered trademark
-          of CBS Broadcasting Inc.
-        </Text>
+        </nav>
       </Container>
     </footer>
   );

@@ -190,38 +190,7 @@
   max-width: 760px;
 }
 
-.caption {
-  font-family: var(--mantine-headings-font-family);
-  font-weight: 600;
-  font-size: 0.6875rem;
-  letter-spacing: var(--gyt-label-tracking);
-  text-transform: uppercase;
-  color: var(--mantine-color-dimmed);
-}
-
-/* ---------- Example standings (rank, name, points) ---------- */
-.boardNarrow {
-  max-width: 760px;
-}
-
-.standings {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.standings li {
-  display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) auto;
-  align-items: center;
-  column-gap: 16px;
-  padding: 12px 18px;
-  border-bottom: 1px solid var(--gyt-rule);
-
-  &:last-child {
-    border-bottom: 0;
-  }
-}
+/* ---------- Ranks (draft order and reveal example) ---------- */
 
 .rank {
   display: inline-grid;
@@ -239,36 +208,6 @@
 .rankFirst {
   background: var(--mantine-color-gold-4);
   color: var(--mantine-color-navy-9);
-}
-
-.standingName {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--mantine-headings-font-family);
-  font-weight: 700;
-  font-size: 1.0625rem;
-}
-
-.points {
-  text-align: right;
-  font-family: var(--mantine-headings-font-family);
-  font-weight: 700;
-  font-size: 1.875rem;
-  line-height: 1;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-}
-
-.points small {
-  display: block;
-  margin-top: -2px;
-  font-size: 0.625rem;
-  font-weight: 500;
-  letter-spacing: var(--gyt-label-tracking);
-  text-transform: uppercase;
-  color: var(--mantine-color-dimmed);
 }
 
 /* ---------- How it works: three plain steps ---------- */
@@ -365,8 +304,9 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* The win is a victory, not a penalty: gold, never ember, for the big points. */
 .flame {
-  color: var(--mantine-color-ember-6);
+  color: light-dark(var(--mantine-color-gold-8), var(--mantine-color-gold-5));
 }
 
 /* ---------- Predictions: plain rows ---------- */
