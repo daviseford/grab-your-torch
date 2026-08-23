@@ -1,0 +1,17 @@
+/*
+ * Both lockup variants render; the active color scheme picks one in CSS so
+ * the right wordmark is on screen from the first paint and follows a scheme
+ * change without a React render. Element selectors keep these rules ahead
+ * of a caller's own display rule on the same class.
+ */
+img.dark {
+  display: none;
+}
+
+[data-mantine-color-scheme="dark"] img.light {
+  display: none;
+}
+
+[data-mantine-color-scheme="dark"] img.dark {
+  display: block;
+}

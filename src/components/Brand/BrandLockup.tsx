@@ -1,4 +1,4 @@
-import { useComputedColorScheme } from "@mantine/core";
+import classes from "./BrandLockup.module.css";
 import { LOCKUP_MIN_WIDTH, STACKED_MIN_WIDTH } from "./brandSizes";
 
 /** The primary lockup's viewBox is 760 x 220. */
@@ -29,19 +29,42 @@ export const BrandLockup = ({
   className,
   decorative = false,
 }: BrandLockupProps) => {
-  const scheme = useComputedColorScheme("light");
-  const variant = on ?? scheme;
   const w = Math.max(LOCKUP_MIN_WIDTH, width);
+  const alt = decorative ? "" : "Grab Your Torch";
+  const shared = {
+    width: w,
+    height: Math.round(w * LOCKUP_ASPECT),
+    decoding: "async" as const,
+    draggable: false,
+  };
+  if (on) {
+    return (
+      <img
+        src={`/brand/grab-your-torch-primary-${on}.svg`}
+        alt={alt}
+        className={className}
+        {...shared}
+      />
+    );
+  }
+  // Both variants render and CSS shows the one for the active scheme, so
+  // the lockup is right from the first paint and needs no re-render.
   return (
-    <img
-      src={`/brand/grab-your-torch-primary-${variant}.svg`}
-      alt={decorative ? "" : "Grab Your Torch"}
-      width={w}
-      height={Math.round(w * LOCKUP_ASPECT)}
-      className={className}
-      decoding="async"
-      draggable={false}
-    />
+    <>
+      <img
+        src="/brand/grab-your-torch-primary-light.svg"
+        alt={alt}
+        className={[classes.light, className].filter(Boolean).join(" ")}
+        {...shared}
+      />
+      <img
+        src="/brand/grab-your-torch-primary-dark.svg"
+        alt=""
+        aria-hidden="true"
+        className={[classes.dark, className].filter(Boolean).join(" ")}
+        {...shared}
+      />
+    </>
   );
 };
 
