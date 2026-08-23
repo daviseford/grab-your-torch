@@ -10,7 +10,10 @@ export type StatusKind =
   | "season"
   | "admin";
 
-type StatusBadgeProps = Omit<BadgeProps, "variant" | "color" | "children"> & {
+type StatusBadgeProps = Omit<
+  BadgeProps,
+  "variant" | "color" | "children" | "leftSection"
+> & {
   kind: StatusKind;
   /** Override the default label for the kind. */
   children?: React.ReactNode;
@@ -31,11 +34,24 @@ const LABELS: Record<StatusKind, string> = {
  * a dot), watch-along is the gold tape band, complete and pending are
  * outlined, season is a navy plate, admin is the flame.
  */
-export const StatusBadge = ({ kind, children, ...rest }: StatusBadgeProps) => (
+export const StatusBadge = ({
+  kind,
+  children,
+  className,
+  ...rest
+}: StatusBadgeProps) => (
+  // No `variant`/`color`: Mantine would then write its own --badge-* vars
+  // inline and beat the kind classes below.
   <Badge
-    variant="filled"
     radius="xs"
-    className={`${classes.root} ${classes[kind]}`}
+    className={[classes.root, classes[kind], className]
+      .filter(Boolean)
+      .join(" ")}
+    leftSection={
+      kind === "live" ? (
+        <span className={classes.dot} aria-hidden="true" />
+      ) : undefined
+    }
     {...rest}
   >
     {children ?? LABELS[kind]}

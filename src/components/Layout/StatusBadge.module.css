@@ -12,12 +12,10 @@
   --badge-color: var(--mantine-color-navy-9);
 }
 
-.live::before {
-  content: "";
-  display: inline-block;
+.dot {
+  display: block;
   width: 6px;
   height: 6px;
-  margin-right: 6px;
   border-radius: 50%;
   background: var(--mantine-color-navy-9);
 }

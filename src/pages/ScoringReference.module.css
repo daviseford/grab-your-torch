@@ -1,0 +1,35 @@
+/* Scoring reference: a lower-third over one grouped board. Read mode. */
+.page {
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-md);
+}
+
+/*
+ * Board clips with overflow: hidden, which makes it the sticky container
+ * for the table header; clip keeps the rounded corners without creating a
+ * scroll container, so the header sticks under the app header instead.
+ */
+.page .legendBoard {
+  overflow: clip;
+}
+
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mantine-spacing-md);
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: 0.6875rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+
+.facts b {
+  color: var(--mantine-color-text);
+  font-weight: 700;
+}

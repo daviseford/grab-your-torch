@@ -1,24 +1,80 @@
+/*
+ * Scoring legend: a grouped board. Category rows are navy plates carrying
+ * their semantic category color as a rail and a dot; data rows are plain.
+ * The same table is reused inside the competition and draft pages.
+ */
+
 /* Clip horizontal overflow without creating a scroll container (preserves sticky) */
 .tableWrapper {
   overflow-x: clip;
 }
 
-/* Opaque background so sticky header doesn't show content behind it */
-.stickyHead {
-  background-color: var(--mantine-color-body);
+.table {
+  --table-border-color: var(--gyt-rule);
 }
 
-/* Category header rows — distinct from data rows, no hover highlight */
+/* Column headers: caps labels on the panel-2 tint, opaque while sticky. */
+.stickyHead th {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: 0.6875rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+  background-color: var(--gyt-panel-2);
+  white-space: nowrap;
+}
+
+/* Action names in the display face, wrapping as needed. */
+.action {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: 0.8125rem;
+  line-height: 1.25;
+}
+
+/* Point values: display digits, tabular; negatives keep the danger color. */
+.points {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 0.9375rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.negative {
+  color: var(--mantine-color-red-6);
+}
+
+/* Category header rows: distinct from data rows, no hover highlight. */
 .categoryRow {
   pointer-events: none;
 }
 
-.categoryCell {
-  background-color: light-dark(
-    var(--mantine-color-gray-1),
-    var(--mantine-color-dark-6)
-  );
-  border-left: 3px solid var(--mantine-primary-color-filled);
+.categoryRow th.categoryCell {
+  background-color: var(--gyt-plate);
+  color: var(--mantine-color-dark-0);
+  border-left: 3px solid var(--category-color, var(--mantine-color-league-6));
+  padding-block: 6px;
+}
+
+.categoryLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+}
+
+.categoryDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--category-color, var(--mantine-color-league-6));
+  flex-shrink: 0;
 }
 
 /* Collapse the description column on narrow screens */

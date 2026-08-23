@@ -1,38 +1,31 @@
 import {
-  Badge,
-  Card,
-  Center,
-  Chip,
-  Group,
-  Image,
-  SimpleGrid,
-  Stack,
-  Text,
+  Button,
+  SegmentedControl,
   TextInput,
-  Title,
+  VisuallyHidden,
 } from "@mantine/core";
-import { IconChevronRight, IconSearch } from "@tabler/icons-react";
+import { IconSearch } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { EmptySlate, PageIntro, StatusBadge } from "../components/Layout";
 import { SEASON_METADATA, type SeasonMeta } from "../data/season-metadata";
+import { SEASON_ERAS, type SeasonEraId } from "./SeasonEras";
 import classes from "./Seasons.module.css";
+import { SeasonTile } from "./SeasonTile";
 
-const ERAS = [
-  { label: "Classic (1–8)", min: 1, max: 8 },
-  { label: "Middle (9–20)", min: 9, max: 20 },
-  { label: "Modern (21–33)", min: 21, max: 33 },
-  { label: "New Era (34–50)", min: 34, max: 50 },
-] as const;
+type EraFilter = "all" | SeasonEraId;
 
-function getEraClass(order: number): string {
-  if (order <= 8) return classes.eraClassic;
-  if (order <= 20) return classes.eraMiddle;
-  if (order <= 33) return classes.eraModern;
-  return classes.eraNew;
-}
+const ERA_OPTIONS = [
+  { label: "All", value: "all" },
+  ...SEASON_ERAS.map((era) => ({
+    label: `${era.label} ${era.range}`,
+    value: era.id,
+  })),
+];
 
 function matchesSearch(meta: SeasonMeta, query: string): boolean {
-  const q = query.toLowerCase();
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
   return (
     String(meta.order).includes(q) ||
     meta.name.toLowerCase().includes(q) ||
@@ -41,143 +34,15 @@ function matchesSearch(meta: SeasonMeta, query: string): boolean {
   );
 }
 
-function matchesEras(meta: SeasonMeta, selectedEras: string[]): boolean {
-  if (selectedEras.length === 0) return true;
-  return selectedEras.some((eraLabel) => {
-    const era = ERAS.find((e) => e.label === eraLabel);
-    return era && meta.order >= era.min && meta.order <= era.max;
-  });
-}
-
-function getSeasonDisplayTitle(meta: SeasonMeta): string {
-  if (/\d/.test(meta.name)) return meta.name;
-
-  const label = meta.subtitle ?? meta.name.replace(/^Survivor:\s*/, "");
-  return `S${meta.order}: ${label}`;
-}
-
-function HeroCard({ meta, live }: { meta: SeasonMeta; live: boolean }) {
-  return (
-    <Card
-      component={Link}
-      to={`/seasons/${meta.id}`}
-      shadow="sm"
-      padding="lg"
-      radius="md"
-      withBorder
-      className={classes.heroCard}
-    >
-      <Card.Section pos="relative">
-        {meta.img ? (
-          <Image
-            src={meta.img}
-            height={200}
-            w="100%"
-            h={200}
-            alt={meta.name}
-            loading="lazy"
-          />
-        ) : (
-          <div
-            className={`${classes.heroImageFallback} ${getEraClass(meta.order)}`}
-          >
-            <span className={classes.heroSeasonNumber}>{meta.order}</span>
-            {meta.subtitle && (
-              <span className={classes.heroSubtitle}>{meta.subtitle}</span>
-            )}
-          </div>
-        )}
-        <Group pos="absolute" top={12} right={12} gap="xs">
-          {live && (
-            <Badge color="red" variant="filled" size="lg">
-              LIVE
-            </Badge>
-          )}
-          <Badge color="dark" variant="filled" size="lg">
-            Season {meta.order}
-          </Badge>
-        </Group>
-      </Card.Section>
-
-      <Group justify="space-between" mt="md" align="flex-start">
-        <div style={{ flex: 1 }}>
-          <Text fw={700} size="lg">
-            {getSeasonDisplayTitle(meta)}
-          </Text>
-          <Text size="sm" c="dimmed">
-            {meta.location} &middot; {meta.year}
-          </Text>
-        </div>
-        <IconChevronRight
-          size={18}
-          color="var(--mantine-color-dimmed)"
-          style={{ marginTop: 4 }}
-        />
-      </Group>
-    </Card>
-  );
-}
-
-function CompactCard({ meta, live }: { meta: SeasonMeta; live: boolean }) {
-  return (
-    <Card
-      component={Link}
-      to={`/seasons/${meta.id}`}
-      shadow="xs"
-      padding="sm"
-      radius="md"
-      withBorder
-      className={classes.compactCard}
-    >
-      <Card.Section pos="relative">
-        {meta.img ? (
-          <Image
-            src={meta.img}
-            height={100}
-            w="100%"
-            h={100}
-            alt={meta.name}
-            loading="lazy"
-          />
-        ) : (
-          <div
-            className={`${classes.compactImageFallback} ${getEraClass(meta.order)}`}
-          >
-            <span className={classes.compactSeasonNumber}>{meta.order}</span>
-            {meta.subtitle && (
-              <span className={classes.compactSubtitle}>{meta.subtitle}</span>
-            )}
-          </div>
-        )}
-        {live && (
-          <Badge
-            color="red"
-            variant="filled"
-            size="xs"
-            pos="absolute"
-            top={6}
-            right={6}
-          >
-            LIVE
-          </Badge>
-        )}
-      </Card.Section>
-
-      <Stack gap={2} mt="xs">
-        <Text fw={600} size="sm" lineClamp={1}>
-          {getSeasonDisplayTitle(meta)}
-        </Text>
-        <Text size="xs" c="dimmed" lineClamp={1}>
-          {meta.location} &middot; {meta.year}
-        </Text>
-      </Stack>
-    </Card>
-  );
+function matchesEra(meta: SeasonMeta, filter: EraFilter): boolean {
+  if (filter === "all") return true;
+  const era = SEASON_ERAS.find((e) => e.id === filter);
+  return !!era && meta.order >= era.min && meta.order <= era.max;
 }
 
 export const Seasons = () => {
   const [search, setSearch] = useState("");
-  const [selectedEras, setSelectedEras] = useState<string[]>([]);
+  const [era, setEra] = useState<EraFilter>("all");
 
   const allSeasons = useMemo(
     () => Object.values(SEASON_METADATA).sort((a, b) => b.order - a.order),
@@ -185,10 +50,11 @@ export const Seasons = () => {
   );
 
   // The live season is the highest-order incomplete season
-  const liveSeasonId = useMemo(() => {
-    const liveSeason = allSeasons.find((m) => !m.complete);
-    return liveSeason?.id ?? null;
-  }, [allSeasons]);
+  const liveSeason = useMemo(
+    () => allSeasons.find((m) => !m.complete) ?? null,
+    [allSeasons],
+  );
+  const liveSeasonId = liveSeason?.id ?? null;
 
   const marqueeSeasons = useMemo(() => allSeasons.slice(0, 2), [allSeasons]);
 
@@ -202,75 +68,121 @@ export const Seasons = () => {
       (meta) =>
         !marqueeIds.has(meta.id) &&
         matchesSearch(meta, search) &&
-        matchesEras(meta, selectedEras),
+        matchesEra(meta, era),
     );
-  }, [allSeasons, marqueeIds, search, selectedEras]);
+  }, [allSeasons, marqueeIds, search, era]);
+
+  const clearFilters = () => {
+    setSearch("");
+    setEra("all");
+  };
 
   return (
-    <Stack gap="lg" p="md">
-      {/* Header */}
-      <div>
-        <Title order={2}>Pick a season</Title>
-        <Text c="dimmed" size="sm">
-          Choose a season, scout the contestants, and get a draft going with
-          your friends.
-        </Text>
-      </div>
+    <div className={classes.page}>
+      <PageIntro
+        eyebrow="Seasons"
+        context={liveSeason ? `On air · ${liveSeason.name}` : undefined}
+        title="Pick a season"
+        description="Choose a season, scout the castaways, and get a draft going with your friends."
+        actions={
+          <Button component={Link} to="/scoring" variant="outline">
+            How scoring works
+          </Button>
+        }
+      />
 
-      {/* Marquee — two latest seasons */}
-      <SimpleGrid cols={{ base: 1, sm: 2 }} maw={900}>
-        {marqueeSeasons.map((meta) => (
-          <HeroCard key={meta.id} meta={meta} live={meta.id === liveSeasonId} />
-        ))}
-      </SimpleGrid>
+      {/* On-air slot: the two latest seasons as large cells */}
+      <section aria-labelledby="seasons-onair" className={classes.section}>
+        <div className={classes.sectionLabel}>
+          <h2 id="seasons-onair" className={classes.sectionTitle}>
+            On air
+          </h2>
+          {liveSeason && <StatusBadge kind="live" size="sm" />}
+        </div>
+        <div className={classes.onAir}>
+          {marqueeSeasons.map((meta) => {
+            const live = meta.id === liveSeasonId;
+            return (
+              <SeasonTile
+                key={meta.id}
+                meta={meta}
+                live={live}
+                size="lg"
+                badges={
+                  live ? (
+                    <StatusBadge kind="live" size="sm" />
+                  ) : meta.complete ? (
+                    <StatusBadge kind="complete" size="sm" />
+                  ) : undefined
+                }
+              />
+            );
+          })}
+        </div>
+      </section>
 
-      {/* Browse — search + era filters + compact grid */}
-      <Stack gap="sm">
-        <div className={classes.sectionHeader}>
-          <Title order={4}>All Seasons</Title>
-          <div className={classes.sectionLine} />
+      {/* Find bar, era control, and the guide grid */}
+      <section aria-labelledby="seasons-all" className={classes.section}>
+        <VisuallyHidden>
+          <h2 id="seasons-all">All seasons</h2>
+        </VisuallyHidden>
+
+        <div className={classes.findBar}>
+          <TextInput
+            placeholder="Search by name, number, or location..."
+            leftSection={<IconSearch size={16} aria-hidden="true" />}
+            aria-label="Search seasons"
+            value={search}
+            onChange={(e) => setSearch(e.currentTarget.value)}
+            className={classes.search}
+          />
+          <div className={classes.scroller}>
+            <SegmentedControl
+              aria-label="Filter by era"
+              value={era}
+              onChange={(value) => setEra(value as EraFilter)}
+              data={ERA_OPTIONS}
+              withItemsBorders={false}
+              classNames={{
+                root: classes.segRoot,
+                label: classes.segLabel,
+                indicator: classes.segIndicator,
+              }}
+            />
+          </div>
+          <span className={classes.count} aria-live="polite">
+            <b>{browseSeasons.length}</b>{" "}
+            {browseSeasons.length === 1 ? "season" : "seasons"}
+          </span>
         </div>
 
-        <TextInput
-          placeholder="Search by name, number, or location..."
-          leftSection={<IconSearch size={16} />}
-          aria-label="Search seasons"
-          value={search}
-          onChange={(e) => setSearch(e.currentTarget.value)}
-        />
-
-        <Chip.Group multiple value={selectedEras} onChange={setSelectedEras}>
-          <Group gap="xs" aria-label="Filter by era" role="group">
-            {ERAS.map((era) => (
-              <Chip
-                key={era.label}
-                value={era.label}
-                size="sm"
-                variant="outline"
-                className={classes.eraChip}
-              >
-                {era.label}
-              </Chip>
-            ))}
-          </Group>
-        </Chip.Group>
-
         {browseSeasons.length === 0 ? (
-          <Center py="xl">
-            <Text c="dimmed">No seasons match your search.</Text>
-          </Center>
+          <div role="status">
+            <EmptySlate
+              title="No seasons match"
+              actions={
+                <Button variant="outline" size="sm" onClick={clearFilters}>
+                  Clear search
+                </Button>
+              }
+            >
+              {search.trim()
+                ? `Nothing matches "${search.trim()}". Try a season name, number, or location.`
+                : "Nothing matches these filters. Try a season name, number, or location."}
+            </EmptySlate>
+          </div>
         ) : (
-          <SimpleGrid cols={{ base: 2, xs: 2, sm: 3, md: 4, lg: 5 }}>
+          <div className={classes.grid}>
             {browseSeasons.map((meta) => (
-              <CompactCard
+              <SeasonTile
                 key={meta.id}
                 meta={meta}
                 live={meta.id === liveSeasonId}
               />
             ))}
-          </SimpleGrid>
+          </div>
         )}
-      </Stack>
-    </Stack>
+      </section>
+    </div>
   );
 };

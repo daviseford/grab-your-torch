@@ -1,144 +1,145 @@
-/* ── Hero (Marquee) Cards ── */
-
-.heroCard {
-  overflow: hidden;
-  transition:
-    transform 200ms ease-out,
-    box-shadow 200ms ease-out;
-
-  &:hover {
-    transform: translateY(-4px);
-    box-shadow: var(--mantine-shadow-lg);
-  }
-}
-
-.heroImageFallback {
-  height: 200px;
+/*
+ * Seasons catalog: the program guide. A lower-third, the on-air slot with
+ * two large cells, a find bar with a segmented era control, then a
+ * five-column tile grid (three on tablets, two on phones).
+ */
+.page {
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: rem(4px);
+  gap: var(--mantine-spacing-xl);
 }
 
-.heroSeasonNumber {
-  font-size: rem(64px);
-  font-weight: 900;
-  color: color-mix(in srgb, var(--mantine-color-white) 95%, transparent);
-  line-height: 1;
-  text-shadow: 0 2px 8px
-    color-mix(in srgb, var(--mantine-color-black) 20%, transparent);
-}
-
-.heroSubtitle {
-  font-size: rem(14px);
-  font-weight: 600;
-  color: color-mix(in srgb, var(--mantine-color-white) 85%, transparent);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  text-shadow: 0 1px 4px
-    color-mix(in srgb, var(--mantine-color-black) 20%, transparent);
-}
-
-/* ── Compact (Browse Grid) Cards ── */
-
-.compactCard {
-  transition:
-    transform 200ms ease-out,
-    box-shadow 200ms ease-out;
-
-  &:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--mantine-shadow-md);
-  }
-}
-
-.compactImageFallback {
-  height: 100px;
+.section {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: rem(2px);
+  gap: var(--mantine-spacing-md);
 }
 
-.compactSeasonNumber {
-  font-size: rem(32px);
-  font-weight: 900;
-  color: color-mix(in srgb, var(--mantine-color-white) 95%, transparent);
-  line-height: 1;
-  text-shadow: 0 1px 4px
-    color-mix(in srgb, var(--mantine-color-black) 15%, transparent);
-}
-
-.compactSubtitle {
-  font-size: rem(10px);
-  font-weight: 600;
-  color: color-mix(in srgb, var(--mantine-color-white) 80%, transparent);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  text-shadow: 0 1px 3px
-    color-mix(in srgb, var(--mantine-color-black) 15%, transparent);
-  max-width: 90%;
-  text-align: center;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* ── Era Color Gradients ── */
-
-.eraClassic {
-  background: linear-gradient(
-    135deg,
-    light-dark(#b8860b, #8b6914),
-    light-dark(#d4a017, #a67c00)
-  );
-}
-
-.eraMiddle {
-  background: linear-gradient(
-    135deg,
-    light-dark(#1a6b8a, #124e6a),
-    light-dark(#2196a8, #1a7a8a)
-  );
-}
-
-.eraModern {
-  background: linear-gradient(
-    135deg,
-    light-dark(#6a3d9a, #4e2d73),
-    light-dark(#8e5cbf, #6b44a0)
-  );
-}
-
-.eraNew {
-  background: linear-gradient(
-    135deg,
-    light-dark(#0d8a6a, #0a6b52),
-    light-dark(#14a882, #0d8a6a)
-  );
-}
-
-/* ── Era Chips ── */
-
-.eraChip {
-  cursor: pointer;
-}
-
-/* ── Section Divider ── */
-
-.sectionHeader {
+/* Caps section label with a hairline running to the right edge. */
+.sectionLabel {
   display: flex;
   align-items: center;
-  gap: var(--mantine-spacing-sm);
+  gap: 10px;
 }
 
-.sectionLine {
+.sectionLabel::after {
+  content: "";
   flex: 1;
   height: 1px;
+  background: var(--gyt-rule);
+}
+
+.sectionTitle {
+  margin: 0;
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: 0.6875rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+
+.onAir {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--mantine-spacing-md);
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Find bar: input, era control, count. */
+.findBar {
+  display: grid;
+  grid-template-columns: minmax(240px, 420px) auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--mantine-spacing-sm);
+
+  @media (max-width: $mantine-breakpoint-md) {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
+
+.search {
+  min-width: 0;
+}
+
+.scroller {
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+
+  @media (max-width: $mantine-breakpoint-md) {
+    grid-column: 1 / -1;
+  }
+}
+
+.segRoot {
+  background: var(--gyt-panel);
+  border: 1px solid var(--gyt-rule-strong);
+  border-radius: var(--mantine-radius-sm);
+  padding: 2px;
+}
+
+.segLabel {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--mantine-color-text);
+
+  &[data-active] {
+    color: var(--mantine-color-white);
+  }
+}
+
+.segIndicator {
   background: light-dark(
-    var(--mantine-color-gray-3),
-    var(--mantine-color-dark-4)
+    var(--mantine-color-navy-9),
+    var(--mantine-color-league-6)
   );
+  box-shadow: none;
+}
+
+.count {
+  justify-self: end;
+  white-space: nowrap;
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: 0.6875rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+
+.count b {
+  color: var(--mantine-color-text);
+  font-weight: 700;
+}
+
+/* Guide grid: five cells across, three on tablets, two on phones. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--mantine-spacing-md);
+
+  @media (max-width: $mantine-breakpoint-md) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--mantine-spacing-sm);
+  }
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
