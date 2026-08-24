@@ -11,16 +11,15 @@ import shared from "./ScoringTables.module.css";
  * The scoreboard strip under the competition header: one scorebug per
  * participant with rank, points through the current episode, the points
  * scored in the last revealed episode, and the roster as a status count
- * (alive / out / via trade). Portraits were too small to recognize anyone,
- * so the strip reports roster health instead of faces.
+ * (active / out). Portraits were too small to recognize anyone, so the
+ * strip reports roster health instead of faces.
  */
 export const ParticipantScoreboard = () => {
   const { data: competition } = useCompetition();
   const { slimUser } = useUser();
   const { filteredEpisodes, filteredEvents, pointsByUserPerEpisodeWithPropBets } =
     useScoringCalculations();
-  const { survivorsByUserUid, eliminatedSurvivors, acquisitions } =
-    useCompetitionMeta();
+  const { survivorsByUserUid, eliminatedSurvivors } = useCompetitionMeta();
 
   if (!competition || competition.participants.length === 0) return null;
 
@@ -66,9 +65,6 @@ export const ParticipantScoreboard = () => {
           const outCount = roster.filter((p) =>
             eliminatedSurvivors.includes(p.castaway_id),
           ).length;
-          const tradeCount = roster.filter(
-            (p) => !!acquisitions[p.castaway_id],
-          ).length;
           // The winner is never "out" but isn't merely alive either.
           const aliveCount =
             roster.length - outCount - (soleSurvivor ? 1 : 0);
@@ -112,14 +108,9 @@ export const ParticipantScoreboard = () => {
                   )
                 ) : (
                   <div className={classes.strip}>
-                    <span>{aliveCount} alive</span>
+                    <span>{aliveCount} active</span>
                     {outCount > 0 && (
                       <span className={classes.out}>{outCount} out</span>
-                    )}
-                    {tradeCount > 0 && (
-                      <span className={classes.trade}>
-                        {tradeCount} via trade
-                      </span>
                     )}
                   </div>
                 ))}
