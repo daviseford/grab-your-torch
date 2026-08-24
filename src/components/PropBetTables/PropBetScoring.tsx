@@ -1,11 +1,16 @@
-import { Badge, Table } from "@mantine/core";
+import { Badge, Table, Tooltip } from "@mantine/core";
 import { PropBetQuestionKey, PropBetsQuestions } from "../../data/propbets";
 import { useCompetition } from "../../hooks/useCompetition";
 import { usePropBetScoring } from "../../hooks/useGetPropBetScoring";
 import { useSeason } from "../../hooks/useSeason";
 import { useUser } from "../../hooks/useUser";
 import type { CastawayId, CastawayLookup } from "../../types";
-import { PropBetAnswer, PropBetScores } from "../../utils/propBetUtils";
+import {
+  PropBetAnswer,
+  PropBetResolution,
+  PropBetResolutionReason,
+  PropBetScores,
+} from "../../utils/propBetUtils";
 import { StatusBadge } from "../Layout";
 import classes from "../ScoringTables/ScoringTables.module.css";
 
@@ -14,6 +19,50 @@ const resolveAnswer = (answer: string, lookup?: CastawayLookup): string => {
   if (!answer || !lookup) return answer;
   return lookup[answer as CastawayId]?.full_name ?? answer;
 };
+
+/** Short first-name for a castaway, falling back to the raw id. */
+const shortName = (id: CastawayId | undefined, lookup?: CastawayLookup) =>
+  id ? (lookup?.[id]?.castaway ?? id) : "";
+
+const REASON_LABELS: Record<PropBetResolutionReason, string> = {
+  first_elimination: "First out",
+  eliminated: "Voted out",
+  winner: "Winner",
+  made_ftc: "Made FTC",
+  medical_evac: "Medevac",
+  quit: "Quit",
+  shot_in_the_dark: "Shot in the Dark",
+  first_idol: "First idol",
+  first_idol_play: "First idol play",
+};
+
+/**
+ * "Medevac: Kyle, Ep 1". The fact that settled the bet, so a season-long
+ * question that closes early does not read as a premature call.
+ */
+const describeResolution = (
+  resolution: PropBetResolution,
+  lookup?: CastawayLookup,
+): string => {
+  const who = shortName(resolution.castaway_id, lookup);
+  const label = REASON_LABELS[resolution.reason];
+  return who
+    ? `${label}: ${who}, Ep ${resolution.episode_num}`
+    : `${label}, Ep ${resolution.episode_num}`;
+};
+
+const ResolutionNote = ({
+  resolution,
+  lookup,
+}: {
+  resolution?: PropBetResolution;
+  lookup?: CastawayLookup;
+}) =>
+  resolution ? (
+    <span className={classes.propReason}>
+      {describeResolution(resolution, lookup)}
+    </span>
+  ) : null;
 
 const AnswerDisplay = ({
   score,
@@ -24,13 +73,20 @@ const AnswerDisplay = ({
 }) => {
   const display = resolveAnswer(score.answer, lookup);
 
+  const reason = score.resolved_by
+    ? describeResolution(score.resolved_by, lookup)
+    : undefined;
+
   if (score.status === "definitive_correct") {
     return (
       <div className={classes.propAnswer}>
         <b className={classes.propName}>{display}</b>
-        <Badge color="green" variant="filled" size="xs">
-          +{score.points_awarded}
-        </Badge>
+        <Tooltip label={reason} disabled={!reason} withArrow>
+          <Badge color="green" variant="filled" size="xs">
+            +{score.points_awarded}
+          </Badge>
+        </Tooltip>
+        <ResolutionNote resolution={score.resolved_by} lookup={lookup} />
       </div>
     );
   }
@@ -39,9 +95,12 @@ const AnswerDisplay = ({
     return (
       <div className={classes.propAnswer}>
         <b className={`${classes.propName} ${classes.propWrong}`}>{display}</b>
-        <Badge color="red" variant="outline" size="xs">
-          Incorrect
-        </Badge>
+        <Tooltip label={reason} disabled={!reason} withArrow>
+          <Badge color="red" variant="outline" size="xs">
+            Incorrect
+          </Badge>
+        </Tooltip>
+        <ResolutionNote resolution={score.resolved_by} lookup={lookup} />
       </div>
     );
   }

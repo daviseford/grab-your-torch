@@ -294,6 +294,21 @@ describe("getPropBetScoresForUser", () => {
       };
       const answer = getStatus("propbet_medical_evac", { eliminations: elims });
       expect(answer.status).toBe("definitive_incorrect");
+      expect(answer.resolved_by).toEqual({
+        reason: "medical_evac",
+        episode_num: 3,
+        castaway_id: CHARLIE,
+      });
+    });
+
+    it("reports the earliest evac when there are several", () => {
+      const elims = {
+        e1: makeElimination("1", 5, BOB, 2, "medical"),
+        e2: makeElimination("2", 3, CHARLIE, 2, "medical"),
+      };
+      const answer = getStatus("propbet_medical_evac", { eliminations: elims });
+      expect(answer.resolved_by?.episode_num).toBe(3);
+      expect(answer.resolved_by?.castaway_id).toBe(CHARLIE);
     });
 
     it("returns pending for Yes when no evac and no finale", () => {
@@ -813,6 +828,117 @@ describe("getPropBetScoresForUser", () => {
         hasFinaleOccurred: true,
       });
       expect(answer.status).toBe("definitive_correct");
+    });
+  });
+
+  describe("resolved_by", () => {
+    it("is absent while a bet is pending", () => {
+      expect(getStatus("propbet_medical_evac").resolved_by).toBeUndefined();
+      expect(getStatus("propbet_winner").resolved_by).toBeUndefined();
+    });
+
+    it("is absent when only the finale settled a yes/no bet", () => {
+      const answer = getStatus("propbet_medical_evac", {
+        hasFinaleOccurred: true,
+      });
+      expect(answer.status).toBe("definitive_correct");
+      expect(answer.resolved_by).toBeUndefined();
+    });
+
+    it("names the first elimination for the first-out bet", () => {
+      const elims = { e1: makeElimination("1", 1, ALICE, 1) };
+      const answer = getStatus("propbet_first_vote", { eliminations: elims });
+      expect(answer.status).toBe("definitive_incorrect");
+      expect(answer.resolved_by).toEqual({
+        reason: "first_elimination",
+        episode_num: 1,
+        castaway_id: ALICE,
+      });
+    });
+
+    it("names the elimination that took the winner pick out", () => {
+      const elims = { e1: makeElimination("1", 4, ALICE, 1) };
+      const answer = getStatus("propbet_winner", { eliminations: elims });
+      expect(answer.status).toBe("definitive_incorrect");
+      expect(answer.resolved_by).toEqual({
+        reason: "eliminated",
+        episode_num: 4,
+        castaway_id: ALICE,
+      });
+    });
+
+    it("names the win_survivor event for a settled winner bet", () => {
+      const events = { w: makeEvent("w", 13, ALICE, "win_survivor") };
+      const answer = getStatus("propbet_winner", { events });
+      expect(answer.status).toBe("definitive_correct");
+      expect(answer.resolved_by).toEqual({
+        reason: "winner",
+        episode_num: 13,
+        castaway_id: ALICE,
+      });
+    });
+
+    it("names the FTC event when the pick makes final tribal", () => {
+      const events = {
+        f: makeEvent("f", 13, ALICE, "make_final_tribal_council"),
+      };
+      const answer = getStatus("propbet_ftc", { events });
+      expect(answer.resolved_by?.reason).toBe("made_ftc");
+    });
+
+    it("names the first idol find for the first-idol bet", () => {
+      const comp = {
+        ...baseCompetition,
+        prop_bets: [
+          {
+            ...baseCompetition.prop_bets![0],
+            values: {
+              ...baseCompetition.prop_bets![0].values,
+              propbet_first_idol_found: ALICE,
+            },
+          },
+        ],
+      };
+      const events = {
+        a: makeEvent("a", 4, BOB, "find_idol"),
+        b: makeEvent("b", 2, CHARLIE, "find_idol"),
+      };
+      const answer = getStatus("propbet_first_idol_found", {
+        competition: comp,
+        events,
+      });
+      expect(answer.status).toBe("definitive_incorrect");
+      expect(answer.resolved_by).toEqual({
+        reason: "first_idol",
+        episode_num: 2,
+        castaway_id: CHARLIE,
+      });
+    });
+
+    it("names the quit for a quit bet", () => {
+      const comp = {
+        ...baseCompetition,
+        prop_bets: [
+          {
+            ...baseCompetition.prop_bets![0],
+            values: {
+              ...baseCompetition.prop_bets![0].values,
+              propbet_quit: "Yes",
+            },
+          },
+        ],
+      };
+      const elims = { e1: makeElimination("1", 6, BOB, 1, "quitter") };
+      const answer = getStatus("propbet_quit", {
+        competition: comp,
+        eliminations: elims,
+      });
+      expect(answer.status).toBe("definitive_correct");
+      expect(answer.resolved_by).toEqual({
+        reason: "quit",
+        episode_num: 6,
+        castaway_id: BOB,
+      });
     });
   });
 

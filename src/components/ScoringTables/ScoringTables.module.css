@@ -355,6 +355,13 @@
   color: var(--mantine-color-yellow-8);
 }
 
+/* The fact that settled a bet: "Medevac: Kyle, Ep 1". */
+.propReason {
+  font-size: 0.6875rem;
+  line-height: 1.3;
+  color: var(--mantine-color-dimmed);
+}
+
 [data-mantine-color-scheme="dark"] .propLeading {
   color: var(--mantine-color-yellow-4);
 }
