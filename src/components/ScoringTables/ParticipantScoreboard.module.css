@@ -97,38 +97,31 @@
   grid-row: 2;
   display: flex;
   flex-wrap: wrap;
-  gap: 3px;
+  gap: 4px 10px;
   align-items: center;
-}
-
-.face,
-.initials {
-  display: block;
-  width: 22px;
-  height: 28px;
-  border-radius: 2px;
-  object-fit: cover;
-  object-position: top;
-  flex-shrink: 0;
-}
-
-.initials {
-  display: grid;
-  place-items: center;
-  background: var(--mantine-color-navy-7);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   color: var(--mantine-color-dark-1);
+}
+
+.winner {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--mantine-color-gold-4);
+  color: var(--mantine-color-navy-9);
   font-family: var(--mantine-headings-font-family);
-  font-size: 0.5625rem;
+  font-size: 0.625rem;
   font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .out {
-  filter: grayscale(1) brightness(0.55);
-  outline: 2px solid var(--mantine-color-ember-6);
-  outline-offset: -2px;
+  color: var(--mantine-color-ember-4);
 }
 
 .trade {
-  outline: 2px solid var(--mantine-color-signal-5);
-  outline-offset: -2px;
+  color: var(--mantine-color-signal-5);
 }

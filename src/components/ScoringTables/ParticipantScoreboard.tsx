@@ -7,24 +7,17 @@ import { getParticipantName } from "../../utils/misc";
 import classes from "./ParticipantScoreboard.module.css";
 import shared from "./ScoringTables.module.css";
 
-const initials = (name: string) =>
-  name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part.charAt(0))
-    .join("")
-    .toUpperCase();
-
 /**
  * The scoreboard strip under the competition header: one scorebug per
  * participant with rank, points through the current episode, the points
- * scored in the last revealed episode, and the roster as a strip of
- * portraits (eliminated struck, via-trade ringed in cyan).
+ * scored in the last revealed episode, and the roster as a status count
+ * (alive / out / via trade). Portraits were too small to recognize anyone,
+ * so the strip reports roster health instead of faces.
  */
 export const ParticipantScoreboard = () => {
   const { data: competition } = useCompetition();
   const { slimUser } = useUser();
-  const { filteredEpisodes, pointsByUserPerEpisodeWithPropBets } =
+  const { filteredEpisodes, filteredEvents, pointsByUserPerEpisodeWithPropBets } =
     useScoringCalculations();
   const { survivorsByUserUid, eliminatedSurvivors, acquisitions } =
     useCompetitionMeta();
@@ -34,6 +27,12 @@ export const ParticipantScoreboard = () => {
   const { participants, team_names: teamNames } = competition;
   const lastIndex = filteredEpisodes.length - 1;
   const lastEpisode = lastIndex >= 0 ? filteredEpisodes[lastIndex] : null;
+
+  // Episode-filtered, so the tag only appears once this competition has
+  // revealed the finale — no spoiling slower watch-along groups.
+  const winnerCastawayId =
+    Object.values(filteredEvents).find((e) => e.action === "win_survivor")
+      ?.castaway_id ?? null;
 
   const entries = participants
     .map((participant) => {
@@ -59,6 +58,20 @@ export const ParticipantScoreboard = () => {
           const isFirst = rank === 1 && hasPoints;
           const isMe = entry.uid === slimUser?.uid;
           const roster = survivorsByUserUid[entry.uid] ?? [];
+          // The Sole Survivor is a castaway, not the participant — the chip
+          // names the castaway whose ownership is being claimed here.
+          const soleSurvivor = roster.find(
+            (p) => p.castaway_id === winnerCastawayId,
+          );
+          const outCount = roster.filter((p) =>
+            eliminatedSurvivors.includes(p.castaway_id),
+          ).length;
+          const tradeCount = roster.filter(
+            (p) => !!acquisitions[p.castaway_id],
+          ).length;
+          // The winner is never "out" but isn't merely alive either.
+          const aliveCount =
+            roster.length - outCount - (soleSurvivor ? 1 : 0);
           return (
             <li
               key={entry.uid}
@@ -87,49 +100,29 @@ export const ParticipantScoreboard = () => {
                   </small>
                 )}
               </div>
-              {roster.length > 0 && (
-                <div
-                  className={classes.strip}
-                  role="group"
-                  aria-label={`${entry.name}'s roster`}
-                >
-                  {roster.map((player) => {
-                    const isOut = eliminatedSurvivors.includes(
-                      player.castaway_id,
-                    );
-                    const viaTrade = !!acquisitions[player.castaway_id];
-                    const stateClass = isOut
-                      ? classes.out
-                      : viaTrade
-                        ? classes.trade
-                        : "";
-                    const alt = `${player.full_name}${
-                      isOut ? ", eliminated" : viaTrade ? ", via trade" : ""
-                    }`;
-                    return player.img ? (
-                      <img
-                        key={player.castaway_id}
-                        src={player.img}
-                        alt={alt}
-                        width={22}
-                        height={28}
-                        loading="lazy"
-                        decoding="async"
-                        className={`${classes.face} ${stateClass}`}
-                      />
-                    ) : (
-                      <span
-                        key={player.castaway_id}
-                        className={`${classes.initials} ${stateClass}`}
-                        role="img"
-                        aria-label={alt}
-                      >
-                        {initials(player.full_name)}
+              {roster.length > 0 &&
+                (winnerCastawayId != null ? (
+                  // Season's over: the only roster fact that matters is who
+                  // owns the Sole Survivor. Everyone else is out.
+                  soleSurvivor && (
+                    <div className={classes.strip}>
+                      <span className={classes.winner}>Sole Survivor</span>
+                      <span>{soleSurvivor.full_name}</span>
+                    </div>
+                  )
+                ) : (
+                  <div className={classes.strip}>
+                    <span>{aliveCount} alive</span>
+                    {outCount > 0 && (
+                      <span className={classes.out}>{outCount} out</span>
+                    )}
+                    {tradeCount > 0 && (
+                      <span className={classes.trade}>
+                        {tradeCount} via trade
                       </span>
-                    );
-                  })}
-                </div>
-              )}
+                    )}
+                  </div>
+                ))}
             </li>
           );
         })}

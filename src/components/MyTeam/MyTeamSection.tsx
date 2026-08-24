@@ -1,6 +1,5 @@
 import {
   ActionIcon,
-  Badge,
   Button,
   Group,
   Table,
@@ -652,21 +651,22 @@ const RosterTableRow = ({
           </span>
           {upcomingMove && upcomingLabel && (
             <Tooltip label={upcomingLabel}>
-              <Badge
+              <Text
                 size="xs"
-                variant="outline"
-                color="yellow"
+                c="dimmed"
+                span
                 role="img"
                 aria-label={upcomingLabel}
                 style={{ flexShrink: 0 }}
               >
-                →{" "}
+                Goes to{" "}
                 {getParticipantName(
                   participants,
                   upcomingMove.toUid,
                   teamNames,
-                )}
-              </Badge>
+                )}{" "}
+                {upcomingMove.landsNextEpisode ? "next episode" : "soon"}
+              </Text>
             </Tooltip>
           )}
         </div>
