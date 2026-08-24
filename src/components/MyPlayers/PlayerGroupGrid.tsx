@@ -369,20 +369,17 @@ const TeamCard = ({
                     )}
                     {upcomingLabel && upcomingMove && (
                       <Tooltip label={upcomingLabel}>
-                        <Badge
-                          size="xs"
-                          variant="outline"
-                          color="yellow"
-                          role="img"
-                          aria-label={upcomingLabel}
-                        >
-                          →{" "}
+                        <span role="img" aria-label={upcomingLabel}>
+                          Goes to{" "}
                           {getParticipantName(
                             participants,
                             upcomingMove.toUid,
                             teamNames,
-                          )}
-                        </Badge>
+                          )}{" "}
+                          {upcomingMove.landsNextEpisode
+                            ? "next episode"
+                            : "soon"}
+                        </span>
                       </Tooltip>
                     )}
                   </>
