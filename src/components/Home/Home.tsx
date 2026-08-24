@@ -5,7 +5,6 @@ import { PropBetsQuestions } from "../../data/propbets";
 import { BASE_PLAYER_SCORING, type ScoringCategory } from "../../data/scoring";
 import { SEASON_METADATA } from "../../data/season-metadata";
 import { useUser } from "../../hooks/useUser";
-import { getSeasonEra } from "../../pages/SeasonEras";
 import { SeasonTile } from "../../pages/SeasonTile";
 import { BrandEmblem } from "../Brand";
 import { Board, RevealStrip } from "../Layout";
@@ -185,7 +184,11 @@ export const Home = () => {
                     meta={meta}
                     live={live}
                     metaLine={
-                      live ? "Now airing" : getSeasonEra(meta.order).label
+                      // Era labels repeat across the whole new-era run; the
+                      // year and cast size are the facts that vary per season.
+                      live
+                        ? "Now airing"
+                        : `${meta.year} · ${meta.contestantCount} castaways`
                     }
                   />
                 );
