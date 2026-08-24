@@ -11,6 +11,7 @@ import { BrandEmblem } from "../Brand";
 import { Board, RevealStrip } from "../Layout";
 import classes from "./Home.module.css";
 import { HomeDraftExample } from "./HomeDraftExample";
+import { HomeResumeDrafts } from "./HomeResumeDrafts";
 
 /** Scoring category colors, kept semantic app-wide. */
 const CATEGORY_COLORS: Record<ScoringCategory, string> = {
@@ -127,6 +128,9 @@ export const Home = () => {
       </section>
 
       <div className={classes.sections}>
+        {/* Way back into an open draft (only renders when one exists) */}
+        <HomeResumeDrafts />
+
         {/* How it works */}
         <section aria-labelledby="home-how" className={classes.section}>
           <div className={classes.inner}>

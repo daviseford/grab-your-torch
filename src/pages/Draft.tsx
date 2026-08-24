@@ -57,6 +57,7 @@ import {
 } from "../types";
 import { trackEvent } from "../utils/analytics";
 import { buildPickOrderUidMap, buildTurnsMap } from "../utils/draftRealtime";
+import { recordRecentDraft, removeRecentDraft } from "../utils/recentDrafts";
 import classes from "./Draft.module.css";
 import { DraftBoard } from "./DraftBoard";
 import { DraftCastGrid } from "./DraftCastGrid";
@@ -89,6 +90,23 @@ export const DraftComponent = () => {
       sawNotStartedRef.current = true;
     }
   }, [draft?.started]);
+
+  // Remember drafts the user participates in so Home can offer a way back
+  // in (see utils/recentDrafts). Finished drafts prune themselves on visit.
+  useEffect(() => {
+    if (!draft || !slimUser) return;
+    if (draft.finished) {
+      removeRecentDraft(draft.id);
+      return;
+    }
+    if (draft.participants.some((p) => p.uid === slimUser.uid)) {
+      recordRecentDraft({
+        draftId: draft.id,
+        seasonId: draft.season_id,
+        seasonNum: draft.season_num,
+      });
+    }
+  }, [draft, slimUser]);
 
   const isRevealing = !!(
     draft?.started &&
