@@ -94,19 +94,22 @@ export const DraftComponent = () => {
   // Remember drafts the user participates in so Home can offer a way back
   // in (see utils/recentDrafts). Finished drafts prune themselves on visit.
   useEffect(() => {
-    if (!draft || !slimUser) return;
+    const userUid = slimUser?.uid;
+    if (!draft || !userUid) return;
     if (draft.finished) {
-      removeRecentDraft(draft.id);
+      removeRecentDraft(userUid, draft.id);
       return;
     }
-    if (draft.participants.some((p) => p.uid === slimUser.uid)) {
-      recordRecentDraft({
+    if (draft.participants.some((p) => p.uid === userUid)) {
+      recordRecentDraft(userUid, {
         draftId: draft.id,
         seasonId: draft.season_id,
         seasonNum: draft.season_num,
       });
+    } else {
+      removeRecentDraft(userUid, draft.id);
     }
-  }, [draft, slimUser]);
+  }, [draft, slimUser?.uid]);
 
   const isRevealing = !!(
     draft?.started &&

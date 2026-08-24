@@ -1,4 +1,4 @@
-import type { Draft, Season } from "../types";
+import type { Draft, Season, SlimUser } from "../types";
 
 /**
  * Recent drafts the signed-in user participates in (browser-local only).
@@ -32,7 +32,7 @@ export interface RecentDraftsOptions {
 
 export const MAX_RECENT_DRAFTS = 5;
 
-const STORAGE_KEY = "survivor_recent_drafts";
+const STORAGE_KEY_PREFIX = "survivor_recent_drafts";
 const STORAGE_VERSION = 1;
 
 const SEASON_ID_PATTERN = /^season_\d+$/;
@@ -78,6 +78,9 @@ const resolveStorage = (storage?: RecentDraftsStorage): RecentDraftsStorage => {
 
 const resolveNow = (now?: () => number): (() => number) => now ?? Date.now;
 
+const storageKeyForUser = (userUid: SlimUser["uid"]): string =>
+  `${STORAGE_KEY_PREFIX}:${userUid}`;
+
 const isValidRecord = (value: unknown): value is RecentDraftRecord => {
   if (typeof value !== "object" || value === null) return false;
   const candidate = value as Record<string, unknown>;
@@ -91,9 +94,36 @@ const isValidRecord = (value: unknown): value is RecentDraftRecord => {
   );
 };
 
-const readFile = (storage: RecentDraftsStorage): StoredFile => {
-  const raw = storage.getItem(STORAGE_KEY);
+const writeFile = (
+  storage: RecentDraftsStorage,
+  storageKey: string,
+  file: StoredFile,
+): void => {
+  // Same constraint as authIntent: private-mode/quota write failures must
+  // never throw into page lifecycle effects; a failed write is a no-op.
+  try {
+    if (file.records.length === 0) {
+      storage.removeItem(storageKey);
+      return;
+    }
+    storage.setItem(storageKey, JSON.stringify(file));
+  } catch {
+    // Storage write failed (QuotaExceededError, restricted storage); ignore.
+  }
+};
+
+const readFile = (
+  storage: RecentDraftsStorage,
+  storageKey: string,
+): StoredFile => {
+  let raw: string | null;
+  try {
+    raw = storage.getItem(storageKey);
+  } catch {
+    return { version: STORAGE_VERSION, records: [] };
+  }
   if (raw === null) return { version: STORAGE_VERSION, records: [] };
+
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (
@@ -102,27 +132,17 @@ const readFile = (storage: RecentDraftsStorage): StoredFile => {
       (parsed as StoredFile).version === STORAGE_VERSION &&
       Array.isArray((parsed as StoredFile).records)
     ) {
-      return parsed as StoredFile;
+      const records = (parsed as StoredFile).records.filter(isValidRecord);
+      if (records.length !== (parsed as StoredFile).records.length) {
+        writeFile(storage, storageKey, { version: STORAGE_VERSION, records });
+      }
+      return { version: STORAGE_VERSION, records };
     }
   } catch {
     // Malformed payload; discard below.
   }
-  storage.removeItem(STORAGE_KEY);
+  writeFile(storage, storageKey, { version: STORAGE_VERSION, records: [] });
   return { version: STORAGE_VERSION, records: [] };
-};
-
-const writeFile = (storage: RecentDraftsStorage, file: StoredFile): void => {
-  // Same constraint as authIntent: private-mode/quota write failures must
-  // never throw into page lifecycle effects; a failed write is a no-op.
-  try {
-    if (file.records.length === 0) {
-      storage.removeItem(STORAGE_KEY);
-      return;
-    }
-    storage.setItem(STORAGE_KEY, JSON.stringify(file));
-  } catch {
-    // Storage write failed (QuotaExceededError, restricted storage); ignore.
-  }
 };
 
 /**
@@ -131,17 +151,19 @@ const writeFile = (storage: RecentDraftsStorage, file: StoredFile): void => {
  * MAX_RECENT_DRAFTS entries.
  */
 export const recordRecentDraft = (
+  userUid: SlimUser["uid"],
   record: Omit<RecentDraftRecord, "visitedAt">,
   options: RecentDraftsOptions = {},
 ): void => {
   const storage = resolveStorage(options.storage);
+  const storageKey = storageKeyForUser(userUid);
   const now = resolveNow(options.now);
-  const file = readFile(storage);
+  const file = readFile(storage, storageKey);
   const records = file.records.filter(
     (existing) => existing.draftId !== record.draftId,
   );
   records.unshift({ ...record, visitedAt: now() });
-  writeFile(storage, {
+  writeFile(storage, storageKey, {
     version: STORAGE_VERSION,
     records: records.slice(0, MAX_RECENT_DRAFTS),
   });
@@ -152,28 +174,26 @@ export const recordRecentDraft = (
  * from storage; a malformed payload reads as empty.
  */
 export const getRecentDrafts = (
+  userUid: SlimUser["uid"],
   options: RecentDraftsOptions = {},
 ): RecentDraftRecord[] => {
   const storage = resolveStorage(options.storage);
-  const file = readFile(storage);
-  const valid = file.records.filter(isValidRecord);
-  if (valid.length !== file.records.length) {
-    writeFile(storage, { version: STORAGE_VERSION, records: valid });
-  }
-  return valid;
+  return readFile(storage, storageKeyForUser(userUid)).records;
 };
 
 /** Remove a single record (e.g. the draft finished or was deleted). */
 export const removeRecentDraft = (
+  userUid: SlimUser["uid"],
   draftId: Draft["id"],
   options: RecentDraftsOptions = {},
 ): void => {
   const storage = resolveStorage(options.storage);
-  const file = readFile(storage);
+  const storageKey = storageKeyForUser(userUid);
+  const file = readFile(storage, storageKey);
   const records = file.records.filter(
     (existing) => existing.draftId !== draftId,
   );
   if (records.length !== file.records.length) {
-    writeFile(storage, { version: STORAGE_VERSION, records });
+    writeFile(storage, storageKey, { version: STORAGE_VERSION, records });
   }
 };
