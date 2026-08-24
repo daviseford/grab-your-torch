@@ -275,13 +275,6 @@ export const SingleCompetition = () => {
   const revealedEpisode = season.episodes?.find(
     (e) => e.order === revealedThrough,
   );
-  const stripStatus = isWatchAlong
-    ? revealedThrough === 0
-      ? "Nothing revealed yet"
-      : `Through episode ${revealedThrough}${revealedEpisode ? ` · ${revealedEpisode.name}` : ""}`
-    : revealedThrough === 0
-      ? "No results yet"
-      : `Results through episode ${revealedThrough}`;
   const participantCount = competition.participants.length;
   const participantLabel = `${participantCount} ${participantCount === 1 ? "participant" : "participants"}`;
 
@@ -349,8 +342,6 @@ export const SingleCompetition = () => {
               <RevealStrip
                 total={episodeCount}
                 revealedThrough={revealedThrough}
-                label={isWatchAlong ? "Episode reveal" : "Results entered"}
-                status={stripStatus}
                 size="sm"
               />
             )}

@@ -21,9 +21,10 @@ type RevealStripProps = {
 };
 
 /**
- * The reveal strip: the signature component. One cell per episode; what is
- * revealed, what is next, and what stays hidden is encoded by marks
- * (punched, flagged, dashed) as well as color.
+ * The reveal strip: the signature component. A rail of one dot per episode;
+ * watched episodes are filled dots on a colored rail, the next episode is a
+ * large hollow ring with an "up next" caption, and hidden episodes are faint
+ * dots. State is encoded by shape as well as color.
  */
 export const RevealStrip = ({
   total,
@@ -79,6 +80,17 @@ export const RevealStrip = ({
               : state === "next"
                 ? `Episode ${episode}, next`
                 : `Episode ${episode}, hidden`;
+          const content = (
+            <>
+              <i className={classes.dot} aria-hidden="true" />
+              {episode}
+              {state === "next" && (
+                <span className={classes.caption} aria-hidden="true">
+                  Up next
+                </span>
+              )}
+            </>
+          );
           return onSelect ? (
             <button
               key={episode}
@@ -88,11 +100,11 @@ export const RevealStrip = ({
               aria-label={title}
               aria-pressed={state === "revealed"}
             >
-              {episode}
+              {content}
             </button>
           ) : (
             <span key={episode} className={cellClass} aria-label={title}>
-              {episode}
+              {content}
             </span>
           );
         })}
