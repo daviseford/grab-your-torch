@@ -278,7 +278,7 @@ export const SingleCompetition = () => {
   const stripStatus = isWatchAlong
     ? revealedThrough === 0
       ? "Nothing revealed yet"
-      : `Through episode ${revealedThrough}${revealedEpisode ? ` · ${revealedEpisode.name}` : ""}`
+      : `Ep ${revealedThrough}${revealedEpisode?.name ? `: ${revealedEpisode.name}` : ""}`
     : revealedThrough === 0
       ? "No results yet"
       : `Results through episode ${revealedThrough}`;
