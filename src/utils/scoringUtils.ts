@@ -59,8 +59,14 @@ export const getEnhancedSurvivorPoints = (
     if (e.castaway_id !== castawayId) return;
     if (e.variant === "switched") return; // Not a real elimination
 
+    // Ties in `order` are a data-entry error (admin forms guard against them),
+    // but if one slips through, break the tie deterministically by id so
+    // every record still gets a distinct rank instead of both losing the bonus.
     const earlierSameEpisode = _eliminations.filter(
-      (x) => x.variant !== "switched" && x.order < e.order,
+      (x) =>
+        x.variant !== "switched" &&
+        x.id !== e.id &&
+        (x.order < e.order || (x.order === e.order && x.id < e.id)),
     ).length;
     addToScores("eliminated", e.episode_num + earlierSameEpisode * 0.5);
 

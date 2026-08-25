@@ -60,6 +60,24 @@ describe("getEnhancedSurvivorPoints elimination scoring", () => {
     ).toBe(6);
   });
 
+  it("breaks tied orders deterministically by id so both boots get distinct ranks", () => {
+    const eliminations = [
+      makeElimination("elimination_b", 6, 10, "US0001"),
+      makeElimination("elimination_a", 6, 10, "US0002"),
+      makeElimination("elimination_c", 6, 11, "US0003"),
+    ];
+
+    expect(
+      getEnhancedSurvivorPoints([], eliminations, [], 6, "US0002").total,
+    ).toBe(6);
+    expect(
+      getEnhancedSurvivorPoints([], eliminations, [], 6, "US0001").total,
+    ).toBe(6.5);
+    expect(
+      getEnhancedSurvivorPoints([], eliminations, [], 6, "US0003").total,
+    ).toBe(7);
+  });
+
   it("does not count tribe switches as earlier eliminations", () => {
     const eliminations = [
       makeElimination("elimination_1", 6, 10, "US0001", "switched"),

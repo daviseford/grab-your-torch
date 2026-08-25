@@ -89,6 +89,19 @@ export const EliminationCRUDTable = () => {
   const saveEdit = async (e: Elimination) => {
     if (!editValues || !season) return;
 
+    const orderTaken = Object.values(eliminations ?? {}).some(
+      (x) => x.id !== e.id && x.order === editValues.order,
+    );
+    if (orderTaken) {
+      notifications.show({
+        title: "Duplicate elimination order",
+        message: `Order ${editValues.order} is already used by another elimination`,
+        color: "red",
+        icon: <IconX size={16} />,
+      });
+      return;
+    }
+
     try {
       const updated = {
         ...e,
