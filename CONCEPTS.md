@@ -102,6 +102,8 @@ A record that a castaway left the game in a given episode, tagged with the manne
 
 Not every elimination record is a real exit: one variant records a tribe switch and is skipped by scoring entirely, and another records reaching the final tribal council without ending the castaway's run. A castaway with a later game event or challenge win is not considered out — returns from redemption-style twists are detected exactly this way, not by a status flag.
 
+Every elimination carries a season-wide order, unique by convention (imported seasons number them sequentially; admin entry rejects a duplicate). Elimination points grow with the episode number, and in a **multi-elimination episode** the order ranks the boots so each later boot earns slightly more than the one before it. Final-tribal-council records take the last ranks of the finale, so runners-up finish above the castaway eliminated just before them. Should two records ever share an order, scoring still assigns them distinct ranks rather than dropping the bonus for both.
+
 ### Tribe
 
 An in-show group of castaways within a season — the thing that wins tribal challenges.
@@ -149,7 +151,7 @@ Exactly one castaway per record, unlike a **Challenge win**. An event may carry 
 
 The third action family — the scoreable consequences of leaving the game — which is never stored directly but derived from an **Elimination**'s manner of departure.
 
-These names exist only as scoring outputs; nothing writes them. The base departure award scales with how deep into the season the castaway got, and the manner of departure adds a further bonus or penalty.
+These names exist only as scoring outputs; nothing writes them. The base departure award scales with how deep into the season the castaway got and, within a **multi-elimination episode**, with how late in that episode they left (see **Elimination**); the manner of departure adds a further bonus or penalty.
 
 ### Scoring rule
 
