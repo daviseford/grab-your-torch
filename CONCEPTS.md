@@ -151,7 +151,7 @@ Exactly one castaway per record, unlike a **Challenge win**. An event may carry 
 
 The third action family — the scoreable consequences of leaving the game — which is never stored directly but derived from an **Elimination**'s manner of departure.
 
-These names exist only as scoring outputs; nothing writes them. The base departure award scales with how deep into the season the castaway got, and the manner of departure adds a further bonus or penalty.
+These names exist only as scoring outputs; nothing writes them. The base departure award scales with how deep into the season the castaway got and, within a **multi-elimination episode**, with how late in that episode they left (see **Elimination**); the manner of departure adds a further bonus or penalty.
 
 ### Scoring rule
 
