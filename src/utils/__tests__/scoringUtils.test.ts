@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { BASE_PLAYER_SCORING } from "../../data/scoring";
 import { Elimination } from "../../types";
 import { getEnhancedSurvivorPoints } from "../scoringUtils";
+
+const MEDICAL_POINTS =
+  BASE_PLAYER_SCORING.find((x) => x.action === "medically_evacuated")
+    ?.fixed_value ?? 0;
 
 const makeElimination = (
   id: string,
@@ -76,6 +81,57 @@ describe("getEnhancedSurvivorPoints elimination scoring", () => {
     expect(
       getEnhancedSurvivorPoints([], eliminations, [], 6, "US0003").total,
     ).toBe(7);
+  });
+
+  it("ranks final tribal council runners-up after the finale boots", () => {
+    // Mirrors the season 50 finale: two tribal boots, then two finalists
+    // who lost at final tribal council.
+    const eliminations = [
+      makeElimination("elimination_1", 13, 20, "US0695"),
+      makeElimination("elimination_2", 13, 21, "US0745"),
+      makeElimination(
+        "elimination_3",
+        13,
+        22,
+        "US0722",
+        "final_tribal_council",
+      ),
+      makeElimination(
+        "elimination_4",
+        13,
+        23,
+        "US0700",
+        "final_tribal_council",
+      ),
+    ];
+
+    expect(
+      getEnhancedSurvivorPoints([], eliminations, [], 13, "US0695").total,
+    ).toBe(13);
+    expect(
+      getEnhancedSurvivorPoints([], eliminations, [], 13, "US0745").total,
+    ).toBe(13.5);
+    expect(
+      getEnhancedSurvivorPoints([], eliminations, [], 13, "US0722").total,
+    ).toBe(14);
+    expect(
+      getEnhancedSurvivorPoints([], eliminations, [], 13, "US0700").total,
+    ).toBe(14.5);
+  });
+
+  it("stacks the later-boot bonus with a medical evacuation's fixed points", () => {
+    const eliminations = [
+      makeElimination("elimination_1", 6, 10, "US0001"),
+      makeElimination("elimination_2", 6, 11, "US0002", "medical"),
+    ];
+
+    const scores = getEnhancedSurvivorPoints([], eliminations, [], 6, "US0002");
+
+    expect(scores.actions).toEqual([
+      { action: "eliminated", points_awarded: 6.5 },
+      { action: "medically_evacuated", points_awarded: MEDICAL_POINTS },
+    ]);
+    expect(scores.total).toBe(6.5 + MEDICAL_POINTS);
   });
 
   it("does not count tribe switches as earlier eliminations", () => {

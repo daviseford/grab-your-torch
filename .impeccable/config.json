@@ -1,3 +1,15 @@
 {
-  "buildPath": "comp"
+  "buildPath": "comp",
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "design-system-font-size",
+        "value": "0.9375rem",
+        "createdAt": "2026-08-25T01:22:52.664Z",
+        "reason": "User confirmed: 0.9375rem is intentional for the season admin aside title"
+      }
+    ]
+  }
 }
