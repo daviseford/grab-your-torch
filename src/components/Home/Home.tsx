@@ -11,6 +11,7 @@ import { Board, RevealStrip } from "../Layout";
 import classes from "./Home.module.css";
 import { HomeDraftExample } from "./HomeDraftExample";
 import { HomeResumeDrafts } from "./HomeResumeDrafts";
+import { HomeTradeExample } from "./HomeTradeExample";
 
 /** Scoring category colors, kept semantic app-wide. */
 const CATEGORY_COLORS: Record<ScoringCategory, string> = {
@@ -380,6 +381,7 @@ export const Home = () => {
                 take effect at the next episode reveal, so past points stay put.
               </p>
             </div>
+            <HomeTradeExample />
           </div>
         </section>
 

@@ -1,20 +1,13 @@
 import {
   Alert,
-  Badge,
-  Box,
   Button,
   Center,
-  Group,
   Loader,
   Stack,
   Text,
   Title,
 } from "@mantine/core";
-import {
-  IconAlertCircle,
-  IconArrowsExchange,
-  IconLock,
-} from "@tabler/icons-react";
+import { IconAlertCircle, IconLock } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
 import { useChallenges } from "../../hooks/useChallenges";
 import { useCompetition } from "../../hooks/useCompetition";
@@ -28,172 +21,19 @@ import {
   rejectTrade,
 } from "../../hooks/useTradeActions";
 import { useUser } from "../../hooks/useUser";
-import { CastawayId, Player, Trade } from "../../types";
+import { Trade } from "../../types";
 import { getParticipantName } from "../../utils/misc";
 import { getTradeLockEpisode } from "../../utils/tradeUtils";
 import { EmptySlate, StatusBadge } from "../Layout";
 import { ProposeTradeModal } from "./ProposeTradeModal";
+import { TradeOffer, TradeStatusBadge } from "./TradeOffer";
+import { getPlayers } from "./tradePlayers";
 import styles from "./TradesSection.module.css";
 
 const HISTORY_BATCH_SIZE = 5;
 
 const resolvedAt = (trade: Trade): string =>
   typeof trade.resolved_at === "string" ? trade.resolved_at : trade.created_at;
-
-type TradePlayer = Pick<Player, "castaway_id" | "full_name" | "img">;
-
-const getPlayers = (
-  players: Player[] | undefined,
-  ids: CastawayId[],
-): TradePlayer[] =>
-  ids.map(
-    (id) =>
-      players?.find((player) => player.castaway_id === id) ?? {
-        castaway_id: id,
-        full_name: id,
-        img: "",
-      },
-  );
-
-const initials = (name: string) =>
-  name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part.charAt(0))
-    .join("")
-    .toUpperCase();
-
-const TradeStatusBadge = ({
-  trade,
-  currentEpisode,
-}: {
-  trade: Trade;
-  /** null means the competition is not episode-limited, so nothing is hidden. */
-  currentEpisode: number | null;
-}) => {
-  if (trade.status === "accepted") {
-    // A cutoff is normally the next episode to be revealed, which is safe to
-    // name. Trades accepted before the cutoff was tied to `current_episode`
-    // carry the season's latest *data* episode instead, which would reveal how
-    // far the season has progressed -- hide anything beyond the next reveal.
-    const cutoff = trade.effective_episode;
-    const showCutoff =
-      typeof cutoff === "number" &&
-      (currentEpisode === null || cutoff <= currentEpisode + 1);
-    return (
-      <Badge color="green" variant="filled" size="sm">
-        {showCutoff ? `Accepted · from Ep ${cutoff}` : "Accepted"}
-      </Badge>
-    );
-  }
-  if (trade.status === "rejected")
-    return (
-      <Badge color="red" variant="outline" size="sm">
-        Declined
-      </Badge>
-    );
-  if (trade.status === "canceled")
-    return (
-      <Badge color="gray" variant="outline" size="sm">
-        Canceled
-      </Badge>
-    );
-  return <StatusBadge kind="pending" size="sm" />;
-};
-
-const PlayerList = ({ players }: { players: TradePlayer[] }) => (
-  <Stack gap={6}>
-    {players.map((player) => (
-      <div key={player.castaway_id} className={styles.playerRow}>
-        {player.img ? (
-          <img
-            src={player.img}
-            alt=""
-            width={30}
-            height={38}
-            loading="lazy"
-            decoding="async"
-            className={styles.face}
-          />
-        ) : (
-          <span className={styles.facePlaceholder} aria-hidden="true">
-            {initials(player.full_name)}
-          </span>
-        )}
-        <span className={styles.playerName}>{player.full_name}</span>
-      </div>
-    ))}
-  </Stack>
-);
-
-const Exchange = ({
-  leftLabel,
-  leftPlayers,
-  rightLabel,
-  rightPlayers,
-}: {
-  leftLabel: string;
-  leftPlayers: TradePlayer[];
-  rightLabel: string;
-  rightPlayers: TradePlayer[];
-}) => (
-  <div className={styles.exchange}>
-    <Box className={styles.exchangeSide}>
-      <Text className={styles.exchangeLabel}>{leftLabel}</Text>
-      <PlayerList players={leftPlayers} />
-    </Box>
-    <div className={styles.exchangeArrow} aria-hidden="true">
-      <IconArrowsExchange size={18} />
-    </div>
-    <Box className={styles.exchangeSide}>
-      <Text className={styles.exchangeLabel}>{rightLabel}</Text>
-      <PlayerList players={rightPlayers} />
-    </Box>
-  </div>
-);
-
-const TradeOffer = ({
-  trade,
-  title,
-  subtitle,
-  leftLabel,
-  leftPlayers,
-  rightLabel,
-  rightPlayers,
-  status,
-  actions,
-}: {
-  trade: Trade;
-  title: string;
-  subtitle: string;
-  leftLabel: string;
-  leftPlayers: TradePlayer[];
-  rightLabel: string;
-  rightPlayers: TradePlayer[];
-  status?: React.ReactNode;
-  actions?: React.ReactNode;
-}) => (
-  <Box className={styles.offer} data-trade-id={trade.id}>
-    <Group justify="space-between" align="flex-start" gap="sm" wrap="nowrap">
-      <div>
-        <Text className={styles.offerTitle}>{title}</Text>
-        <Text size="xs" c="dimmed">
-          {subtitle}
-        </Text>
-      </div>
-      {status}
-    </Group>
-
-    <Exchange
-      leftLabel={leftLabel}
-      leftPlayers={leftPlayers}
-      rightLabel={rightLabel}
-      rightPlayers={rightPlayers}
-    />
-
-    {actions && <div className={styles.offerActions}>{actions}</div>}
-  </Box>
-);
 
 const GroupHead = ({
   title,

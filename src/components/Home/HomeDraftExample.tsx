@@ -81,8 +81,5 @@ export const HomeDraftExample = () => (
         ariaLabel="Example draft board"
       />
     </div>
-    <figcaption className={classes.draftExampleCaption}>
-      A four-person draft of the Survivor 47 cast, on the clock for pick 7.
-    </figcaption>
   </figure>
 );
