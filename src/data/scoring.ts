@@ -47,7 +47,7 @@ export const BASE_PLAYER_SCORING: CategorizedPlayerScoring[] = [
   {
     action: "eliminated",
     description:
-      "1 point awarded per episode number (e.g. 6 points for Episode 6 elimination).",
+      "1 point awarded per episode number (e.g. 6 points for Episode 6 elimination). In a multi-elimination episode, later eliminations get +0.5 each (e.g. 6.5 for the second boot).",
     category: "Milestones",
   },
   {

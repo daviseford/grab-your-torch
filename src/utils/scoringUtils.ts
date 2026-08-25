@@ -53,12 +53,16 @@ export const getEnhancedSurvivorPoints = (
     }
   });
 
-  // if the player was eliminated, give them points based on episode number
+  // if the player was eliminated, give them points based on episode number;
+  // in a multi-elimination episode, later eliminations earn +0.5 each
   _eliminations?.forEach((e) => {
     if (e.castaway_id !== castawayId) return;
     if (e.variant === "switched") return; // Not a real elimination
 
-    addToScores("eliminated", e.episode_num);
+    const earlierSameEpisode = _eliminations.filter(
+      (x) => x.variant !== "switched" && x.order < e.order,
+    ).length;
+    addToScores("eliminated", e.episode_num + earlierSameEpisode * 0.5);
 
     if (e.variant === "medical") {
       addToScores(
