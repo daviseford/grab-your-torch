@@ -17,8 +17,11 @@ import shared from "./ScoringTables.module.css";
 export const ParticipantScoreboard = () => {
   const { data: competition } = useCompetition();
   const { slimUser } = useUser();
-  const { filteredEpisodes, filteredEvents, pointsByUserPerEpisodeWithPropBets } =
-    useScoringCalculations();
+  const {
+    filteredEpisodes,
+    filteredEvents,
+    pointsByUserPerEpisodeWithPropBets,
+  } = useScoringCalculations();
   const { survivorsByUserUid, eliminatedSurvivors } = useCompetitionMeta();
 
   if (!competition || competition.participants.length === 0) return null;
@@ -66,8 +69,7 @@ export const ParticipantScoreboard = () => {
             eliminatedSurvivors.includes(p.castaway_id),
           ).length;
           // The winner is never "out" but isn't merely alive either.
-          const aliveCount =
-            roster.length - outCount - (soleSurvivor ? 1 : 0);
+          const aliveCount = roster.length - outCount - (soleSurvivor ? 1 : 0);
           return (
             <li
               key={entry.uid}

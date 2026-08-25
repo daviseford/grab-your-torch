@@ -52,6 +52,10 @@ export const CreateElimination = () => {
 
     validate: {
       castaway_id: hasLength({ min: 1 }, "Add eliminated player"),
+      order: (value) =>
+        Object.values(eliminations ?? {}).some((x) => x.order === value)
+          ? `Order ${value} is already used by another elimination`
+          : null,
     },
 
     transformValues: (values) => ({
