@@ -31,7 +31,7 @@ _Avoid:_ player (in this sense — see Flagged ambiguities).
 
 The live, turn-taking session in which participants divide a season's castaways among themselves; its completion is what creates the **Competition**.
 
-Every castaway in the season is drafted, with turns cycling in order until the cast is exhausted. Only the creator promotes a finished draft into a competition. Older drafts can carry legacy shapes, so reads normalize both current and historical representations.
+Turns cycle in order until every participant holds the same number of castaways. When the cast does not divide evenly among the participants, the remainder goes **undrafted**: those castaways belong to no roster and score for no one, though prop bets may still name them. The pick count is fixed when the creator starts the draft, from the cast size and whoever has joined by then. Only the creator promotes a finished draft into a competition. Older drafts can carry legacy shapes, so reads normalize both current and historical representations.
 
 ### Draft pick
 

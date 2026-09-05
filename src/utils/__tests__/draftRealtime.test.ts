@@ -5,6 +5,7 @@ import {
   buildPickOrderUidMap,
   buildTurnsMap,
   normalizeDraft,
+  planDraftPicks,
 } from "../draftRealtime";
 
 const userA = {
@@ -20,6 +21,42 @@ const userB = {
   displayName: "B",
   isAdmin: false,
 } satisfies SlimUser;
+
+describe("planDraftPicks", () => {
+  it("splits an even cast with nothing left over", () => {
+    expect(planDraftPicks(18, 3)).toEqual({
+      totalPicks: 18,
+      picksEach: 6,
+      undrafted: 0,
+    });
+  });
+
+  it("leaves the remainder undrafted when the cast does not divide evenly", () => {
+    expect(planDraftPicks(21, 2)).toEqual({
+      totalPicks: 20,
+      picksEach: 10,
+      undrafted: 1,
+    });
+    expect(planDraftPicks(21, 4)).toEqual({
+      totalPicks: 20,
+      picksEach: 5,
+      undrafted: 1,
+    });
+    expect(planDraftPicks(18, 4)).toEqual({
+      totalPicks: 16,
+      picksEach: 4,
+      undrafted: 2,
+    });
+  });
+
+  it("plans nothing without participants", () => {
+    expect(planDraftPicks(21, 0)).toEqual({
+      totalPicks: 0,
+      picksEach: 0,
+      undrafted: 21,
+    });
+  });
+});
 
 describe("draftRealtime", () => {
   it("builds deterministic turn assignments", () => {

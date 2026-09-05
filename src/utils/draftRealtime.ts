@@ -71,6 +71,32 @@ export function buildPickOrderUidMap(
   );
 }
 
+export type DraftPlan = {
+  /** Picks the draft will run: the largest multiple of the participant count that fits the cast. */
+  totalPicks: number;
+  /** Picks per participant. */
+  picksEach: number;
+  /** Castaways nobody drafts because the cast does not divide evenly. */
+  undrafted: number;
+};
+
+/**
+ * How a cast splits among participants. Every participant gets the same
+ * number of picks; when the cast does not divide evenly the remainder goes
+ * undrafted rather than handing someone an extra castaway.
+ */
+export function planDraftPicks(
+  castCount: number,
+  participantCount: number,
+): DraftPlan {
+  if (participantCount <= 0 || castCount <= 0) {
+    return { totalPicks: 0, picksEach: 0, undrafted: Math.max(castCount, 0) };
+  }
+  const picksEach = Math.floor(castCount / participantCount);
+  const totalPicks = picksEach * participantCount;
+  return { totalPicks, picksEach, undrafted: castCount - totalPicks };
+}
+
 export function buildTurnsMap(
   participants: SlimUser[],
   totalPlayers: number,

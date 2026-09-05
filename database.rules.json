@@ -30,6 +30,11 @@
           ".write": "auth.token.admin == true || (auth != null && root.child('drafts').child($draftId).child('creator_uid').val() == auth.uid && root.child('drafts').child($draftId).child('state').child('started').val() != true)"
         },
 
+        "total_players": {
+          ".write": "auth.token.admin == true || (auth != null && root.child('drafts').child($draftId).child('creator_uid').val() == auth.uid && root.child('drafts').child($draftId).child('state').child('started').val() != true)",
+          ".validate": "newData.isNumber() && newData.val() > 0 && (!data.exists() || newData.val() <= data.val())"
+        },
+
         "draft_picks": {
           "$pickNumber": {
             ".write": "auth != null && root.child('drafts').child($draftId).child('participants').child(auth.uid).exists() && root.child('drafts').child($draftId).child('state').child('started').val() == true && root.child('drafts').child($draftId).child('state').child('finished').val() != true && !data.exists()"
