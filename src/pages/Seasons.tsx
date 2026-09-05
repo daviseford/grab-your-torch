@@ -85,14 +85,18 @@ export const Seasons = () => {
     [marqueeSeasons],
   );
 
+  // The marquee seasons stay out of the guide grid so they are not listed
+  // twice, except while searching: a search for "51" should find Survivor 51
+  // rather than report that nothing matches.
+  const isSearching = search.trim().length > 0;
   const browseSeasons = useMemo(() => {
     return allSeasons.filter(
       (meta) =>
-        !marqueeIds.has(meta.id) &&
+        (isSearching || !marqueeIds.has(meta.id)) &&
         matchesSearch(meta, search) &&
         matchesEra(meta, era),
     );
-  }, [allSeasons, marqueeIds, search, era]);
+  }, [allSeasons, marqueeIds, isSearching, search, era]);
 
   const clearFilters = () => {
     setSearch("");
