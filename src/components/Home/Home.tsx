@@ -6,6 +6,10 @@ import { BASE_PLAYER_SCORING, type ScoringCategory } from "../../data/scoring";
 import { SEASON_METADATA } from "../../data/season-metadata";
 import { useUser } from "../../hooks/useUser";
 import { SeasonTile } from "../../pages/SeasonTile";
+import {
+  formatPremiereDate,
+  getSeasonAirStatus,
+} from "../../utils/seasonAirStatus";
 import { BrandEmblem } from "../Brand";
 import { Board, RevealStrip } from "../Layout";
 import classes from "./Home.module.css";
@@ -80,7 +84,10 @@ export const Home = () => {
     () => Object.values(SEASON_METADATA).sort((a, b) => b.order - a.order),
     [],
   );
-  const liveSeasonId = seasons.find((m) => !m.complete)?.id ?? null;
+  const liveSeasonId =
+    seasons.find((m) => getSeasonAirStatus(m) === "live")?.id ?? null;
+  const upcomingSeasonId =
+    seasons.find((m) => getSeasonAirStatus(m) === "upcoming")?.id ?? null;
   const guideSeasons = seasons.slice(0, 5);
 
   return (
@@ -179,6 +186,7 @@ export const Home = () => {
             <div className={classes.guide}>
               {guideSeasons.map((meta) => {
                 const live = meta.id === liveSeasonId;
+                const upcoming = meta.id === upcomingSeasonId && meta.premiere;
                 return (
                   <SeasonTile
                     key={meta.id}
@@ -189,7 +197,9 @@ export const Home = () => {
                       // year and cast size are the facts that vary per season.
                       live
                         ? "Now airing"
-                        : `${meta.year} · ${meta.contestantCount} castaways`
+                        : upcoming
+                          ? `Premieres ${formatPremiereDate(upcoming)}`
+                          : `${meta.year} · ${meta.contestantCount} castaways`
                     }
                   />
                 );

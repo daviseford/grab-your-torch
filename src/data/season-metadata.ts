@@ -19,6 +19,11 @@ export type SeasonMeta = {
   img: string;
   /** True when the season has completed (winner determined in survivoR data) */
   complete: boolean;
+  /**
+   * ISO air date of the premiere, set for a season registered before it
+   * airs so the catalog can call it upcoming rather than on air.
+   */
+  premiere?: string;
 };
 
 export const SEASON_METADATA: Record<Season["id"], SeasonMeta> = {
@@ -571,5 +576,17 @@ export const SEASON_METADATA: Record<Season["id"], SeasonMeta> = {
     contestantCount: 18,
     img: "/images/season_50/season-50-logo.png",
     complete: true,
+  },
+  season_51: {
+    id: "season_51",
+    order: 51,
+    name: "Survivor 51",
+    subtitle: null,
+    location: "Mamanuca Islands, Fiji",
+    year: 2026,
+    contestantCount: 21,
+    img: "/images/season_51/season-51-logo.webp",
+    complete: false,
+    premiere: "2026-09-23",
   },
 };

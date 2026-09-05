@@ -14,6 +14,10 @@ import {
   useBugContext,
 } from "../components/Layout";
 import { SEASON_METADATA, type SeasonMeta } from "../data/season-metadata";
+import {
+  formatPremiereDate,
+  getSeasonAirStatus,
+} from "../utils/seasonAirStatus";
 import { SEASON_ERAS, type SeasonEraId } from "./SeasonEras";
 import classes from "./Seasons.module.css";
 import { SeasonTile } from "./SeasonTile";
@@ -55,12 +59,24 @@ export const Seasons = () => {
     [],
   );
 
-  // The live season is the highest-order incomplete season
+  // The live season is the highest-order incomplete season that has
+  // premiered; a registered season still waiting to air is "upcoming".
   const liveSeason = useMemo(
-    () => allSeasons.find((m) => !m.complete) ?? null,
+    () => allSeasons.find((m) => getSeasonAirStatus(m) === "live") ?? null,
+    [allSeasons],
+  );
+  const upcomingSeason = useMemo(
+    () => allSeasons.find((m) => getSeasonAirStatus(m) === "upcoming") ?? null,
     [allSeasons],
   );
   const liveSeasonId = liveSeason?.id ?? null;
+  const upcomingSeasonId = upcomingSeason?.id ?? null;
+
+  const introContext = liveSeason
+    ? `On air · ${liveSeason.name}`
+    : upcomingSeason?.premiere
+      ? `Premieres ${formatPremiereDate(upcomingSeason.premiere)} · ${upcomingSeason.name}`
+      : undefined;
 
   const marqueeSeasons = useMemo(() => allSeasons.slice(0, 2), [allSeasons]);
 
@@ -87,7 +103,7 @@ export const Seasons = () => {
     <div className={classes.page}>
       <PageIntro
         eyebrow="Seasons"
-        context={liveSeason ? `On air · ${liveSeason.name}` : undefined}
+        context={introContext}
         title="Pick a season"
         description="Choose a season, scout the castaways, and get a draft going with your friends."
         actions={
@@ -101,13 +117,14 @@ export const Seasons = () => {
       <section aria-labelledby="seasons-onair" className={classes.section}>
         <div className={classes.sectionLabel}>
           <h2 id="seasons-onair" className={classes.sectionTitle}>
-            {liveSeason ? "On air" : "Latest"}
+            {liveSeason ? "On air" : upcomingSeason ? "Coming up" : "Latest"}
           </h2>
           {liveSeason && <StatusBadge kind="live" size="sm" />}
         </div>
         <div className={classes.onAir}>
           {marqueeSeasons.map((meta) => {
             const live = meta.id === liveSeasonId;
+            const upcoming = meta.id === upcomingSeasonId;
             return (
               <SeasonTile
                 key={meta.id}
@@ -117,6 +134,10 @@ export const Seasons = () => {
                 badges={
                   live ? (
                     <StatusBadge kind="live" size="sm" />
+                  ) : upcoming ? (
+                    <StatusBadge kind="pending" size="sm">
+                      Upcoming
+                    </StatusBadge>
                   ) : meta.complete ? (
                     <StatusBadge kind="complete" size="sm" />
                   ) : undefined

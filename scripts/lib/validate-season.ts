@@ -30,9 +30,21 @@ function findDuplicates<T>(
   return messages;
 }
 
+/** A castaway_id → full_name pair already committed in a season file. */
+export interface ExistingCastaway {
+  castawayId: string;
+  fullName: string;
+}
+
 /**
  * Validate season data against sanity checks:
  * - Episode count monotonicity (cannot decrease)
+ * - Castaway identity stability: an id already in the committed file must
+ *   still exist and a committed full_name must keep its id (drafts and
+ *   competitions key on castaway_id, so a re-numbered cast would silently
+ *   hand rosters to the wrong people; this matters most for casts
+ *   bootstrapped from the wiki with provisional ids before survivoR
+ *   published the season)
  * - All castaway_id references exist in the player list
  * - No duplicate IDs for challenges, eliminations, or events
  * - Structural integrity (required fields present)
@@ -41,11 +53,41 @@ export function validateSeasonData(
   playerData: ScrapeResult,
   resultsData: ScrapeResultsOutput,
   existingEpisodeCount?: number,
+  existingCastaways?: ExistingCastaway[],
 ): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
   const playerIds = new Set(playerData.players.map((p) => p.castawayId));
+
+  // Castaway identity stability against the committed file
+  if (existingCastaways && existingCastaways.length > 0) {
+    const newNameById = new Map(
+      playerData.players.map((p) => [p.castawayId, p.localName]),
+    );
+    const newIdByName = new Map(
+      playerData.players.map((p) => [p.localName, p.castawayId]),
+    );
+    for (const existing of existingCastaways) {
+      const newName = newNameById.get(existing.castawayId);
+      const newId = newIdByName.get(existing.fullName);
+      if (newName === undefined) {
+        errors.push(
+          `Castaway ${existing.castawayId} (${existing.fullName}) is in the committed file but missing from the new data`,
+        );
+      } else if (newName !== existing.fullName) {
+        if (newId !== undefined && newId !== existing.castawayId) {
+          errors.push(
+            `Castaway "${existing.fullName}" changed id from ${existing.castawayId} to ${newId}`,
+          );
+        } else {
+          warnings.push(
+            `Castaway ${existing.castawayId} renamed from "${existing.fullName}" to "${newName}"`,
+          );
+        }
+      }
+    }
+  }
 
   // Episode count monotonicity
   if (
