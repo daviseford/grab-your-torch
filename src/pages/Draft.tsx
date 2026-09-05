@@ -550,7 +550,8 @@ export const DraftComponent = () => {
   const undraftedCount = Math.max(castCount - totalPicks, 0);
   const columnCount = Math.max(boardColumns.length, 1);
   const roundCount = Math.ceil(totalPicks / columnCount);
-  const picksEach = draft && participants.length > 0 ? plan.picksEach : null;
+  // A draft needs two people to start, so a solo lobby has no split to show.
+  const picksEach = draft && participants.length >= 2 ? plan.picksEach : null;
   const draftedSummary =
     undraftedCount > 0
       ? `All ${totalPicks} picks are in and ${undraftedCount} ${undraftedCount === 1 ? "castaway" : "castaways"} went undrafted`

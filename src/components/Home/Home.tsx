@@ -178,8 +178,13 @@ export const Home = () => {
               </h2>
               <p className={classes.lead}>
                 All {SEASON_COUNT} US seasons and {CASTAWAY_COUNT}+ castaways
-                are ready to play, from the original Borneo to the season airing
-                now. Browse by era, search by name or location, and start a
+                are ready to play, from the original Borneo to{" "}
+                {liveSeasonId
+                  ? "the season airing now"
+                  : upcomingSeasonId
+                    ? "the season about to premiere"
+                    : "the latest season"}
+                . Browse by era, search by name or location, and start a
                 competition on any of them.
               </p>
             </div>
