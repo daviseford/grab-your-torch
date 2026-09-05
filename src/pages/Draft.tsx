@@ -56,7 +56,11 @@ import {
   SlimUser,
 } from "../types";
 import { trackEvent } from "../utils/analytics";
-import { buildPickOrderUidMap, buildTurnsMap } from "../utils/draftRealtime";
+import {
+  buildPickOrderUidMap,
+  buildTurnsMap,
+  planDraftPicks,
+} from "../utils/draftRealtime";
 import { recordRecentDraft, removeRecentDraft } from "../utils/recentDrafts";
 import classes from "./Draft.module.css";
 import { DraftBoard } from "./DraftBoard";
@@ -128,10 +132,6 @@ export const DraftComponent = () => {
   const allPlayersDoneWithPropBets =
     draft?.prop_bets &&
     draft?.prop_bets?.length === draft?.participants?.length;
-
-  const isInvalidNumberOfPlayers = !draft
-    ? false
-    : draft.total_players % draft.participants.length !== 0;
 
   const addPropBetsToDraft = async (values: PropBetsFormData) => {
     if (!draft || !slimUser || userHasSubmittedPropBets) return;
@@ -349,16 +349,21 @@ export const DraftComponent = () => {
   // double-click would race two different pick orders.
   const [startingDraft, setStartingDraft] = useState(false);
   const startDraft = async () => {
-    if (!draft || !slimUser?.uid || startingDraft) return;
+    if (!draft || !season || !slimUser?.uid || startingDraft) return;
     setStartingDraft(true);
 
     const draftOrder = shuffle(draft.participants);
-    const turns = buildTurnsMap(draftOrder, draft.total_players);
+    // The draft was created with the whole cast as its pick count. Now that
+    // the lobby is final, shrink it to what divides evenly among everyone who
+    // joined; the remainder stays undrafted.
+    const plan = planDraftPicks(season.players.length, draftOrder.length);
+    const turns = buildTurnsMap(draftOrder, plan.totalPicks);
 
     try {
       await update(ref(rt_db, `drafts/${draft.id}`), {
         pick_order_uids: buildPickOrderUidMap(draftOrder),
         turns,
+        total_players: plan.totalPicks,
         "state/started": true,
         // `state/finished` is already false from draft creation, and the RTDB
         // rule for it only allows a false-to-true write, so re-writing false
@@ -534,13 +539,22 @@ export const DraftComponent = () => {
     ? draft.pick_order
     : participants;
   const castCount = season.players?.length ?? 0;
-  const totalPicks = draft?.total_players ?? castCount;
+  // Until the host starts, total_players still holds the whole cast, so the
+  // lobby previews the split for whoever has joined so far.
+  const plan = planDraftPicks(castCount, participants.length);
+  const totalPicks = draft?.started
+    ? draft.total_players
+    : draft
+      ? plan.totalPicks
+      : castCount;
+  const undraftedCount = Math.max(castCount - totalPicks, 0);
   const columnCount = Math.max(boardColumns.length, 1);
   const roundCount = Math.ceil(totalPicks / columnCount);
-  const picksEach =
-    draft && !isInvalidNumberOfPlayers && participants.length > 0
-      ? totalPicks / participants.length
-      : null;
+  const picksEach = draft && participants.length > 0 ? plan.picksEach : null;
+  const draftedSummary =
+    undraftedCount > 0
+      ? `All ${totalPicks} picks are in and ${undraftedCount} ${undraftedCount === 1 ? "castaway" : "castaways"} went undrafted`
+      : "Every castaway is drafted";
   const lobbyRounds = Math.min(LOBBY_PREVIEW_ROUNDS, roundCount);
   const currentRound = draft
     ? Math.min(roundCount, Math.ceil(draft.current_pick_number / columnCount))
@@ -697,7 +711,7 @@ export const DraftComponent = () => {
               tools={
                 <>
                   {sharePlate}
-                  {draft && isCreator && !isInvalidNumberOfPlayers && (
+                  {draft && isCreator && (
                     <Button
                       size="md"
                       onClick={startDraft}
@@ -737,11 +751,16 @@ export const DraftComponent = () => {
             </DraftSpine>
           )}
 
-          {draft && isInvalidNumberOfPlayers && (
-            <Alert color="orange" variant="light">
-              The {castCount} contestants can't be split evenly among{" "}
-              {draft.participants.length} players. Invite another friend or
-              remove one to continue.
+          {draft && participants.length >= 2 && undraftedCount > 0 && (
+            <Alert color="blue" variant="light" role="status">
+              {castCount} castaways don't split evenly among{" "}
+              {participants.length} players: everyone drafts {plan.picksEach},
+              and{" "}
+              {undraftedCount === 1
+                ? "1 castaway"
+                : `${undraftedCount} castaways`}{" "}
+              {undraftedCount === 1 ? "goes" : "go"} undrafted and{" "}
+              {undraftedCount === 1 ? "scores" : "score"} for no one.
             </Alert>
           )}
 
@@ -752,6 +771,7 @@ export const DraftComponent = () => {
               viewerUid={slimUser?.uid}
               castCount={castCount}
               picksEach={picksEach}
+              undraftedCount={undraftedCount}
             />
           )}
 
@@ -879,9 +899,9 @@ export const DraftComponent = () => {
             description={
               allPlayersDoneWithPropBets
                 ? competition
-                  ? "Every castaway is drafted and every prop bet is in. Your competition is ready."
-                  : "Every castaway is drafted and every prop bet is in."
-                : "Every castaway is drafted. The competition starts once every prop bet is in."
+                  ? `${draftedSummary} and every prop bet is in. Your competition is ready.`
+                  : `${draftedSummary} and every prop bet is in.`
+                : `${draftedSummary}. The competition starts once every prop bet is in.`
             }
             tools={
               allPlayersDoneWithPropBets && competition ? (

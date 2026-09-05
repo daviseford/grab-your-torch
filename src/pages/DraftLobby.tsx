@@ -9,8 +9,10 @@ type DraftParticipantsProps = {
   creatorUid: string;
   viewerUid?: string;
   castCount: number;
-  /** Picks per participant when the cast splits evenly. */
+  /** Picks per participant for the group that has joined so far. */
   picksEach: number | null;
+  /** Castaways left undrafted because the cast does not split evenly. */
+  undraftedCount?: number;
 };
 
 /** The lobby's participant board: one slate per friend who has joined. */
@@ -20,6 +22,7 @@ export const DraftParticipants = ({
   viewerUid,
   castCount,
   picksEach,
+  undraftedCount = 0,
 }: DraftParticipantsProps) => (
   <Board
     title="Participants"
@@ -29,6 +32,9 @@ export const DraftParticipants = ({
       <span className={classes.hint}>
         {castCount} castaways
         {picksEach !== null && ` · ${picksEach} picks each`}
+        {picksEach !== null &&
+          undraftedCount > 0 &&
+          ` · ${undraftedCount} undrafted`}
       </span>
     }
   >
