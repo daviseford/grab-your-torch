@@ -22,6 +22,27 @@ interface ExistingPlayerData {
 }
 
 /**
+ * Extract castaway_id → full_name pairs from the SEASON_XX_CASTAWAY_LOOKUP
+ * export of an existing season file. Used to make sure a regeneration never
+ * re-numbers a cast that drafts already reference.
+ */
+export function extractExistingCastawayLookup(
+  fileContent: string,
+): Array<{ castawayId: string; fullName: string }> {
+  const lookupRegex =
+    /^\s*"?(US\d{4})"?:\s*\{\s*full_name:\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')/gm;
+  const pairs: Array<{ castawayId: string; fullName: string }> = [];
+  let match: RegExpExecArray | null;
+  while ((match = lookupRegex.exec(fileContent)) !== null) {
+    pairs.push({
+      castawayId: match[1],
+      fullName: (match[2] ?? match[3]).replace(/\\(["'\\])/g, "$1"),
+    });
+  }
+  return pairs;
+}
+
+/**
  * Resolve name and img from a regex match with groups:
  *   [1] or [2] = name (double or single quoted)
  *   [3] or [4] or [5] = img (double quoted, single quoted, or backtick template)

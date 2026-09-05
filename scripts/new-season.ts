@@ -1,10 +1,12 @@
 /**
  * Season Bootstrap CLI — one command to scaffold a complete season.
  *
- * Usage: yarn new-season <N> [--push] [--force] [--dry-run]
+ * Usage: yarn new-season <N> [--push] [--force] [--dry-run] [--wiki-cast]
  *
  * Steps:
  *   1. Fetch player data from survivoR dataset
+ *      (--wiki-cast: when survivoR has no castaways yet, read the announced
+ *      cast from the Survivor Wiki with provisional castaway_ids)
  *   2. Transform survivoR data
  *   3. Fetch player images and bios from wiki (supplemental)
  *   4. Generate full season data file
@@ -17,17 +19,23 @@ import * as fs from "fs";
 import * as path from "path";
 import { generateFullSeasonFile, registerSeason } from "./lib/codegen.js";
 import { pushSeasonToFirestore } from "./lib/firebase-push.js";
-import { fetchSeasonData } from "./lib/survivor-client.js";
+import { fetchSeasonData, fetchTable } from "./lib/survivor-client.js";
 import {
   transformPlayers,
   transformResults,
 } from "./lib/survivor-transformer.js";
+import type { SurvivorCastaway } from "./lib/survivor-types.js";
 import {
   downloadImage,
   fetchImageUrl,
   fetchWikitext,
   getSeasonPageName,
 } from "./lib/wiki-api.js";
+import {
+  buildProvisionalCastaways,
+  fetchWikiCast,
+  nextCastawayId,
+} from "./lib/wiki-cast.js";
 import { fetchWikiSupplemental } from "./lib/wiki-supplemental.js";
 import { parseSeasonInfobox } from "./lib/wikitext-parser.js";
 
@@ -110,10 +118,11 @@ async function main(): Promise<void> {
   const force = flags.has("--force");
   const push = flags.has("--push");
   const dryRun = flags.has("--dry-run");
+  const wikiCast = flags.has("--wiki-cast");
 
   if (!seasonNum || isNaN(seasonNum)) {
     console.error(
-      "Usage: yarn new-season <season_number> [--push] [--force] [--dry-run]",
+      "Usage: yarn new-season <season_number> [--push] [--force] [--dry-run] [--wiki-cast]",
     );
     console.error("Example: yarn new-season 51");
     process.exit(1);
@@ -135,6 +144,52 @@ async function main(): Promise<void> {
   logStep(1, `Fetching survivoR data for Season ${seasonNum}`);
   const seasonData = await fetchSeasonData(seasonNum);
 
+  let provisionalCast = false;
+  if (seasonData.castaways.length === 0) {
+    if (!wikiCast) {
+      console.error(
+        `\nsurvivoR has no castaways for Season ${seasonNum}. If CBS has announced the cast, rerun with --wiki-cast to bootstrap it from the Survivor Wiki with provisional castaway_ids.`,
+      );
+      process.exit(1);
+    }
+
+    console.log(
+      `  Falling back to the Survivor Wiki cast table (provisional castaway_ids)...`,
+    );
+    const cast = await fetchWikiCast(seasonNum);
+    if (cast.length === 0) {
+      console.error(
+        `\nNo castaways found on the wiki page "${getSeasonPageName(seasonNum)}" either. Nothing to bootstrap.`,
+      );
+      process.exit(1);
+    }
+
+    // survivoR numbers new castaways sequentially, alphabetically by
+    // full_name; returning players keep the id they already have.
+    const allCastaways = await fetchTable<SurvivorCastaway>("castaways");
+    const knownIds = new Map(
+      allCastaways
+        .filter((c) => c.version === "US")
+        .map((c) => [c.full_name, c.castaway_id] as const),
+    );
+    const firstId = nextCastawayId(knownIds.values());
+    seasonData.castaways = buildProvisionalCastaways(
+      cast,
+      seasonNum,
+      firstId,
+      knownIds,
+    );
+    provisionalCast = true;
+
+    console.log(
+      `  Wiki cast: ${cast.length} castaways, provisional ids from ${firstId}`,
+    );
+    for (const c of seasonData.castaways) {
+      const source = knownIds.has(c.full_name) ? "returning" : "provisional";
+      console.log(`    ${c.castaway_id}  ${c.full_name.padEnd(28)} ${source}`);
+    }
+  }
+
   // Step 2
   logStep(2, "Transforming survivoR data");
   const playerData = transformPlayers(seasonData, seasonNum);
@@ -146,12 +201,21 @@ async function main(): Promise<void> {
 
   // Step 4
   logStep(4, "Generating season data file");
-  const fileContent = generateFullSeasonFile(
+  let fileContent = generateFullSeasonFile(
     playerData,
     resultsData,
     seasonNum,
     outputPath,
   );
+  if (provisionalCast) {
+    fileContent =
+      `// Cast bootstrapped from the Survivor Wiki before survivoR published this\n` +
+      `// season. castaway_ids are PROVISIONAL: predicted from survivoR's numbering\n` +
+      `// convention (sequential after the last id, alphabetical by full_name).\n` +
+      `// scripts/sync-season.ts refuses to regenerate this file if survivoR's real\n` +
+      `// ids differ, so any mismatch surfaces as a failed sync, not a silent swap.\n` +
+      fileContent;
+  }
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true });
   }

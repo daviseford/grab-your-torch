@@ -230,6 +230,11 @@ import {
   SEASON_50_PLAYERS,
 } from "./season_50";
 import {
+  SEASON_51_CASTAWAY_LOOKUP,
+  SEASON_51_EPISODES,
+  SEASON_51_PLAYERS,
+} from "./season_51";
+import {
   SEASON_6_CASTAWAY_LOOKUP,
   SEASON_6_EPISODES,
   SEASON_6_PLAYERS,
@@ -748,5 +753,14 @@ export const SEASONS = {
     players: SEASON_47_PLAYERS,
     episodes: SEASON_47_EPISODES,
     castawayLookup: SEASON_47_CASTAWAY_LOOKUP,
+  },
+  season_51: {
+    id: "season_51" as const,
+    order: 51,
+    name: "Survivor 51",
+    img: "/images/season_51/season-51-logo.webp",
+    players: SEASON_51_PLAYERS,
+    episodes: SEASON_51_EPISODES,
+    castawayLookup: SEASON_51_CASTAWAY_LOOKUP,
   },
 } satisfies Record<Season["id"], Season>;

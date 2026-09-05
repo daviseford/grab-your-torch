@@ -20,6 +20,10 @@ import { useSeason } from "../hooks/useSeason";
 import { useUser } from "../hooks/useUser";
 import { trackEvent } from "../utils/analytics";
 import { generateDraftId } from "../utils/draftRealtime";
+import {
+  formatPremiereDate,
+  getSeasonAirStatus,
+} from "../utils/seasonAirStatus";
 import { Players } from "./Players";
 import classes from "./SingleSeason.module.css";
 
@@ -148,7 +152,13 @@ export const SingleSeason = () => {
   // Catalog facts (location, year, airing state) live in the lightweight
   // metadata; the season document itself carries the cast.
   const meta: SeasonMeta | undefined = SEASON_METADATA[season.id];
-  const live = meta ? !meta.complete : false;
+  const airStatus = meta ? getSeasonAirStatus(meta) : "complete";
+  const live = airStatus === "live";
+  const introContext = live
+    ? `On air · Season ${season.order}`
+    : airStatus === "upcoming" && meta?.premiere
+      ? `Premieres ${formatPremiereDate(meta.premiere)} · Season ${season.order}`
+      : undefined;
   const castCount = season.players?.length ?? 0;
 
   return (
@@ -189,7 +199,7 @@ export const SingleSeason = () => {
 
       <PageIntro
         eyebrow="Seasons"
-        context={live ? `On air · Season ${season.order}` : undefined}
+        context={introContext}
         title={season.name}
         description={
           <>

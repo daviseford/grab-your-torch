@@ -6,8 +6,8 @@ describe("SEASON_METADATA", () => {
   const entries = Object.entries(SEASON_METADATA);
   const values = Object.values(SEASON_METADATA);
 
-  it("has exactly 50 entries", () => {
-    expect(entries.length).toBe(50);
+  it("has exactly 51 entries", () => {
+    expect(entries.length).toBe(51);
   });
 
   it("every key matches season_N pattern and equals the entry id", () => {
@@ -18,9 +18,17 @@ describe("SEASON_METADATA", () => {
     }
   });
 
-  it("order values are unique and cover 1-50", () => {
+  it("order values are unique and cover 1-51", () => {
     const orders = values.map((m) => m.order).sort((a, b) => a - b);
-    expect(orders).toEqual(Array.from({ length: 50 }, (_, i) => i + 1));
+    expect(orders).toEqual(Array.from({ length: 51 }, (_, i) => i + 1));
+  });
+
+  it("premiere dates are ISO dates and only set on incomplete seasons", () => {
+    for (const meta of values) {
+      if (meta.premiere === undefined) continue;
+      expect(meta.premiere).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(meta.complete).toBe(false);
+    }
   });
 
   it("every entry has a valid year and contestant count", () => {

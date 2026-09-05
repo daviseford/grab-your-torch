@@ -20,6 +20,8 @@ Run the full season bootstrap command:
 yarn new-season $ARGUMENTS --force --push
 ```
 
+If survivoR has no castaways for the season yet (the script exits with a message saying so), the season has not started airing. If CBS has announced the cast, rerun with `--wiki-cast` to bootstrap the cast from the Survivor Wiki with provisional castaway_ids. Leave `--push` off in that case: pushing provisional data to production Firestore is the user's call, so report the exact push command instead. A wiki-bootstrapped season also needs a hand-written entry in `src/data/season-metadata.ts` with `complete: false` and the `premiere` date.
+
 This command:
 
 1. Fetches structured gameplay data from the survivoR dataset (players, episodes, challenges, eliminations, events, advantages)

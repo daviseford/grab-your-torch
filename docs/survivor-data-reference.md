@@ -202,3 +202,11 @@ survivoR uses preferred/stage names rather than full legal names:
 | `Oscar Lusth` | `Ozzy Lusth`              |
 
 The `castaway_details.json` table has `full_name_detailed` which may include the legal name, but it lacks `version`/`season` fields (it's a global lookup).
+
+## Pre-Premiere Cast Bootstrap (Provisional IDs)
+
+survivoR only publishes a season once episodes air, but CBS announces the cast a few weeks earlier and the Survivor Wiki season page carries the full castaway table by then. `yarn new-season <N> --wiki-cast` reads that table (`scripts/lib/wiki-cast.ts`) when survivoR has no rows and shapes it like `castaways.json`, so the rest of the pipeline runs unchanged.
+
+The `castaway_id`s it assigns are **provisional**. survivoR numbers each season's new castaways sequentially after the highest existing id, in case-insensitive alphabetical order of `full_name`; seasons 47, 48, and 49 all follow that rule exactly (for example S49: `US0734 Alex Moore` ... `US0741 Matt Williams`, `US0742 MC Chukwujekwu` ... `US0751 Steven Ramm`). Returning players keep their existing id.
+
+Because drafts and competitions key on `castaway_id`, a wrong guess must never be applied silently. `validateSeasonData` compares the regenerated cast against the committed `SEASON_XX_CASTAWAY_LOOKUP` and fails the sync when a committed id disappears or a committed name comes back under a different id (a same-id rename is only a warning). If that ever fires, the fix is a one-off migration of the affected competition and draft documents to survivoR's ids, then re-running the sync.

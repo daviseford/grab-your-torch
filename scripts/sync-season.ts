@@ -11,6 +11,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import {
+  extractExistingCastawayLookup,
   extractExistingPlayers,
   generateFullSeasonFile,
   registerSeason,
@@ -182,10 +183,14 @@ async function main(): Promise<void> {
     isNewSeason || !existingContent
       ? undefined
       : countEpisodes(existingContent);
+  const existingCastaways = existingContent
+    ? extractExistingCastawayLookup(existingContent)
+    : undefined;
   const validation = validateSeasonData(
     playerData,
     resultsData,
     existingEpisodeCount,
+    existingCastaways,
   );
 
   if (!validation.valid) {
