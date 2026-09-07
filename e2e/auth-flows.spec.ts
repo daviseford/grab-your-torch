@@ -15,7 +15,7 @@
  * - afterAll flushes again so the emulator is empty when the suite exits.
  */
 
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import admin from "firebase-admin";
 import { RESET_REQUEST_CONFIRMATION } from "../src/components/Auth/authErrors";
 
@@ -279,8 +279,16 @@ const PROD_HOST_SUFFIXES = [
   ".googletagmanager.com",
 ];
 
+// Static font assets the Auth emulator's own sign-in picker page pulls in.
+// They carry no Firebase data and never touch the production project.
+const EMULATOR_PICKER_ASSET_HOSTS = [
+  "fonts.googleapis.com",
+  "fonts.gstatic.com",
+];
+
 const isProductionHost = (hostname: string): boolean => {
   if (hostname === "127.0.0.1" || hostname === "localhost") return false;
+  if (EMULATOR_PICKER_ASSET_HOSTS.includes(hostname)) return false;
   return PROD_HOST_SUFFIXES.some(
     (suffix) => hostname === suffix.slice(1) || hostname.endsWith(suffix),
   );
@@ -1143,4 +1151,107 @@ test("public browsing stays account-free and makes no no-signup claims", async (
     SLOW,
   );
   await expect(dialog(page)).toHaveCount(0);
+});
+
+// Social sign-in through the Auth emulator's fake account picker. The
+// emulator serves its own popup page for Google (and any other OAuth
+// provider) at AUTH_EMU, so this exercises the real signInWithPopup path with
+// no production traffic. Discord is not enabled in e2e-auth mode (no
+// VITE_AUTH_DISCORD_PROVIDER_ID in .env.e2e-auth), so only Google renders.
+// The Competitions page is the entry point because its sign-in gate carries
+// no retained intent, so nothing else happens after authentication.
+
+// The picker attaches its click handlers in an inline script that runs only
+// after a blocking third-party script has loaded, so interacting before the
+// load event can click a button that does nothing yet. It then hands its
+// result to the emulator relay iframe inside the opener page; on a cold dev
+// server that iframe can still be loading when the picker submits, and the
+// result is dropped, so wait for the relay to finish loading too.
+const openGooglePicker = async (page: Page) => {
+  const popup = page.waitForEvent("popup");
+  await dialog(page)
+    .getByRole("button", { name: "Continue with Google" })
+    .click();
+  const picker = await popup;
+  await picker.waitForLoadState("load");
+
+  const isRelayFrame = (url: string) => url.includes("/emulator/auth/iframe");
+  await expect
+    .poll(() => page.frames().some((frame) => isRelayFrame(frame.url())), SLOW)
+    .toBe(true);
+  await page
+    .frames()
+    .find((frame) => isRelayFrame(frame.url()))
+    ?.waitForLoadState("load");
+  return picker;
+};
+
+// The picker hands its result back by posting a message from the popup to the
+// emulator's relay iframe inside the opener page. In headless Chromium that
+// relay never arrives while any Playwright route is registered on the
+// context, even a pass-through one, so this test swaps the suite's aborting
+// guard for an observe-only tripwire: production-bound requests are still
+// recorded and still fail the test in afterEach, they are just not aborted.
+const observeProductionRequestsOnly = async (context: BrowserContext) => {
+  await context.unroute("**/*");
+  context.on("request", (request) => {
+    if (isProductionHost(new URL(request.url()).hostname)) {
+      productionViolations.push(request.url());
+    }
+  });
+};
+
+const userDocsFor = async (email: string) =>
+  (await adminDb.collection("users").where("email", "==", email).get()).docs;
+
+test("Google sign-in: a first visit creates the account and user document, a return visit reuses both", async ({
+  page,
+  context,
+  isMobile,
+}) => {
+  await observeProductionRequestsOnly(context);
+  await page.goto("/competitions");
+  await main(page)
+    .getByRole("button", { name: "Sign in", exact: true })
+    .click();
+
+  await expect(
+    dialog(page).getByRole("button", { name: "Continue with Discord" }),
+  ).toHaveCount(0);
+
+  // First sign-in: pick a brand-new auto-generated Google account.
+  const picker = await openGooglePicker(page);
+  await picker.locator("#add-account-button").click();
+  await expect(picker.locator("#autogen-button")).toBeVisible();
+  await picker.locator("#autogen-button").click();
+  const email = await picker.locator("#email-input").inputValue();
+  const displayName = await picker.locator("#display-name-input").inputValue();
+  expect(email).toBeTruthy();
+  await picker.locator("#sign-in").click();
+
+  await expect(dialog(page)).toBeHidden(SLOW);
+  await expectSignedIn(page, isMobile);
+
+  // The user document is provisioned exactly like a password registration.
+  await expect
+    .poll(async () => (await userDocsFor(email)).length, SLOW)
+    .toBe(1);
+  const created = (await userDocsFor(email))[0].data();
+  expect(created.displayName).toBe(displayName);
+  expect(created.uid).toBe((await admin.auth().getUserByEmail(email)).uid);
+
+  // Return visit: the same account signs straight back in and adds nothing.
+  await signOutViaNavbar(page, isMobile);
+  await main(page)
+    .getByRole("button", { name: "Sign in", exact: true })
+    .click();
+  const returningPicker = await openGooglePicker(page);
+  await returningPicker
+    .locator("#accounts-list")
+    .getByText(email, { exact: true })
+    .click();
+
+  await expect(dialog(page)).toBeHidden(SLOW);
+  await expectSignedIn(page, isMobile);
+  expect((await userDocsFor(email)).length).toBe(1);
 });

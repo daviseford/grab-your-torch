@@ -15,6 +15,10 @@ export type AuthErrorCategory =
   | "too-many-requests"
   | "network"
   | "expired-action-code"
+  | "cancelled"
+  | "popup-blocked"
+  | "account-exists"
+  | "provider-disabled"
   | "generic";
 
 export type AuthError = {
@@ -39,6 +43,15 @@ const MESSAGES: Record<AuthErrorCategory, string> = {
   "too-many-requests": "Too many attempts. Wait a few minutes and try again.",
   network: "The network request failed. Check your connection and try again.",
   "expired-action-code": RESET_LINK_INVALID_MESSAGE,
+  // Social sign-in (popup) outcomes. "cancelled" is never shown by the auth
+  // modal, which treats a closed popup as a plain release of the form.
+  cancelled: "Sign-in was cancelled before it finished.",
+  "popup-blocked":
+    "Your browser blocked the sign-in window. Allow popups for this site and try again.",
+  "account-exists":
+    "An account already exists with this email using a different sign-in method. Sign in with that method instead.",
+  "provider-disabled":
+    "This sign-in method is not available right now. Try another way to sign in.",
   generic: GENERIC_MESSAGE,
 };
 
@@ -55,6 +68,12 @@ const CATEGORY_BY_CODE: Record<string, AuthErrorCategory> = {
   "auth/network-request-failed": "network",
   "auth/expired-action-code": "expired-action-code",
   "auth/invalid-action-code": "expired-action-code",
+  "auth/popup-closed-by-user": "cancelled",
+  "auth/cancelled-popup-request": "cancelled",
+  "auth/user-cancelled": "cancelled",
+  "auth/popup-blocked": "popup-blocked",
+  "auth/account-exists-with-different-credential": "account-exists",
+  "auth/operation-not-allowed": "provider-disabled",
 };
 
 const extractAuthCode = (error: unknown): string | null => {
