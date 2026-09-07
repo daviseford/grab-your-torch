@@ -12,6 +12,12 @@ export interface ContestantInfo {
   allSeasons?: number[];
   /** Wiki image filename (e.g., "S46 Ben Katzman.jpg") -- needs URL resolution via API */
   imageFileName?: string;
+  /**
+   * True when `imageFileName` is labelled for the target season (an `S<N>`
+   * entry in a multi-season gallery or tabber, or a bare `S<N> Name.jpg`).
+   * False when the parser fell back to the first (most recent) entry.
+   */
+  imageIsSeasonSpecific?: boolean;
   /** Nickname extracted from the bold intro paragraph (e.g., "Coach", "Q", "Boston Rob") */
   nickname?: string;
 }
@@ -211,9 +217,10 @@ export function parseContestantPage(
           wikitext,
         )?.[1] ?? fields.image)
       : fields.image;
-    const imageFileName = extractImageFileName(imageSource, targetSeasonNum);
-    if (imageFileName) {
-      info.imageFileName = imageFileName;
+    const image = extractImageFileName(imageSource, targetSeasonNum);
+    if (image) {
+      info.imageFileName = image.fileName;
+      info.imageIsSeasonSpecific = image.seasonSpecific;
     }
   }
 
@@ -272,45 +279,81 @@ function stripWikiMarkup(raw: string): string {
   return result;
 }
 
-/** Extract a clean image filename from an infobox `image` field value. */
-function extractImageFileName(
+/** Matches a wiki image filename labelled for a US season, e.g. "S28 Tony Vlachos.jpg". */
+function seasonFilePrefix(seasonNum: number): RegExp {
+  return new RegExp(`^S${seasonNum}\\b`, "i");
+}
+
+export interface ExtractedImage {
+  fileName: string;
+  /** Whether `fileName` carries the `S<N>` label of the requested season. */
+  seasonSpecific: boolean;
+}
+
+/**
+ * Pick the entry labelled for the target season from a list of per-season
+ * wiki filenames, falling back to the first entry when none matches.
+ */
+function pickSeasonEntry(
+  entries: string[],
+  targetSeasonNum?: number,
+): ExtractedImage | null {
+  if (entries.length === 0) return null;
+  const forSeason = targetSeasonNum
+    ? entries.find((name) => seasonFilePrefix(targetSeasonNum).test(name))
+    : undefined;
+  if (forSeason) return { fileName: forSeason, seasonSpecific: true };
+  return { fileName: entries[0], seasonSpecific: false };
+}
+
+/**
+ * Extract a clean image filename from an infobox `image` field value.
+ *
+ * Returning contestants' infoboxes carry one image per season, most recent
+ * first. When a target season is given, the entry labelled `S<N>` for that
+ * season wins so callers never pick up a later season's photo; otherwise the
+ * first entry is returned with `seasonSpecific: false`.
+ */
+export function extractImageFileName(
   raw: string,
   targetSeasonNum?: number,
-): string | null {
+): ExtractedImage | null {
   let imgFile = raw.trim();
 
-  // Handle multi-season gallery format, used by returning contestants:
+  // Multi-season gallery format:
   //   <gallery>
   //   S8 Kathy Vavrick-O'Brien.jpg|All-Stars
   //   S4 Kathy Vavrick-O'Brien.jpg|Marquesas
   //   </gallery>
-  // Prefer the entry for the season being generated; fall back to the first.
   if (/<gallery>/i.test(imgFile)) {
     const body = imgFile.replace(/<\/?gallery[^>]*>/gi, "");
     const entries = body
       .split(/\r?\n/)
       .map((line) => line.split("|")[0].trim())
       .filter((name) => /\.(jpg|jpeg|png|webp)$/i.test(name));
-    if (entries.length === 0) return null;
-    const forSeason = targetSeasonNum
-      ? entries.find((name) =>
-          new RegExp(`^S${targetSeasonNum}\\b`, "i").test(name),
-        )
-      : undefined;
-    return forSeason ?? entries[0];
+    return pickSeasonEntry(entries, targetSeasonNum);
   }
 
-  // Handle tabber format: <tabber>Label=[[File:S50 Colby.jpg]]</tabber>
-  const fileMatch = imgFile.match(/\[\[File:([^\]|]+)/i);
-  if (fileMatch) {
-    imgFile = fileMatch[1].trim();
+  // Multi-season tabber format (one tab per season, most recent first).
+  // Older pages sometimes use the `Image:` namespace alias instead of `File:`.
+  //   <tabber>Winners at War=[[File:S40 Tony Vlachos.jpg]]|-|Cagayan=[[File:S28 Tony Vlachos.jpg]]</tabber>
+  const fileEntries = [
+    ...imgFile.matchAll(/\[\[(?:File|Image):([^\]|]+)/gi),
+  ].map((m) => m[1].trim());
+  if (fileEntries.length > 0) {
+    return pickSeasonEntry(fileEntries, targetSeasonNum);
   }
 
   // Remove any remaining markup
   imgFile = imgFile.replace(/<[^>]+>/g, "").trim();
 
   if (imgFile && !imgFile.includes("{{") && !imgFile.includes("[[")) {
-    return imgFile;
+    return {
+      fileName: imgFile,
+      seasonSpecific:
+        targetSeasonNum !== undefined &&
+        seasonFilePrefix(targetSeasonNum).test(imgFile),
+    };
   }
   return null;
 }

@@ -26,6 +26,24 @@ const BEN_KATZMAN_WIKITEXT = `{{Contestant
 | days         = 26/26
 }}`;
 
+const TONY_VLACHOS_WIKITEXT = `{{Contestant
+| image         = <tabber>Australia v The World (AU)=[[File:AUS13 Tony Vlachos.jpg]]|-|Winners at War=[[File:S40 Tony Vlachos.jpg]]|-|Game Changers=[[File:S34 Tony Vlachos.jpg]]|-|Cagayan=[[File:S28 Tony Vlachos.jpg]]</tabber>
+| birthdate     = {{Birth date and age|1973|9|10|mf=y}}
+| hometown      = Jersey City, New Jersey;<br />Allendale, New Jersey
+| occupation    = Police Officer
+| version       = {{Version|us}}<br />{{Version|au}}
+| season        = {{S2|28}}
+| place         = Winner
+| season2       = {{S2|34}}
+| place2        = 19/20
+| season3       = {{S2|40}}
+| place3        = Winner
+| season4       = {{S2|13au}} (AU)
+| place4        = 11/14
+}}
+
+'''Anthony "Tony" Vlachos''' is the [[Sole Survivor]] of {{S|28}} and {{S|40}}.`;
+
 const COLBY_DONALDSON_WIKITEXT = `{{Spoiler}}{{Contestant
 | image         = <tabber>In the Hands of the Fans=[[File:S50 Colby Donaldson.jpg]]</tabber>
 | birthdate     = {{Birth date and age|1974|4|1|mf=yes}}
@@ -234,6 +252,65 @@ describe("parseContestantPage", () => {
   it("parses a returning player for their first season (Colby for S2)", () => {
     const info = parseContestantPage(COLBY_DONALDSON_WIKITEXT, 2);
     expect(info).toEqual(expect.objectContaining({ previousSeasons: [] }));
+  });
+
+  it("picks the target season's tab from a multi-season tabber image", () => {
+    expect(parseContestantPage(TONY_VLACHOS_WIKITEXT, 28)).toEqual(
+      expect.objectContaining({
+        imageFileName: "S28 Tony Vlachos.jpg",
+        imageIsSeasonSpecific: true,
+      }),
+    );
+    expect(parseContestantPage(TONY_VLACHOS_WIKITEXT, 34)).toEqual(
+      expect.objectContaining({
+        imageFileName: "S34 Tony Vlachos.jpg",
+        imageIsSeasonSpecific: true,
+      }),
+    );
+    expect(parseContestantPage(TONY_VLACHOS_WIKITEXT, 40)).toEqual(
+      expect.objectContaining({
+        imageFileName: "S40 Tony Vlachos.jpg",
+        imageIsSeasonSpecific: true,
+      }),
+    );
+  });
+
+  it("accepts the Image: namespace alias inside a tabber", () => {
+    const wikitext = `{{Contestant
+| image         = <tabber>Blood vs. Water=[[File:S27 Gervase Peterson.jpg]]|-|Borneo=[[Image:S1 Gervase Peterson.jpg]]</tabber>
+| season        = {{S2|1}}
+| season2       = {{S2|27}}
+}}`;
+    expect(parseContestantPage(wikitext, 1)).toEqual(
+      expect.objectContaining({
+        imageFileName: "S1 Gervase Peterson.jpg",
+        imageIsSeasonSpecific: true,
+      }),
+    );
+  });
+
+  it("does not let S2 match the S28 tab", () => {
+    expect(parseContestantPage(TONY_VLACHOS_WIKITEXT, 2)).toEqual(
+      expect.objectContaining({
+        imageFileName: "AUS13 Tony Vlachos.jpg",
+        imageIsSeasonSpecific: false,
+      }),
+    );
+  });
+
+  it("falls back to the first tab when the target season has no image", () => {
+    const info = parseContestantPage(COLBY_DONALDSON_WIKITEXT, 2);
+    expect(info?.imageFileName).toBe("S50 Colby Donaldson.jpg");
+    expect(info?.imageIsSeasonSpecific).toBe(false);
+  });
+
+  it("flags a single-season plain image as season-specific for its own season", () => {
+    expect(parseContestantPage(BEN_KATZMAN_WIKITEXT, 46)).toEqual(
+      expect.objectContaining({
+        imageFileName: "S46 Ben Katzman.jpg",
+        imageIsSeasonSpecific: true,
+      }),
+    );
   });
 
   it("returns null for wikitext without Contestant template", () => {

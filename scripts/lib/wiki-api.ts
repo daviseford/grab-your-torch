@@ -168,6 +168,31 @@ export async function fetchImageUrls(
 }
 
 /**
+ * Rewrite a wiki CDN image URL to the 400px-wide thumbnail every player
+ * image in `public/images/` is downloaded at.
+ */
+export function toThumbnailUrl(url: string): string {
+  return url.replace(
+    /\/revision\/latest.*/,
+    "/revision/latest/scale-to-width-down/400",
+  );
+}
+
+/**
+ * Fetch an image's bytes from a URL.
+ * Returns null on any HTTP or network failure.
+ */
+export async function fetchImageBytes(url: string): Promise<Buffer | null> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    return Buffer.from(await response.arrayBuffer());
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Download an image from a URL to a local file path.
  * Returns true on success, false on failure.
  */
@@ -175,11 +200,9 @@ export async function downloadImage(
   url: string,
   destPath: string,
 ): Promise<boolean> {
+  const buffer = await fetchImageBytes(url);
+  if (!buffer) return false;
   try {
-    const response = await fetch(url);
-    if (!response.ok) return false;
-
-    const buffer = Buffer.from(await response.arrayBuffer());
     const dir = path.dirname(destPath);
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(destPath, buffer);

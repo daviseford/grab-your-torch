@@ -29,6 +29,7 @@ import {
   downloadImage,
   fetchImageUrls,
   fetchWikitext,
+  toThumbnailUrl,
 } from "./lib/wiki-api.js";
 import { resolveWikiPageTitle } from "./lib/wiki-name-resolver.js";
 import { parseContestantPage } from "./lib/wikitext-parser.js";
@@ -180,10 +181,7 @@ async function downloadFromWiki(blank: Blank): Promise<string | null> {
     return null;
   }
 
-  const thumbUrl = url.replace(
-    /\/revision\/latest.*/,
-    "/revision/latest/scale-to-width-down/400",
-  );
+  const thumbUrl = toThumbnailUrl(url);
   const localFileName = blank.fullName.replace(/\s+/g, "-") + ".jpg";
   const imgDir = path.join(projectRoot, "public", "images", seasonKey);
   fs.mkdirSync(imgDir, { recursive: true });

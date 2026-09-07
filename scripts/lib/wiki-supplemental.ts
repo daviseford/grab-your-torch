@@ -7,7 +7,12 @@
 
 import * as path from "path";
 import type { ScrapedPlayer } from "./types.js";
-import { delay, downloadImage, fetchImageUrls } from "./wiki-api.js";
+import {
+  delay,
+  downloadImage,
+  fetchImageUrls,
+  toThumbnailUrl,
+} from "./wiki-api.js";
 import { resolveWikiPageTitle } from "./wiki-name-resolver.js";
 import { parseContestantPage } from "./wikitext-parser.js";
 
@@ -109,10 +114,7 @@ export async function fetchWikiSupplemental(
     if (!url) continue;
 
     const name = player.localName || player.wikiPageTitle;
-    const thumbUrl = url.replace(
-      /\/revision\/latest.*/,
-      "/revision/latest/scale-to-width-down/400",
-    );
+    const thumbUrl = toThumbnailUrl(url);
     const localFileName = name.replace(/\s+/g, "-") + ".jpg";
     const localPath = path.join(imgDirPath, localFileName);
 
