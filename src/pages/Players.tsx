@@ -1,8 +1,9 @@
 import { SimpleGrid } from "@mantine/core";
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { CastawayCard } from "../components/Layout";
 import { useSeason } from "../hooks/useSeason";
 import { Player } from "../types";
+import { sortCastAlphabetically } from "../utils/castOrder";
 
 /** Age and hometown on one line, profession on the next, where present. */
 const castawayMeta = (player: Player): ReactNode => {
@@ -20,6 +21,15 @@ const castawayMeta = (player: Player): ReactNode => {
 export const Players = () => {
   const { data: season } = useSeason();
 
+  // Season data lists the cast in boot order, which would spoil the season.
+  const cast = useMemo(
+    () =>
+      season
+        ? sortCastAlphabetically(season.players, season.castawayLookup)
+        : [],
+    [season],
+  );
+
   if (!season) return null;
 
   return (
@@ -27,7 +37,7 @@ export const Players = () => {
       cols={{ base: 2, sm: 3, md: 6 }}
       spacing={{ base: "sm", sm: "md" }}
     >
-      {season.players.map((player) => (
+      {cast.map((player) => (
         <CastawayCard
           key={player.castaway_id}
           name={player.full_name}
