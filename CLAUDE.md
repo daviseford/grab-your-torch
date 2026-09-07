@@ -36,6 +36,7 @@ Grab Your Torch is a fantasy sports-style web app for the TV show Survivor. User
 - **Set admin claim:** `yarn tsx scripts/set-admin-claim.ts <uid>` (set Firebase Auth admin custom claim on a user)
 - **Optimize images:** `yarn tsx scripts/optimize-images.ts` (resize and compress all images in `public/images/`)
 - **Fix missing player images:** `yarn tsx scripts/fix-missing-player-images.ts [season_numbers...] [--dry-run] [--no-download]` (repair `img: ""` entries — matches already-downloaded files whose name the codegen merge missed, then downloads the season-correct image from the wiki)
+- **Fix returning player images:** `yarn tsx scripts/fix-returning-player-images.ts [season_numbers...] [--dry-run]` (for every castaway who appears in more than one season, replace each season's photo with the wiki image labelled for that season instead of the most recent appearance; keeps and reports any file without a season-specific wiki image)
 - **Generate web assets:** `yarn tsx scripts/generate-web-assets.ts` (generate favicon PNGs, apple-touch-icon, and OG image from SVG source)
 
 ## Data Source
