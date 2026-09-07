@@ -15,6 +15,7 @@ import { claimAuthIntent } from "./authIntent";
 import { ForgotPassword } from "./ForgotPassword";
 import { Login } from "./Login";
 import { Register } from "./Register";
+import { SocialSignIn } from "./SocialSignIn";
 
 export type AuthMode = "login" | "register" | "forgot-password";
 
@@ -23,6 +24,7 @@ export type AuthFormOutcome =
   | { status: "authenticated" }
   | { status: "setup-warning"; message: string }
   | { status: "confirmed"; message: string }
+  | { status: "cancelled" }
   | { status: "error"; error: AuthError };
 
 /** Props accepted by the account forms. Optional so they still render standalone. */
@@ -167,6 +169,9 @@ export const AuthModal = ({
         setError(null);
         setConfirmation(outcome.message);
         break;
+      case "cancelled":
+        // A closed social sign-in popup: nothing to show, form released.
+        break;
       case "error":
         setConfirmation(null);
         setError(outcome.error);
@@ -244,6 +249,14 @@ export const AuthModal = ({
         <Alert color="green" mt="md">
           {confirmation}
         </Alert>
+      )}
+
+      {!completing && mode !== "forgot-password" && (
+        <SocialSignIn
+          pending={pending}
+          onPendingChange={setPending}
+          onOutcome={handleOutcome}
+        />
       )}
 
       {!completing && mode === "login" && (

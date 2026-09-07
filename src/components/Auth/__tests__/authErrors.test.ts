@@ -71,6 +71,32 @@ describe("mapAuthError", () => {
     }
   });
 
+  it("maps a closed or superseded social sign-in popup to cancelled", () => {
+    for (const code of [
+      "auth/popup-closed-by-user",
+      "auth/cancelled-popup-request",
+      "auth/user-cancelled",
+    ]) {
+      expect(mapAuthError(firebaseError(code, "raw")).category).toBe(
+        "cancelled",
+      );
+    }
+  });
+
+  it("maps blocked popups, provider collisions, and disabled providers", () => {
+    expect(
+      mapAuthError(firebaseError("auth/popup-blocked", "raw")).category,
+    ).toBe("popup-blocked");
+    expect(
+      mapAuthError(
+        firebaseError("auth/account-exists-with-different-credential", "raw"),
+      ).category,
+    ).toBe("account-exists");
+    expect(
+      mapAuthError(firebaseError("auth/operation-not-allowed", "raw")).category,
+    ).toBe("provider-disabled");
+  });
+
   it("returns a generic safe message for unknown Firebase codes", () => {
     const result = mapAuthError(
       firebaseError("auth/some-future-code", "do not leak this"),

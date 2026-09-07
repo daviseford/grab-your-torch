@@ -52,6 +52,7 @@ Grab Your Torch is a fantasy sports-style web app for the TV show Survivor. User
 - **State/Data:** All hooks use raw Firebase `onSnapshot` for realtime Firestore/RTDB subscriptions (no react-query)
 - **Firebase backend:** Firestore (seasons, competitions), Realtime Database (live drafts), Firebase Auth, hosted on Firebase Hosting
 - **Dual database pattern:** Firestore for persistent read-heavy data (seasons, competitions, game events), Realtime Database for live collaborative state (drafts in progress)
+- **Social login:** Google sign-in only, via Firebase's native provider and `signInWithPopup`. Console setup lives in `docs/social-login-setup.md`.
 - **Documented solutions:** `docs/solutions/` contains past problem resolutions organized by category with YAML frontmatter (`module`, `tags`, `problem_type`). Relevant when debugging or implementing in documented areas.
 - **Shared vocabulary:** `CONCEPTS.md` defines project-specific domain terms (entities, named processes, status concepts). Relevant when orienting to the codebase or discussing domain concepts.
 
