@@ -56,6 +56,7 @@ import {
   SlimUser,
 } from "../types";
 import { trackEvent } from "../utils/analytics";
+import { sortCastAlphabetically } from "../utils/castOrder";
 import {
   buildPickOrderUidMap,
   buildTurnsMap,
@@ -502,6 +503,15 @@ export const DraftComponent = () => {
     });
   };
 
+  // Season data lists the cast in boot order; the grid must not spoil it.
+  const cast = useMemo(
+    () =>
+      season
+        ? sortCastAlphabetically(season.players, season.castawayLookup)
+        : [],
+    [season],
+  );
+
   const draftLive = !!draft?.started && !draft?.finished;
   useBugContext(
     season ? (
@@ -845,7 +855,7 @@ export const DraftComponent = () => {
           </div>
 
           <DraftCastGrid
-            players={season.players}
+            players={cast}
             picks={draft!.draft_picks}
             viewerUid={slimUser?.uid}
             canDraft={Boolean(
@@ -1055,10 +1065,13 @@ const PropBets = ({ season, onSubmit }: PropBetsProps) => {
     validate,
   });
 
-  const playerOptions = season.players.map((player) => ({
-    value: player.castaway_id,
-    label: player.full_name,
-  }));
+  const playerOptions = useMemo(
+    () =>
+      sortCastAlphabetically(season.players, season.castawayLookup).map(
+        (player) => ({ value: player.castaway_id, label: player.full_name }),
+      ),
+    [season],
+  );
 
   const handleSubmit = async (
     e: React.FormEvent<HTMLFormElement> | undefined,
