@@ -1154,10 +1154,8 @@ test("public browsing stays account-free and makes no no-signup claims", async (
 });
 
 // Social sign-in through the Auth emulator's fake account picker. The
-// emulator serves its own popup page for Google (and any other OAuth
-// provider) at AUTH_EMU, so this exercises the real signInWithPopup path with
-// no production traffic. Discord is not enabled in e2e-auth mode (no
-// VITE_AUTH_DISCORD_PROVIDER_ID in .env.e2e-auth), so only Google renders.
+// emulator serves its own popup page for Google at AUTH_EMU, so this
+// exercises the real signInWithPopup path with no production traffic.
 // The Competitions page is the entry point because its sign-in gate carries
 // no retained intent, so nothing else happens after authentication.
 
@@ -1214,10 +1212,6 @@ test("Google sign-in: a first visit creates the account and user document, a ret
   await main(page)
     .getByRole("button", { name: "Sign in", exact: true })
     .click();
-
-  await expect(
-    dialog(page).getByRole("button", { name: "Continue with Discord" }),
-  ).toHaveCount(0);
 
   // First sign-in: pick a brand-new auto-generated Google account.
   const picker = await openGooglePicker(page);

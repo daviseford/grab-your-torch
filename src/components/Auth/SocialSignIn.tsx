@@ -1,5 +1,5 @@
 import { Button, Divider, Stack, Text } from "@mantine/core";
-import { IconBrandDiscord, IconBrandGoogle } from "@tabler/icons-react";
+import { IconBrandGoogle } from "@tabler/icons-react";
 import {
   getAdditionalUserInfo,
   signInWithPopup,
@@ -12,8 +12,8 @@ import { trackEvent } from "../../utils/analytics";
 import { mapAuthError } from "./authErrors";
 import type { AuthFormOutcome, AuthFormProps } from "./AuthModal";
 import {
-  getEnabledSocialProviders,
   resolveSocialDisplayName,
+  SOCIAL_PROVIDERS,
   type SocialProvider,
   type SocialProviderId,
 } from "./socialProviders";
@@ -23,30 +23,26 @@ const SETUP_WARNING_MESSAGE =
 
 const ICONS: Record<SocialProviderId, ReactNode> = {
   google: <IconBrandGoogle size={18} aria-hidden />,
-  discord: <IconBrandDiscord size={18} aria-hidden />,
 };
-
-// Resolved once: the enabled set is fixed at build time.
-const DEFAULT_PROVIDERS = getEnabledSocialProviders();
 
 export type SocialSignInProps = Pick<
   AuthFormProps,
   "pending" | "onPendingChange" | "onOutcome"
 > & {
-  /** Overrides the build-time provider set (tests). */
-  providers?: SocialProvider[];
+  /** Overrides the provider set (tests). */
+  providers?: readonly SocialProvider[];
 };
 
 /**
- * "Continue with Google / Discord" buttons plus the divider that separates
- * them from the email form. A first sign-in provisions the user document the
- * same way Register does; a returning sign-in just reports success.
+ * "Continue with Google" button plus the divider that separates it from the
+ * email form. A first sign-in provisions the user document the same way
+ * Register does; a returning sign-in just reports success.
  */
 export const SocialSignIn = ({
   pending: pendingProp,
   onPendingChange,
   onOutcome,
-  providers = DEFAULT_PROVIDERS,
+  providers = SOCIAL_PROVIDERS,
 }: SocialSignInProps = {}) => {
   const [localPending, setLocalPending] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
