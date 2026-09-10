@@ -788,12 +788,28 @@ describe("poolStandingsCache", () => {
     expect(restored?.episode_num).toBe(7);
   });
 
-  it("keys the entry by pool, episode and scoring revision", () => {
-    expect(poolStandingsCacheKey("pool_season_51", 7, "rev-a")).toBe(
-      "gyt_pool_standings:v1:pool_season_51:episode_7:rev-a",
+  it("keys the entry by pool, episode, scoring revision and publish stamp", () => {
+    expect(poolStandingsCacheKey("pool_season_51", 7, "rev-a", "t1")).toBe(
+      "gyt_pool_standings:v1:pool_season_51:episode_7:rev-a:t1",
     );
-    expect(poolStandingsCacheKey("pool_season_51", 10, "rev-a")).not.toBe(
-      poolStandingsCacheKey("pool_season_51", 1, "rev-a"),
+    expect(poolStandingsCacheKey("pool_season_51", 10, "rev-a", "t1")).not.toBe(
+      poolStandingsCacheKey("pool_season_51", 1, "rev-a", "t1"),
+    );
+  });
+
+  it("misses after an in-place republish of the same episode", () => {
+    // A correction republishes the same episode under the same scoring
+    // revision, so neither of those segments moves. The publish stamp is the
+    // only thing that does, and without it a returning visitor would keep
+    // the superseded rows for as long as their storage survived.
+    expect(poolStandingsCacheKey("pool_season_51", 7, "rev-a", "t2")).not.toBe(
+      poolStandingsCacheKey("pool_season_51", 7, "rev-a", "t1"),
+    );
+  });
+
+  it("falls back to a stable segment before the first publish", () => {
+    expect(poolStandingsCacheKey("pool_season_51", 7, "rev-a")).toBe(
+      "gyt_pool_standings:v1:pool_season_51:episode_7:rev-a:unstamped",
     );
   });
 

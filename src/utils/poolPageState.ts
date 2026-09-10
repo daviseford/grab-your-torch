@@ -65,7 +65,3 @@ export const resolvePoolPageState = ({
   if (now >= timestampToMillis(pool.freeze_at)) return "frozen";
   return "open";
 };
-
-/** True only for the one state in which an entry may be created. */
-export const poolAcceptsEntries = (state: PoolPageState): boolean =>
-  state === "open";

@@ -143,10 +143,6 @@ export const getPoolEntryBlockers = ({
   return blockers;
 };
 
-/** True when a submit would produce a payload the rules accept. */
-export const canSubmitPoolEntry = (input: PoolEntryReadinessInput): boolean =>
-  getPoolEntryBlockers(input).length === 0;
-
 /**
  * Build the create payload, or throw with the field that is wrong.
  *

@@ -41,21 +41,20 @@ describe("scoring revision", () => {
   });
 
   it("changes when a derivation module that does not exist yet appears", () => {
-    const sources = readScoringSources(repoRoot);
-    const absent = sources.find((s) => s.contents === null);
-
-    // The source list is forward-looking: it names derivation modules that
-    // later units add. An absent module must still be part of the hash so its
-    // arrival invalidates the cache.
+    // The absent module is constructed rather than hunted for. This assertion
+    // used to search the real source list for one whose contents were null,
+    // which held while the list named modules later units had not written
+    // yet, and silently stopped running the moment the last of them landed,
+    // leaving a tautology behind. An absent module must still be part of the
+    // hash so its arrival invalidates the cache, and that has to stay
+    // provable once every listed module exists.
+    const sources = [
+      ...readScoringSources(repoRoot),
+      { path: "src/utils/notYetWritten.ts", contents: null },
+    ];
     const appeared = sources.map((s) =>
-      s === absent ? { ...s, contents: "export const x = 1;\n" } : s,
+      s.contents === null ? { ...s, contents: "export const x = 1;" } : s,
     );
-
-    if (!absent) {
-      // Every listed module exists; nothing to prove here.
-      expect(sources.every((s) => s.contents !== null)).toBe(true);
-      return;
-    }
 
     expect(computeScoringRevision(appeared)).not.toBe(
       computeScoringRevision(sources),

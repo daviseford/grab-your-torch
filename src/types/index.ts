@@ -523,6 +523,17 @@ export type Pool = {
 
   /** Stamped by the job when a win_survivor event is present. */
   season_complete: boolean;
+
+  /**
+   * ISO timestamp of the run that published the current standings.
+   *
+   * The browser cache is keyed on it so an in-place republish of the same
+   * episode is a miss. Neither the episode number nor the scoring revision
+   * changes when a correction is republished, so without this a returning
+   * visitor would keep the superseded rows indefinitely. Absent until the
+   * first publish.
+   */
+  standings_computed_at?: string;
 };
 
 /**

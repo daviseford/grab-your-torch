@@ -612,10 +612,30 @@ export const buildStandingsWrites = (
   poolId: string,
   plan: RecomputePlan,
 ): StandingsWrite[] => {
-  if (plan.status !== "ok") return [];
-
   const writes: StandingsWrite[] = [];
   const base = `pools/${poolId}`;
+
+  // Counters live beside the config, never on it (KTD3): the config is a
+  // rules input for every entry write, and a bad job payload must not be able
+  // to take the freeze with it.
+  //
+  // They are written for every plan, including "empty" and "no_data". The
+  // entry window is weeks of runs with no episode data at all, and the
+  // entrant count is the one number the homepage shows during it, so gating
+  // this on a publishable plan would pin it at zero for exactly the window
+  // the pool exists for.
+  const counters: PoolCounters = {
+    entry_count: plan.entry_count,
+    updated_at: plan.computed_at,
+  };
+  writes.push({
+    path: `${base}/meta/counters`,
+    op: "set",
+    kind: "counters",
+    data: counters,
+  });
+
+  if (plan.status !== "ok") return writes;
 
   for (const episode of plan.episodes) {
     const docId = poolStandingsDocId(episode.episode_num);
@@ -637,20 +657,6 @@ export const buildStandingsWrites = (
     });
   }
 
-  // Counters live beside the config, never on it (KTD3): the config is a
-  // rules input for every entry write, and a bad job payload must not be able
-  // to take the freeze with it.
-  const counters: PoolCounters = {
-    entry_count: plan.entry_count,
-    updated_at: plan.computed_at,
-  };
-  writes.push({
-    path: `${base}/meta/counters`,
-    op: "set",
-    kind: "counters",
-    data: counters,
-  });
-
   writes.push({
     path: base,
     op: "update",
@@ -658,6 +664,11 @@ export const buildStandingsWrites = (
     data: {
       latest_episode_num: plan.latest_episode_num,
       season_complete: plan.season_complete,
+      // Stamped so a browser cache keyed on it misses after an in-place
+      // republish of the same episode. Without it a corrected leaderboard
+      // never reaches a visitor who already cached that episode, because
+      // neither the episode number nor the scoring revision changes.
+      standings_computed_at: plan.computed_at,
     },
   });
 
@@ -1011,6 +1022,10 @@ async function main(): Promise<void> {
     return;
   }
 
+  // On a runner, stdout and stderr are the workflow log, and this repository
+  // is public. Anything naming an entrant is withheld there.
+  const isPublicLog = Boolean(process.env.GITHUB_ACTIONS || process.env.CI);
+
   if (fixture && write) {
     fail(
       "--fixture and --write cannot be combined. A fixture is a local file, not the live pool",
@@ -1059,17 +1074,37 @@ async function main(): Promise<void> {
     if (err instanceof RecomputeRefusal) {
       console.error("");
       console.error(`Refusing to publish (${err.code}): ${err.message}.`);
-      for (const line of err.details) console.error(line);
+      if (isPublicLog) {
+        console.error(
+          "  Entry details withheld: this log is public. Re-run locally, or",
+        );
+        console.error(
+          `  run "yarn repair-pool-picks ${poolId}" to see and fix them.`,
+        );
+      } else {
+        for (const line of err.details) console.error(line);
+      }
       process.exit(1);
     }
     throw err;
   }
 
-  // Operator console output, unlike the job summary, may name entries: it is
-  // not a public artifact and an operator needs the document ids to fix them.
+  // The audit names entrants by uid, so where it goes depends on who can read
+  // it. On a runner this is the workflow log of a public repository, which
+  // would publish before the freeze exactly what R19 hides and after it
+  // exactly what R17 bans. An operator running locally needs the ids to fix
+  // the picks, and gets them.
   if (!plan.audit.ok) {
     console.log("");
-    for (const line of describeAudit(plan.audit)) console.log(line);
+    if (isPublicLog) {
+      console.log(
+        `Pick audit: ${plan.audit.mismatches.length} repairable, ` +
+          `${plan.audit.unrepairable.length} unrepairable. Entry details ` +
+          `withheld from this public log.`,
+      );
+    } else {
+      for (const line of describeAudit(plan.audit)) console.log(line);
+    }
   }
 
   const writes = buildStandingsWrites(poolId, plan);

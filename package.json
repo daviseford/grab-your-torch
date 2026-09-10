@@ -23,6 +23,7 @@
     "e2e": "playwright test",
     "e2e:screenshot": "playwright test screenshot-all --project=chromium-desktop",
     "e2e:setup": "playwright test --project=setup",
+    "e2e:pool-public": "playwright test --project=chromium-signed-out",
     "e2e:audit": "playwright test audit-all --project=setup --project=chromium-desktop --project=chromium-mobile",
     "e2e:ui": "playwright test --ui",
     "e2e:trades": "playwright test --config playwright.trades.config.ts",

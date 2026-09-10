@@ -110,12 +110,12 @@ jobs:
       # A refusal or crash exits before the script writes its summary, so leave
       # a marker pointing at the step log rather than an empty summary page.
       - name: Note failure in job summary
-        if: failure()
+        if: failure() || cancelled()
         run: |
           {
             echo "## Pool standings recompute"
             echo ""
-            echo "The recompute refused to publish or failed. Nothing was written."
+            echo "The recompute refused to publish, failed, or was cancelled. A refusal writes nothing; a failure or a timeout mid-publish may have written some documents, so re-run to converge."
             echo "See the \"Recompute and publish standings\" step log for the refusal code."
           } >> "$GITHUB_STEP_SUMMARY"
 

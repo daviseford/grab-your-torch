@@ -54,10 +54,6 @@ export const validatePoolHandle = (handle: string): PoolHandleError | null => {
   return null;
 };
 
-/** Convenience for the readiness check and the submit gate. */
-export const isValidPoolHandle = (handle: string): boolean =>
-  validatePoolHandle(handle) === null;
-
 // The suggestion affordance. Deliberately takes a random source and nothing
 // else: there is no parameter through which an account display name could
 // reach it. Google supplies legal names, and this page is public and

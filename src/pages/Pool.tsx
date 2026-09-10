@@ -28,6 +28,7 @@ import {
   poolEntryChangedElsewhere,
   PoolHandleField,
   PoolHandleOnlyForm,
+  PoolLeaderboard,
   resolvePoolEntryControls,
   type PoolWriteKind,
   type PoolWriteRejection,
@@ -43,6 +44,7 @@ import {
   type PoolEntrySubmitOutcome,
 } from "../hooks/usePoolEntry";
 import { usePoolEntryScores } from "../hooks/usePoolEntryScores";
+import { usePoolStandings } from "../hooks/usePoolStandings";
 import { useUser } from "../hooks/useUser";
 import type {
   FirestoreTimestamp,
@@ -128,6 +130,7 @@ export const Pool = () => {
   const { slimUser, isAuthReady } = useUser();
   const {
     entry,
+    hasEntry,
     isLoading: entryLoading,
     submitEntry,
     updateEntry,
@@ -141,6 +144,16 @@ export const Pool = () => {
     entry,
     pool?.season_id,
   );
+  // The public standings, on the page the homepage's "See the full standings"
+  // action points at. Without this the pool route promised a leaderboard it
+  // never rendered, and the overflow-page path had no caller at all. The hook
+  // issues no read until a pool has actually published an episode.
+  const {
+    view: standingsView,
+    expand: expandStandings,
+    canExpand: canExpandStandings,
+    isExpanding: isExpandingStandings,
+  } = usePoolStandings({ pool, isPoolLoaded: Boolean(pool) });
 
   const [picks, setPicks] = useState<PoolPick[]>([]);
   const [handle, setHandle] = useState("");
@@ -382,13 +395,18 @@ export const Pool = () => {
    */
   const saveEntry = useCallback(
     (values: EntryValues): Promise<SaveEntryResult> => {
-      const isEdit = editing;
+      // Route on what the server holds, not on which control was pressed.
+      // The sign-in resume path never sets `editing`, so an entrant who
+      // already has an entry and signs in again would otherwise send a
+      // create, which the rules reject because it restamps `created_at`, and
+      // the denial would surface as a false "this pool has closed".
+      const isEdit = editing || hasEntry;
       lastAttempt.current = async () => {
         await performSave(values, isEdit);
       };
       return performSave(values, isEdit);
     },
-    [editing, performSave],
+    [editing, hasEntry, performSave],
   );
 
   /**
@@ -687,6 +705,12 @@ export const Pool = () => {
             {blockerMessage}
           </Notice>
         )}
+        <PoolLeaderboard
+          view={standingsView}
+          onExpand={expandStandings}
+          canExpand={canExpandStandings}
+          isExpanding={isExpandingStandings}
+        />
         {entry && (
           <SubmittedEntry
             entry={entry}

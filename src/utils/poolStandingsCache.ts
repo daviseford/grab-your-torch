@@ -47,6 +47,11 @@ export interface PoolStandingsCacheOptions {
   storage?: PoolStandingsCacheStorage;
   /** Defaults to the bundled `SCORING_REVISION`. */
   scoringRevision?: string;
+  /**
+   * The config's `standings_computed_at`. Part of the key, so a republish of
+   * the same episode misses instead of serving superseded rows.
+   */
+  publishedAt?: string;
 }
 
 const STORAGE_KEY_PREFIX = "gyt_pool_standings";
@@ -88,20 +93,26 @@ const resolveStorage = (
 };
 
 /**
- * `gyt_pool_standings:v1:{poolId}:{episodeId}:{scoringRevision}`.
+ * `gyt_pool_standings:v1:{poolId}:{episodeId}:{scoringRevision}:{publishedAt}`.
  *
- * Both the episode and the scoring revision are in the key rather than only in
- * the payload, so an advance in either is a miss rather than a comparison
- * somebody has to remember to write.
+ * The episode, the scoring revision and the publish stamp are all in the key
+ * rather than only in the payload, so an advance in any of them is a miss
+ * rather than a comparison somebody has to remember to write.
+ *
+ * The publish stamp is what catches a correction. Recomputing the same
+ * episode changes neither the episode number nor the scoring revision, so
+ * without it a returning visitor would keep the superseded rows for as long
+ * as their storage survived.
  */
 export const poolStandingsCacheKey = (
   poolId: PoolId | string,
   episodeNum: number,
   scoringRevision: string,
+  publishedAt?: string,
 ): string =>
   `${STORAGE_KEY_PREFIX}:v${STORAGE_VERSION}:${poolId}:${poolStandingsDocId(
     episodeNum,
-  )}:${scoringRevision}`;
+  )}:${scoringRevision}:${publishedAt ?? "unstamped"}`;
 
 const isStoredFile = (value: unknown): value is StoredFile => {
   if (typeof value !== "object" || value === null) return false;
@@ -132,7 +143,12 @@ export const readPoolStandingsCache = (
 ): PoolStandings | undefined => {
   const storage = resolveStorage(options.storage);
   const scoringRevision = options.scoringRevision ?? SCORING_REVISION;
-  const key = poolStandingsCacheKey(poolId, episodeNum, scoringRevision);
+  const key = poolStandingsCacheKey(
+    poolId,
+    episodeNum,
+    scoringRevision,
+    options.publishedAt,
+  );
 
   let raw: string | null;
   try {
@@ -189,7 +205,12 @@ export const writePoolStandingsCache = (
   const file: StoredFile = { version: STORAGE_VERSION, summary };
   try {
     storage.setItem(
-      poolStandingsCacheKey(poolId, episodeNum, scoringRevision),
+      poolStandingsCacheKey(
+        poolId,
+        episodeNum,
+        scoringRevision,
+        options.publishedAt,
+      ),
       JSON.stringify(file),
     );
   } catch {
@@ -205,5 +226,13 @@ export const clearPoolStandingsCache = (
 ): void => {
   const storage = resolveStorage(options.storage);
   const scoringRevision = options.scoringRevision ?? SCORING_REVISION;
-  discard(storage, poolStandingsCacheKey(poolId, episodeNum, scoringRevision));
+  discard(
+    storage,
+    poolStandingsCacheKey(
+      poolId,
+      episodeNum,
+      scoringRevision,
+      options.publishedAt,
+    ),
+  );
 };

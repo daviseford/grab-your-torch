@@ -97,6 +97,10 @@ export const usePoolStandings = ({
   const [isExpanding, setIsExpanding] = useState(false);
 
   // The summary document, by direct path at the pointer's episode.
+  // A republish of the same episode changes only this stamp, so it has to be
+  // a real dependency: the effect must re-run and miss the cache.
+  const publishedAt = pool?.standings_computed_at;
+
   useEffect(() => {
     setIsExpanded(false);
     setPages(undefined);
@@ -117,7 +121,9 @@ export const usePoolStandings = ({
       return;
     }
 
-    const cached = readPoolStandingsCache(poolId, latestEpisodeNum);
+    const cached = readPoolStandingsCache(poolId, latestEpisodeNum, {
+      publishedAt,
+    });
     if (cached) {
       // A returning visitor on the current episode issues no read.
       setSummary(cached);
@@ -135,7 +141,10 @@ export const usePoolStandings = ({
         const data = snap.exists() ? (snap.data() as PoolStandings) : undefined;
         setSummary(data);
         setSummaryLoaded(true);
-        if (data) writePoolStandingsCache(poolId, latestEpisodeNum, data);
+        if (data)
+          writePoolStandingsCache(poolId, latestEpisodeNum, data, {
+            publishedAt,
+          });
       })
       .catch((error) => {
         // An absent or unreadable document is the empty state, never zeroes.
@@ -148,7 +157,7 @@ export const usePoolStandings = ({
     return () => {
       cancelled = true;
     };
-  }, [poolId, displayMode, latestEpisodeNum]);
+  }, [poolId, displayMode, latestEpisodeNum, publishedAt]);
 
   const pageCount = summary?.page_count ?? 0;
 
