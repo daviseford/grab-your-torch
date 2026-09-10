@@ -1,0 +1,124 @@
+name: "Recompute pool standings"
+
+# Primary trigger: the season-data sync finishing. The sync run is what lands
+# the episode data in Firestore, so recomputing straight after it keeps the
+# window between "data landed" and "standings refreshed" down to minutes.
+#
+# NOTE: `workflow_run` only fires for the workflow definition on the DEFAULT
+# BRANCH. While this file lives on a feature branch the sync workflow will not
+# trigger it; it starts firing once this is merged to `main`. That is expected,
+# not a bug. Until then, use `workflow_dispatch` to prove the job works.
+#
+# Deliberately never `pull_request`: this job reads
+# secrets.FIREBASE_ADMIN_SERVICE_ACCOUNT, and ci.yml is kept secret-free so it
+# stays safe to run on fork pull requests.
+on:
+  workflow_run:
+    # Matches the sync workflow by its `name:`, not its filename. If
+    # sync-survivor-data.yml ever renames itself, this list must change with it
+    # or the primary trigger silently stops firing.
+    workflows: ["Sync survivoR data"]
+    types: [completed]
+  schedule:
+    # Backstop only, twice a day, in case a workflow_run event is missed or the
+    # data landed by some route other than the sync workflow. Times are UTC.
+    # 15:00 UTC is one hour after the sync workflow's own 14:00 UTC cron, so it
+    # covers a sync whose completion event never reached this workflow.
+    # 03:00 UTC is 11pm US Eastern, just after the Wednesday 8pm episode and its
+    # traffic peak, which is when a stale leaderboard is most visible.
+    - cron: '0 3 * * *'
+    - cron: '0 15 * * *'
+  workflow_dispatch:
+    inputs:
+      pool:
+        description: 'Season number or pool id to recompute'
+        required: false
+        default: '51'
+      force:
+        description: 'Allow standings to replace a version with more entrants'
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  group: pool-standings-recompute
+  # Not cancel-in-progress: the script publishes standings documents one at a
+  # time and is not transactional, so killing a run mid-publish would leave the
+  # pool half-updated. Queueing behind a running publish is the safe choice.
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+# Reads the repo, writes only to Firestore. No repo or PR writes needed.
+permissions:
+  contents: read
+
+jobs:
+  recompute:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # workflow_run fires on EVERY completion, including failure and
+    # cancellation. Recomputing against data a failed sync never landed is
+    # worse than staying stale, so skip those. The first clause keeps the
+    # schedule and workflow_dispatch paths running, since neither carries a
+    # `workflow_run` context for the second clause to read.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Write Firebase service account key
+        run: |
+          echo '${{ secrets.FIREBASE_ADMIN_SERVICE_ACCOUNT }}' > firebase-private-key.json
+          chmod 600 firebase-private-key.json
+
+      # The script appends its own job summary to $GITHUB_STEP_SUMMARY and
+      # writes no result file unless --result is passed, so there is nothing to
+      # parse and nothing extra to clean up. It exits 0 on a publish, on a dry
+      # run, and on both clean no-op exits (no entrants, no aired data), and
+      # exits 1 on a refusal (pick_audit, freeze_drift, entry_count_regression)
+      # or an unexpected error. A pool that exists but has not premiered exits 0
+      # every run, so the schedule will not page anyone before the season opens.
+      # A pool document that does not exist AT ALL is a hard error (exit 1), so
+      # the cron will fail on every run until pools/pool_season_51 has been
+      # created in Firestore. Verified against the script on 2026-09-10.
+      - name: Recompute and publish standings
+        env:
+          VITE_FIREBASE_DATABASE_URL: ${{ vars.VITE_FIREBASE_DATABASE_URL }}
+          # `inputs` is empty for schedule and workflow_run, so both fall back
+          # to the current season's pool.
+          POOL: ${{ inputs.pool || '51' }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          ARGS="--write"
+          if [ "$FORCE" = "true" ]; then
+            ARGS="$ARGS --force"
+          fi
+          yarn recompute-pool-standings "$POOL" $ARGS
+
+      # A refusal or crash exits before the script writes its summary, so leave
+      # a marker pointing at the step log rather than an empty summary page.
+      - name: Note failure in job summary
+        if: failure()
+        run: |
+          {
+            echo "## Pool standings recompute"
+            echo ""
+            echo "The recompute refused to publish or failed. Nothing was written."
+            echo "See the \"Recompute and publish standings\" step log for the refusal code."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cleanup
+        if: always()
+        run: rm -f firebase-private-key.json
