@@ -16,7 +16,8 @@ import {
   IconChevronRight,
   IconChevronUp,
 } from "@tabler/icons-react";
-import { useMemo, useState } from "react";
+import { collection, doc, getDoc, getDocs } from "firebase/firestore";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   EmptySlate,
@@ -24,12 +25,19 @@ import {
   StandbySlate,
   StatusBadge,
   useBugContext,
+  type StatusKind,
 } from "../components/Layout";
+import { db } from "../firebase";
 import { useCompetitions } from "../hooks/useCompetitions";
 import { useIsMobile } from "../hooks/useIsMobile";
 import { useMyCompetitions } from "../hooks/useMyCompetitions";
 import { useUser } from "../hooks/useUser";
-import { Competition } from "../types";
+import { Competition, type Pool, type PoolId } from "../types";
+import {
+  describePoolLifecycle,
+  selectEnteredPools,
+  type PoolLifecycle,
+} from "../utils/poolModuleState";
 import classes from "./Competitions.module.css";
 
 type SortField = "name" | "season" | "participants" | "type" | "status";
@@ -73,6 +81,118 @@ const SortableHeader = ({
   );
 };
 
+// ---------------------------------------------------------------------------
+// Season pools (R21)
+// ---------------------------------------------------------------------------
+
+/**
+ * The pools this person has entered.
+ *
+ * Resolved by LISTING `pools` and GETTING `entries/{uid}`, one get per pool.
+ * Never a collection-group query: there are none in this repo and the rules
+ * provide no block for one, so a `collectionGroup("entries")` here would be
+ * denied rather than merely slow. The list is one document per season and the
+ * gets are one per pool, which at one pool is two reads.
+ *
+ * One-time fetches rather than listeners. Nothing on this page needs to react
+ * to a pool changing while it is open, and an entry document changes only when
+ * this person changes it.
+ */
+const useEnteredPools = (uid: string | undefined) => {
+  const [pools, setPools] = useState<Pool[]>([]);
+
+  useEffect(() => {
+    if (!uid) {
+      setPools([]);
+      return;
+    }
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const snap = await getDocs(collection(db, "pools"));
+        const all = snap.docs.map(
+          (d) => ({ ...(d.data() as Pool), id: d.id as PoolId }) as Pool,
+        );
+        const entered = await Promise.all(
+          all.map(async (pool) => {
+            const entry = await getDoc(
+              doc(db, "pools", pool.id, "entries", uid),
+            );
+            return entry.exists() ? pool.id : null;
+          }),
+        );
+        if (cancelled) return;
+        setPools(
+          selectEnteredPools(
+            all,
+            new Set(entered.filter((id): id is PoolId => id !== null)),
+          ),
+        );
+      } catch (error) {
+        // A denied or offline read means no pool section, never a broken page.
+        console.error("useEnteredPools: read failed", error);
+        if (!cancelled) setPools([]);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [uid]);
+
+  return pools;
+};
+
+/**
+ * Pool lifecycle wording in the status badge's clothes.
+ *
+ * A pool has no participant count and no competition type, so it does not fit
+ * the table's columns and does not get the competition status badge's words
+ * either: "In progress" and "Complete" describe a competition's own timeline,
+ * and a pool's is entries opening, entries closing, scoring, and final.
+ */
+const POOL_TONE_KINDS: Record<PoolLifecycle["tone"], StatusKind> = {
+  open: "live",
+  closed: "pending",
+  scoring: "in-progress",
+  final: "complete",
+};
+
+const PoolCard = ({ pool, now }: { pool: Pool; now: number }) => {
+  const lifecycle = describePoolLifecycle(pool, now);
+  return (
+    <li>
+      <Link
+        to={`/pool/${pool.season_id}`}
+        className={classes.row}
+        aria-label={pool.name}
+      >
+        <div className={classes.rowName}>
+          <div className={classes.name}>{pool.name}</div>
+          <div className={classes.creator}>
+            Season {pool.season_num} · You are entered
+          </div>
+        </div>
+        <div className={classes.rowBadges}>
+          <StatusBadge
+            kind={POOL_TONE_KINDS[lifecycle.tone]}
+            size="sm"
+            classNames={badgeClassNames}
+          >
+            {lifecycle.label}
+          </StatusBadge>
+        </div>
+        <IconChevronRight
+          size={16}
+          className={classes.rowChevron}
+          aria-hidden="true"
+        />
+      </Link>
+    </li>
+  );
+};
+
 const creatorName = (comp: Competition) =>
   comp.team_names?.[comp.creator_uid] ??
   comp.participants.find((p) => p.uid === comp.creator_uid)?.displayName;
@@ -109,6 +229,11 @@ export const Competitions = () => {
 
   const { data: competitions, isLoading } = useMyCompetitions();
   const { data: allCompetitions } = useCompetitions();
+  // R21: an entrant finds their pool where they look for their competitions.
+  const enteredPools = useEnteredPools(slimUser?.uid);
+  // Read once per mount rather than per render: the badge is a label, not a
+  // countdown, and the freeze it reports is enforced by rules regardless.
+  const [now] = useState(() => Date.now());
 
   const [sortField, setSortField] = useState<SortField>("season");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -341,6 +466,30 @@ export const Competitions = () => {
           </div>
         }
       />
+
+      {/*
+        Season pools, in their own labelled section above the table and
+        outside its sort and filter controls (R21). A pool has no participant
+        count and no competition type, so it has no row in that table; it
+        carries pool lifecycle wording instead of the competition status
+        badge. Renders nothing for someone who has not entered one.
+      */}
+      {enteredPools.length > 0 && (
+        <section aria-labelledby="competitions-pools">
+          <Title id="competitions-pools" order={2} size="h5" mt="lg" mb="xs">
+            {enteredPools.length === 1
+              ? "Your season pool"
+              : "Your season pools"}
+          </Title>
+          <div className={classes.board}>
+            <ul className={classes.list} role="list">
+              {enteredPools.map((pool) => (
+                <PoolCard key={pool.id} pool={pool} now={now} />
+              ))}
+            </ul>
+          </div>
+        </section>
+      )}
 
       {isLoading && (
         <div className={classes.board}>

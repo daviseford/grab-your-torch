@@ -21,6 +21,7 @@ export default defineConfig({
     // Desktop viewport
     {
       name: "chromium-desktop",
+      testIgnore: /pool-public\.spec\.ts/,
       use: {
         ...devices["Desktop Chrome"],
         viewport: { width: 1280, height: 720 },
@@ -32,12 +33,31 @@ export default defineConfig({
     // Mobile viewport
     {
       name: "chromium-mobile",
+      testIgnore: /pool-public\.spec\.ts/,
       use: {
         ...devices["Pixel 5"],
         viewport: { width: 375, height: 812 },
         storageState: "e2e/.auth/state.json",
       },
       dependencies: ["setup"],
+    },
+
+    // Signed out, on purpose.
+    //
+    // Every other project above loads e2e/.auth/state.json, which is a real
+    // signed-in admin session, and depends on the setup project that produces
+    // it. The public pool claim is about what a visitor with no account
+    // touches, so running it under those projects would authenticate the very
+    // thing under test and prove nothing. This project therefore has NO
+    // storageState and NO setup dependency, and the two projects above ignore
+    // the spec so it is never run signed in by accident.
+    {
+      name: "chromium-signed-out",
+      testMatch: /pool-public\.spec\.ts/,
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1280, height: 720 },
+      },
     },
   ],
 
