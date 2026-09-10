@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsx scripts/generate-scoring-revision.ts && tsc && vite build",
     "lint": "eslint --max-warnings 0",
     "preview": "vite preview",
     "format": "yarn prettier . --write",
@@ -34,7 +34,8 @@
     "optimize-images": "tsx scripts/optimize-images.ts",
     "tsc:scripts": "tsc -p scripts/tsconfig.json --noEmit",
     "tsc:rules": "tsc -p rules-tests/tsconfig.json --noEmit",
-    "set-admin": "tsx scripts/set-admin-claim.ts"
+    "set-admin": "tsx scripts/set-admin-claim.ts",
+    "gen:scoring-revision": "tsx scripts/generate-scoring-revision.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

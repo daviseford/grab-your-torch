@@ -2,11 +2,12 @@ import { NumberInput, Select, Stack, Table, Text } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { IconCheck, IconX } from "@tabler/icons-react";
-import { deleteField, doc, setDoc } from "firebase/firestore";
+import { deleteField, doc, writeBatch } from "firebase/firestore";
 import { useState } from "react";
 import { db } from "../../firebase";
 import { useEliminations } from "../../hooks/useEliminations";
 import { useSeason } from "../../hooks/useSeason";
+import { useSeasonRevision } from "../../hooks/useSeasonRevision";
 import { useUser } from "../../hooks/useUser";
 import {
   CastawayId,
@@ -14,6 +15,7 @@ import {
   EliminationVariant,
   EliminationVariants,
 } from "../../types";
+import { removeById, upsertById } from "../../utils/seasonRevision";
 import { Board, EmptySlate } from "../Layout";
 import {
   BoardEmpty,
@@ -34,6 +36,7 @@ export const EliminationCRUDTable = () => {
   const { data: season } = useSeason();
   const { data: eliminations } = useEliminations(season?.id);
   const { slimUser } = useUser();
+  const { stampFor } = useSeasonRevision();
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<EditValues | null>(null);
@@ -59,13 +62,17 @@ export const EliminationCRUDTable = () => {
       labels: { confirm: "Delete elimination", cancel: "Keep it" },
       confirmProps: { color: "red" },
       onConfirm: async () => {
-        const ref = doc(db, `eliminations/${season?.id}`);
-
-        const newEliminations = { ...eliminations };
-
-        delete newEliminations[e.id];
-
-        await setDoc(ref, newEliminations);
+        const newEliminations = removeById(eliminations, e.id);
+        // The revision stamp rides in the same batch as the write it
+        // describes, so a deletion can never leave a cache looking fresh.
+        const batch = writeBatch(db);
+        batch.set(doc(db, `eliminations/${season?.id}`), newEliminations);
+        batch.set(
+          doc(db, "seasons", season!.id),
+          stampFor({ eliminations: newEliminations }),
+          { merge: true },
+        );
+        await batch.commit();
       },
     });
   };
@@ -103,20 +110,37 @@ export const EliminationCRUDTable = () => {
     }
 
     try {
-      const updated = {
+      const next: Elimination = {
         ...e,
         order: editValues.order,
         variant: editValues.variant,
         castaway_id: editValues.castaway_id,
         episode_num: editValues.episode_num,
         episode_id: `episode_${editValues.episode_num}`,
+        votes_received: editValues.votes_received,
+      };
+      // The stored write uses a deleteField() sentinel where the plain value
+      // is undefined; the revision is hashed from `next`, whose undefined
+      // field canonicalizes the same way an absent one does.
+      const updated = {
+        ...next,
         votes_received:
           editValues.votes_received !== undefined
             ? editValues.votes_received
             : deleteField(),
       };
-      const ref = doc(db, `eliminations/${season.id}`);
-      await setDoc(ref, { [e.id]: updated }, { merge: true });
+      const batch = writeBatch(db);
+      batch.set(
+        doc(db, `eliminations/${season.id}`),
+        { [e.id]: updated },
+        { merge: true },
+      );
+      batch.set(
+        doc(db, "seasons", season.id),
+        stampFor({ eliminations: upsertById(eliminations, next) }),
+        { merge: true },
+      );
+      await batch.commit();
 
       notifications.show({
         title: "Elimination updated",

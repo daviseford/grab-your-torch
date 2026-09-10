@@ -9,19 +9,21 @@ import {
 import { hasLength, useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
 import { IconCheck, IconX } from "@tabler/icons-react";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, writeBatch } from "firebase/firestore";
 import { last, orderBy } from "lodash-es";
 import { useEffect } from "react";
 import { v4 } from "uuid";
 import { db } from "../../firebase";
 import { useEliminations } from "../../hooks/useEliminations";
 import { useSeason } from "../../hooks/useSeason";
+import { useSeasonRevision } from "../../hooks/useSeasonRevision";
 import {
   CastawayId,
   Elimination,
   EliminationVariants,
   TeamAssignments,
 } from "../../types";
+import { upsertById } from "../../utils/seasonRevision";
 import { EmptySlate } from "../Layout";
 import {
   CreatePanel,
@@ -37,6 +39,7 @@ const dropdownOptions = EliminationVariants.slice().reverse();
 export const CreateElimination = () => {
   const { data: season, isLoading } = useSeason();
   const { data: eliminations } = useEliminations(season?.id);
+  const { stampFor } = useSeasonRevision();
 
   const form = useForm<Elimination>({
     initialValues: {
@@ -101,8 +104,20 @@ export const CreateElimination = () => {
     if (_validate.hasErrors) return;
 
     try {
-      const ref = doc(db, `eliminations/${season?.id}`);
-      await setDoc(ref, { [values.id]: values }, { merge: true });
+      // The revision stamp rides in the same batch as the write it describes,
+      // so an admin correction can never leave a derived cache looking fresh.
+      const batch = writeBatch(db);
+      batch.set(
+        doc(db, `eliminations/${season?.id}`),
+        { [values.id]: values },
+        { merge: true },
+      );
+      batch.set(
+        doc(db, "seasons", season!.id),
+        stampFor({ eliminations: upsertById(eliminations, values) }),
+        { merge: true },
+      );
+      await batch.commit();
 
       // Remove eliminated player from team assignments for this episode onward
       await removePlayerFromTeams(

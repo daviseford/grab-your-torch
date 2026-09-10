@@ -12,7 +12,9 @@ import { IconCheck, IconX } from "@tabler/icons-react";
 import { arrayUnion, doc, updateDoc } from "firebase/firestore";
 import { db } from "../../firebase";
 import { useSeason } from "../../hooks/useSeason";
+import { useSeasonRevision } from "../../hooks/useSeasonRevision";
 import { Episode } from "../../types";
+import { upsertEpisode } from "../../utils/seasonRevision";
 import {
   CreatePanel,
   FormActions,
@@ -25,6 +27,7 @@ import adminParts from "../SeasonAdmin/SeasonAdminParts.module.css";
 
 export const CreateEpisode = () => {
   const { data: season, isLoading } = useSeason();
+  const { stampFor } = useSeasonRevision();
 
   const nextOrder = (season?.episodes?.length ?? 0) + 1;
 
@@ -56,7 +59,12 @@ export const CreateEpisode = () => {
 
     try {
       const ref = doc(db, "seasons", season.id);
-      await updateDoc(ref, { episodes: arrayUnion(episode) });
+      // The revision stamp rides in the same write as the episode it
+      // describes, so an added episode can never leave a cache looking fresh.
+      await updateDoc(ref, {
+        episodes: arrayUnion(episode),
+        ...stampFor({ episodes: upsertEpisode(season.episodes, episode) }),
+      });
 
       notifications.show({
         title: "Episode created successfully",

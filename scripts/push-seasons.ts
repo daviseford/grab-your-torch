@@ -86,6 +86,9 @@ async function pushSeason(
         players: players || [],
         episodes: episodes || [],
         castawayLookup: castawayLookup || {},
+        challenges,
+        eliminations,
+        events,
       }),
     },
     {
@@ -105,6 +108,11 @@ async function pushSeason(
       data: (voteHistory || {}) as Record<string, unknown>,
     },
   ];
+
+  const seasonDoc = allDocs[0].data;
+  console.log(
+    `    revisions: data ${seasonDoc.data_revision}, scoring ${seasonDoc.scoring_revision}`,
+  );
 
   const pushed: string[] = [];
   const skipped: string[] = [];

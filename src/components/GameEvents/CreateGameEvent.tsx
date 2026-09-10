@@ -9,14 +9,16 @@ import {
 import { isNotEmpty, useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
 import { IconCheck, IconX } from "@tabler/icons-react";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, writeBatch } from "firebase/firestore";
 import { useEffect } from "react";
 import { v4 } from "uuid";
 import { BASE_PLAYER_SCORING } from "../../data/scoring";
 import { db } from "../../firebase";
 import { useEliminations } from "../../hooks/useEliminations";
 import { useSeason } from "../../hooks/useSeason";
+import { useSeasonRevision } from "../../hooks/useSeasonRevision";
 import { CastawayId, GameEvent, GameEventActions } from "../../types";
+import { upsertById } from "../../utils/seasonRevision";
 import { EmptySlate } from "../Layout";
 import {
   CreatePanel,
@@ -30,6 +32,7 @@ import {
 export const CreateGameEvent = () => {
   const { data: season, isLoading } = useSeason();
   const { data: eliminations } = useEliminations(season?.id);
+  const { payload, stampFor } = useSeasonRevision();
 
   const form = useForm<GameEvent>({
     initialValues: {
@@ -91,8 +94,20 @@ export const CreateGameEvent = () => {
     }
 
     try {
-      const ref = doc(db, `events/${season?.id}`);
-      await setDoc(ref, { [values.id]: values }, { merge: true });
+      // The revision stamp rides in the same batch as the write it describes,
+      // so an admin correction can never leave a derived cache looking fresh.
+      const batch = writeBatch(db);
+      batch.set(
+        doc(db, `events/${season?.id}`),
+        { [values.id]: values },
+        { merge: true },
+      );
+      batch.set(
+        doc(db, "seasons", season!.id),
+        stampFor({ events: upsertById(payload.events, values) }),
+        { merge: true },
+      );
+      await batch.commit();
 
       notifications.show({
         title: "Event created successfully",
