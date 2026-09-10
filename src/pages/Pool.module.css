@@ -60,3 +60,10 @@
     margin-bottom: 10px;
   }
 }
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mantine-spacing-xs);
+  margin-top: var(--mantine-spacing-xs);
+}

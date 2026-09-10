@@ -33,6 +33,31 @@ export type PoolEntryPayload = {
   updated_at: unknown;
 };
 
+/**
+ * The pre-freeze full edit (R7).
+ *
+ * Identical to the create payload except that `created_at` is ABSENT. The
+ * rules require `created_at` unchanged on update, and `request.time` moves
+ * between the two writes, so re-sending it as `serverTimestamp()` is denied
+ * and a full `setDoc` overwrite is denied for the same reason. Omitting the
+ * key is what carries the original `created_at` through: an `updateDoc` (or a
+ * merging `setDoc`) leaves a key it was not given alone.
+ */
+export type PoolEntryUpdatePayload = Omit<PoolEntryPayload, "created_at">;
+
+/**
+ * The post-freeze handle edit (R5, R9).
+ *
+ * Exactly two keys. The rules accept a diff touching only `handle` and
+ * `updated_at` after the freeze, and reject the same write the moment a pick
+ * or a prop bet rides along (AE6), so this builder has no parameter through
+ * which one could.
+ */
+export type PoolHandleUpdatePayload = {
+  handle: string;
+  updated_at: unknown;
+};
+
 export type BuildPoolEntryPayloadInput = {
   uid: string;
   pool: PoolEntryPayloadPool;
@@ -129,15 +154,35 @@ export const canSubmitPoolEntry = (input: PoolEntryReadinessInput): boolean =>
  * `{castaway_id, full_name}` pair against `pool.roster`, and the remap audit
  * treats the stored name as ground truth (R23), so a name rebuilt from a local
  * lookup, or a client-supplied name that disagrees, must never be what lands.
+ *
+ * A create is the edit payload plus `created_at`: the two shapes must not be
+ * allowed to drift, because the rules validate the merged document either way.
  */
-export const buildPoolEntryPayload = ({
+export const buildPoolEntryPayload = (
+  input: BuildPoolEntryPayloadInput,
+): PoolEntryPayload => ({
+  ...buildPoolEntryUpdatePayload(input),
+  created_at: input.timestamp(),
+});
+
+/**
+ * Build the pre-freeze edit payload, or throw with the field that is wrong.
+ *
+ * Every validation the create path applies applies here too: the merged
+ * document has to satisfy the same allowlist, so an update that would leave it
+ * with the wrong pick count, a duplicate, an off-roster pick, or a handle the
+ * rules reject is refused before it is sent rather than after.
+ *
+ * `created_at` is deliberately never produced. See `PoolEntryUpdatePayload`.
+ */
+export const buildPoolEntryUpdatePayload = ({
   uid,
   pool,
   picks,
   handle,
   propBets,
   timestamp,
-}: BuildPoolEntryPayloadInput): PoolEntryPayload => {
+}: BuildPoolEntryPayloadInput): PoolEntryUpdatePayload => {
   const blockers = getPoolEntryBlockers({ pool, picks, handle, propBets });
   if (blockers.length > 0) {
     throw new PoolEntryPayloadError(blockers[0].field, blockers[0].message);
@@ -177,7 +222,29 @@ export const buildPoolEntryPayload = ({
     handle,
     picks: resolved,
     prop_bets,
-    created_at: timestamp(),
     updated_at: timestamp(),
   };
+};
+
+export type BuildPoolHandleUpdateInput = {
+  handle: string;
+  /** `serverTimestamp` from the Firestore SDK, or a test sentinel. */
+  timestamp: () => unknown;
+};
+
+/**
+ * Build the post-freeze handle-only payload, or throw if the handle is one the
+ * rules would reject.
+ *
+ * A handle stays editable after the freeze (R5), and this is the only write
+ * that remains possible then. It is still refused while the kill switch is
+ * thrown, because the rules require `status == "open"` for it as well.
+ */
+export const buildPoolHandleUpdatePayload = ({
+  handle,
+  timestamp,
+}: BuildPoolHandleUpdateInput): PoolHandleUpdatePayload => {
+  const handleError = validatePoolHandle(handle);
+  if (handleError) throw new PoolEntryPayloadError("handle", handleError);
+  return { handle, updated_at: timestamp() };
 };

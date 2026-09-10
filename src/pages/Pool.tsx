@@ -1,6 +1,13 @@
 import { Button, Text } from "@mantine/core";
 import { modals } from "@mantine/modals";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { Link, useParams } from "react-router-dom";
 import { saveAuthIntent, type AuthIntent } from "../components/Auth/authIntent";
 import {
@@ -11,15 +18,37 @@ import {
   StatusBadge,
   useBugContext,
 } from "../components/Layout";
-import { buildPoolCastDetails, PoolCastPicker, PoolHandleField } from "../components/Pool";
+import {
+  applyPoolWriteEvent,
+  buildPoolCastDetails,
+  describePoolWriteRejection,
+  loadPoolWriteRejection,
+  poolEntryChangedElsewhere,
+  PoolCastPicker,
+  PoolHandleField,
+  PoolHandleOnlyForm,
+  resolvePoolEntryControls,
+  type PoolWriteKind,
+  type PoolWriteRejection,
+} from "../components/Pool";
 import { PropBetsForm } from "../components/PropBets";
 import { SEASON_METADATA, type SeasonMeta } from "../data/season-metadata";
 import { PropBetQuestionKeys } from "../data/propbets";
 import { useAuthContinuation } from "../hooks/useAuthContinuation";
 import { usePool, usePoolCounters } from "../hooks/usePool";
-import { usePoolEntry } from "../hooks/usePoolEntry";
+import {
+  isPoolWriteAcknowledged,
+  usePoolEntry,
+  type PoolEntrySubmitOutcome,
+} from "../hooks/usePoolEntry";
 import { useUser } from "../hooks/useUser";
-import type { PoolPick, PropBetsFormData, Season } from "../types";
+import type {
+  FirestoreTimestamp,
+  PoolEntry,
+  PoolPick,
+  PropBetsFormData,
+  Season,
+} from "../types";
 import { trackEvent } from "../utils/analytics";
 import {
   clearPoolEntryDraft,
@@ -49,10 +78,32 @@ import classes from "./Pool.module.css";
  * empty and the config roster is the only cast source this page has (KTD3).
  * The freeze instant and the kill switch are read from that same document and
  * never from `SEASON_METADATA.premiere` (R11).
+ *
+ * NOTHING ON THIS PAGE DISCARDS COMPLETED PICKS WITHOUT SAYING SO
+ * ---------------------------------------------------------------
+ * The freeze is enforced by rules against `request.time`, so the gate here is
+ * cosmetic and a write can be refused at any moment (KTD4). Three things
+ * follow, and they are the shape of the whole page:
+ *
+ *  - a refused write never clears the form. The picks stay exactly where they
+ *    are and a notice says the pool has closed (AE2),
+ *  - a refusal is recorded before it is rendered, so one that arrives after
+ *    the entrant has navigated away still reaches them on their next load
+ *    (`poolWriteRejection`),
+ *  - a transient failure offers a retry and never claims the pool has closed.
  */
 
 /** How often the page re-evaluates the freeze. */
 const FREEZE_TICK_MS = 30_000;
+
+/** One complete entry, as the form holds it. */
+type EntryValues = {
+  picks: PoolPick[];
+  handle: string;
+  propBets: PropBetsFormData;
+};
+
+type SaveEntryResult = { ok: boolean; message: string; denied: boolean };
 
 const formatFreeze = (millis: number): string =>
   new Date(millis).toLocaleString(undefined, {
@@ -67,7 +118,14 @@ export const Pool = () => {
   // (KTD3), and is readable signed-out along with it.
   const { data: counters } = usePoolCounters(poolId);
   const { slimUser, isAuthReady } = useUser();
-  const { entry, isLoading: entryLoading, submitEntry } = usePoolEntry(poolId);
+  const {
+    entry,
+    isLoading: entryLoading,
+    submitEntry,
+    updateEntry,
+    updateHandle,
+    withdrawEntry,
+  } = usePoolEntry(poolId);
 
   const [picks, setPicks] = useState<PoolPick[]>([]);
   const [handle, setHandle] = useState("");
@@ -75,18 +133,33 @@ export const Pool = () => {
   const [announcement, setAnnouncement] = useState<string | null>(null);
   const [showHandleError, setShowHandleError] = useState(false);
   const [blockerMessage, setBlockerMessage] = useState<string | null>(null);
-  const [submitMessage, setSubmitMessage] = useState<string | null>(null);
+  const [retryMessage, setRetryMessage] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [pendingStateKey, setPendingStateKey] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   // Mantine's useForm reads initialValues once, at mount. The autosave can
   // arrive after that, so the prop bets form is remounted when it does.
   const [propBetsFormKey, setPropBetsFormKey] = useState(0);
+  // Set while the entrant is revising an entry that is already in.
+  const [editing, setEditing] = useState(false);
+  // The entry's `updated_at` at the moment the open form read it, so a save
+  // made in a second tab is noticed instead of being overwritten blind.
+  const [editBaseline, setEditBaseline] = useState<
+    FirestoreTimestamp | undefined
+  >(undefined);
+  const [rejection, setRejection] = useState<PoolWriteRejection | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), FREEZE_TICK_MS);
     return () => clearInterval(timer);
   }, []);
+
+  // A write refused while no form was mounted, read back on this load.
+  useEffect(() => {
+    if (!poolId) return;
+    setRejection(loadPoolWriteRejection(poolId));
+  }, [poolId]);
 
   // SEASON_METADATA is used for the season's display name, and for choosing
   // between two messages when there is no configuration document at all. It is
@@ -96,6 +169,7 @@ export const Pool = () => {
     : undefined;
   const airStatus = meta ? getSeasonAirStatus(meta) : "upcoming";
   const state = resolvePoolPageState({ pool, poolLoaded, airStatus, now });
+  const controls = resolvePoolEntryControls({ state, hasEntry: !!entry });
 
   const details = useMemo(
     () => buildPoolCastDetails(pool?.season_id),
@@ -173,12 +247,67 @@ export const Pool = () => {
     latest.current = { picks, handle, propBets };
   }, [picks, handle, propBets]);
 
-  const write = useCallback(
-    async (values: {
-      picks: PoolPick[];
-      handle: string;
-      propBets: PropBetsFormData;
-    }): Promise<{ ok: boolean; message: string; denied: boolean }> => {
+  /**
+   * Run one write and record what came back.
+   *
+   * The recording happens here rather than inside the hook because this async
+   * function runs to completion whether or not the component is still mounted.
+   * An offline write replayed on reconnect and refused after the freeze
+   * therefore still leaves a record, even though the state setters below are
+   * no-ops by then, and the next load explains it (step 4).
+   */
+  const runWrite = useCallback(
+    async (
+      kind: PoolWriteKind,
+      write: () => Promise<PoolEntrySubmitOutcome>,
+    ): Promise<PoolEntrySubmitOutcome> => {
+      if (!poolId) {
+        return { status: "failed", message: "This pool could not be loaded." };
+      }
+      applyPoolWriteEvent({ type: "started", pool_id: poolId });
+      setSubmitting(true);
+      setRetryMessage(null);
+
+      const outcome = await write();
+
+      setSubmitting(false);
+      if (isPoolWriteAcknowledged(outcome)) {
+        setRejection(
+          applyPoolWriteEvent({ type: "acknowledged", pool_id: poolId }),
+        );
+        return outcome;
+      }
+      if (outcome.status === "denied") {
+        if (outcome.reason === "payload") {
+          // The client refused an unfinished entry. Nothing was sent, so
+          // there is nothing to record: name the field and let them fix it.
+          setBlockerMessage(outcome.message);
+          return outcome;
+        }
+        // The boundary refused it. Terminal, and the picks stay on screen
+        // while one notice explains it, mounted form or not (AE2).
+        setRejection(
+          applyPoolWriteEvent({
+            type: "denied",
+            pool_id: poolId,
+            kind,
+            at: Date.now(),
+          }),
+        );
+        return outcome;
+      }
+      applyPoolWriteEvent({ type: "failed", pool_id: poolId });
+      setRetryMessage(outcome.message);
+      return outcome;
+    },
+    [poolId],
+  );
+
+  /** What the retry button re-runs after a transient failure. */
+  const lastAttempt = useRef<null | (() => Promise<void>)>(null);
+
+  const performSave = useCallback(
+    async (values: EntryValues, isEdit: boolean): Promise<SaveEntryResult> => {
       if (!pool) {
         return {
           ok: false,
@@ -186,28 +315,51 @@ export const Pool = () => {
           denied: true,
         };
       }
-      setSubmitting(true);
-      const outcome = await submitEntry({
-        pool,
-        picks: values.picks,
-        handle: values.handle,
-        propBets: values.propBets,
-      });
-      setSubmitting(false);
-      if (outcome.status === "created") {
+      const outcome = await runWrite(isEdit ? "update" : "create", () =>
+        (isEdit ? updateEntry : submitEntry)({
+          pool,
+          picks: values.picks,
+          handle: values.handle,
+          propBets: values.propBets,
+        }),
+      );
+
+      if (isPoolWriteAcknowledged(outcome)) {
         if (poolId) clearPoolEntryDraft(poolId);
-        setSubmitMessage(null);
-        trackEvent("pool_entry_submitted", { pool_id: pool.id });
+        lastAttempt.current = null;
+        setEditing(false);
+        setEditBaseline(undefined);
+        setStatusMessage(isEdit ? "Your entry has been updated." : null);
+        trackEvent(isEdit ? "pool_entry_updated" : "pool_entry_submitted", {
+          pool_id: pool.id,
+        });
         return { ok: true, message: "", denied: false };
       }
-      setSubmitMessage(outcome.message);
       return {
         ok: false,
         message: outcome.message,
         denied: outcome.status === "denied",
       };
     },
-    [pool, poolId, submitEntry],
+    [pool, poolId, runWrite, submitEntry, updateEntry],
+  );
+
+  /**
+   * Save, and arm the retry with the same values before anything can fail.
+   *
+   * A transient failure must be retryable with exactly what the entrant
+   * entered, not with whatever the form holds by the time they press the
+   * button, so the values are captured here rather than read back later.
+   */
+  const saveEntry = useCallback(
+    (values: EntryValues): Promise<SaveEntryResult> => {
+      const isEdit = editing;
+      lastAttempt.current = async () => {
+        await performSave(values, isEdit);
+      };
+      return performSave(values, isEdit);
+    },
+    [editing, performSave],
   );
 
   /**
@@ -221,6 +373,7 @@ export const Pool = () => {
       setPropBets(values);
       persist({ prop_bets: values });
       setShowHandleError(true);
+      setStatusMessage(null);
 
       const blockers = getPoolEntryBlockers({
         pool,
@@ -256,9 +409,9 @@ export const Pool = () => {
         return;
       }
 
-      await write({ picks, handle, propBets: values });
+      await saveEntry({ picks, handle, propBets: values });
     },
-    [pool, poolId, picks, handle, persist, slimUser, write],
+    [pool, poolId, picks, handle, persist, slimUser, saveEntry],
   );
 
   const matchesEnterPool = useCallback(
@@ -297,14 +450,14 @@ export const Pool = () => {
         return { result: "invalid" as const, message: blockers[0].message };
       }
 
-      const outcome = await write(values);
+      const outcome = await saveEntry(values);
       if (outcome.ok) return { result: "completed" as const };
       return {
         result: (outcome.denied ? "invalid" : "failed") as "invalid" | "failed",
         message: outcome.message,
       };
     },
-    [pool, poolId, slimUser, write],
+    [pool, poolId, slimUser, saveEntry],
   );
 
   const continuation = useAuthContinuation({
@@ -313,6 +466,80 @@ export const Pool = () => {
     matches: matchesEnterPool,
     execute: executeEnterPool,
   });
+
+  /** Prefill the form from the entry the server holds, and start editing. */
+  const startEditing = useCallback(() => {
+    if (!entry) return;
+    setPicks(entry.picks);
+    setHandle(entry.handle);
+    setPropBets(entry.prop_bets);
+    setPropBetsFormKey((key) => key + 1);
+    setEditBaseline(entry.updated_at);
+    setShowHandleError(false);
+    setBlockerMessage(null);
+    setRetryMessage(null);
+    setStatusMessage(null);
+    setEditing(true);
+  }, [entry]);
+
+  const cancelEditing = useCallback(() => {
+    setEditing(false);
+    setEditBaseline(undefined);
+    setBlockerMessage(null);
+    setRetryMessage(null);
+    lastAttempt.current = null;
+  }, []);
+
+  const withdraw = useCallback(() => {
+    const run = async () => {
+      lastAttempt.current = run;
+      const outcome = await runWrite("withdraw", withdrawEntry);
+      if (!isPoolWriteAcknowledged(outcome)) return;
+      lastAttempt.current = null;
+      // The listener drops the entry on its own; clear the form behind it so
+      // the empty entry form is genuinely empty.
+      setPicks([]);
+      setHandle("");
+      setPropBets({});
+      setPropBetsFormKey((key) => key + 1);
+      setEditing(false);
+      setEditBaseline(undefined);
+      if (poolId) clearPoolEntryDraft(poolId);
+      setStatusMessage(
+        "Your entry has been withdrawn. You can enter again until entries close.",
+      );
+    };
+    modals.openConfirmModal({
+      title: "Withdraw your entry?",
+      children: (
+        <Text size="sm">
+          Your picks, handle, and prop bets are removed from this pool. You can
+          enter again any time before entries close.
+        </Text>
+      ),
+      labels: { confirm: "Withdraw my entry", cancel: "Keep my entry" },
+      confirmProps: { color: "red" },
+      onConfirm: () => void run(),
+    });
+  }, [poolId, runWrite, withdrawEntry]);
+
+  const saveHandleOnly = useCallback(
+    async (next: string) => {
+      const outcome = await runWrite("handle", () => updateHandle(next));
+      if (isPoolWriteAcknowledged(outcome)) return { ok: true, retryable: false };
+      return { ok: false, retryable: outcome.status === "failed" };
+    },
+    [runWrite, updateHandle],
+  );
+
+  const dismissRejection = useCallback(() => {
+    if (!poolId) return;
+    setRejection(applyPoolWriteEvent({ type: "dismissed", pool_id: poolId }));
+  }, [poolId]);
+
+  const retryLastAttempt = useCallback(() => {
+    void lastAttempt.current?.();
+  }, []);
 
   if (state === "loading" || (poolLoaded && pool && entryLoading)) {
     return <RouteLoading />;
@@ -377,6 +604,41 @@ export const Pool = () => {
     />
   );
 
+  /**
+   * The one place a refused write is explained. It renders whether or not the
+   * form that caused it is still mounted, and clears itself on the next
+   * acknowledged write or when the entrant dismisses it.
+   */
+  const rejectionNotice = rejection ? (
+    <Notice
+      label={describePoolWriteRejection(rejection).label}
+      tone="danger"
+      role="alert"
+      actions={
+        <Button size="xs" variant="default" onClick={dismissRejection}>
+          Got it
+        </Button>
+      }
+    >
+      {describePoolWriteRejection(rejection).message}
+    </Notice>
+  ) : null;
+
+  const retryNotice = retryMessage ? (
+    <Notice
+      label="Not saved"
+      tone="danger"
+      role="alert"
+      actions={
+        <Button size="xs" variant="default" onClick={retryLastAttempt}>
+          Try again
+        </Button>
+      }
+    >
+      {retryMessage}
+    </Notice>
+  ) : null;
+
   if (state === "closed" || state === "frozen") {
     return (
       <div className={classes.page}>
@@ -386,12 +648,27 @@ export const Pool = () => {
             ? "This pool is not accepting entries at the moment. Nothing you do here will be saved."
             : `Entries closed on ${formatFreeze(freezeMillis)}, so this pool can no longer be entered.`}
         </Notice>
+        {rejectionNotice}
+        {retryNotice}
+        {blockerMessage && (
+          <Notice label="Not yet" tone="warning" role="alert">
+            {blockerMessage}
+          </Notice>
+        )}
         {entry && <SubmittedEntry entry={entry} />}
+        {controls === "handle-only" && entry && (
+          <section className={classes.section} aria-labelledby="pool-handle">
+            <h2 className={classes.heading} id="pool-handle">
+              Your handle
+            </h2>
+            <PoolHandleOnlyForm handle={entry.handle} onSave={saveHandleOnly} />
+          </section>
+        )}
       </div>
     );
   }
 
-  if (entry) {
+  if (entry && !editing) {
     return (
       <div className={classes.page}>
         {intro}
@@ -399,14 +676,74 @@ export const Pool = () => {
           Your entry is in. You can change it until entries close on{" "}
           {formatFreeze(freezeMillis)}.
         </Notice>
-        <SubmittedEntry entry={entry} />
+        {rejectionNotice}
+        {retryNotice}
+        {statusMessage && (
+          <Notice label="Saved" tone="success" role="status">
+            {statusMessage}
+          </Notice>
+        )}
+        <SubmittedEntry
+          entry={entry}
+          actions={
+            controls === "edit-and-withdraw" ? (
+              <div className={classes.actions}>
+                <Button variant="default" onClick={startEditing}>
+                  Change my entry
+                </Button>
+                <Button
+                  variant="subtle"
+                  color="red"
+                  disabled={submitting}
+                  onClick={withdraw}
+                >
+                  Withdraw my entry
+                </Button>
+              </div>
+            ) : undefined
+          }
+        />
       </div>
     );
   }
 
+  const changedElsewhere = poolEntryChangedElsewhere(
+    editBaseline,
+    entry?.updated_at,
+  );
+
   return (
     <div className={classes.page}>
       {intro}
+
+      {statusMessage && !editing && (
+        <Notice label="Withdrawn" tone="info" role="status">
+          {statusMessage}
+        </Notice>
+      )}
+
+      {editing && (
+        <Notice label="Editing" tone="info">
+          You are changing an entry that is already in. Nothing changes until
+          you save.
+        </Notice>
+      )}
+
+      {changedElsewhere && (
+        <Notice
+          label="Changed elsewhere"
+          tone="warning"
+          role="alert"
+          actions={
+            <Button size="xs" variant="default" onClick={startEditing}>
+              Load the newer entry
+            </Button>
+          }
+        >
+          This entry was changed in another tab or on another device after you
+          started editing. Saving now replaces that newer version.
+        </Notice>
+      )}
 
       <section className={classes.section} aria-labelledby="pool-picks">
         <h2 className={classes.heading} id="pool-picks">
@@ -450,11 +787,8 @@ export const Pool = () => {
             {blockerMessage}
           </Notice>
         )}
-        {submitMessage && (
-          <Notice label="Not saved" tone="danger" role="alert">
-            {submitMessage}
-          </Notice>
-        )}
+        {rejectionNotice}
+        {retryNotice}
         {continuation.status === "failed" && continuation.error && (
           <Notice
             label="Not saved"
@@ -473,9 +807,22 @@ export const Pool = () => {
           key={propBetsFormKey}
           cast={pool.roster}
           initialValues={propBets}
-          submitLabel={submitting ? "Submitting..." : "Submit my entry"}
+          submitLabel={
+            submitting
+              ? "Saving..."
+              : editing
+                ? "Save my changes"
+                : "Submit my entry"
+          }
           onSubmit={onPropBetsSubmit}
         />
+        {editing && (
+          <div className={classes.actions}>
+            <Button variant="subtle" color="gray" onClick={cancelEditing}>
+              Cancel and keep my entry as it is
+            </Button>
+          </div>
+        )}
       </section>
     </div>
   );
@@ -485,13 +832,16 @@ export const Pool = () => {
  * The entrant's own submitted entry. Only they can read it: entry documents
  * stay owner-only before and after the freeze (KTD6, AE5).
  *
- * The edit and withdrawal controls are a separate unit. This view is the seam
- * they attach to.
+ * `actions` is where the edit and withdrawal controls attach. They are absent
+ * after the freeze, which is `resolvePoolEntryControls`' decision rather than
+ * this component's.
  */
 const SubmittedEntry = ({
   entry,
+  actions,
 }: {
-  entry: { handle: string; picks: PoolPick[]; prop_bets: PropBetsFormData };
+  entry: Pick<PoolEntry, "handle" | "picks" | "prop_bets">;
+  actions?: ReactNode;
 }) => (
   <section className={classes.section} aria-labelledby="pool-entry">
     <h2 className={classes.heading} id="pool-entry">
@@ -508,5 +858,6 @@ const SubmittedEntry = ({
         answered
       </dd>
     </dl>
+    {actions}
   </section>
 );
