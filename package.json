@@ -29,6 +29,8 @@
     "e2e:auth-flows": "firebase emulators:exec --only auth,firestore,database --project demo-auth-flows \"playwright test --config playwright.auth-flows.config.ts\"",
     "seed-competition": "tsx scripts/seed-competition.ts",
     "create-pool": "tsx scripts/create-pool.ts",
+    "repair-pool-picks": "tsx scripts/repair-pool-picks.ts",
+    "snapshot-firestore": "tsx scripts/snapshot-firestore.ts",
     "new-season": "tsx scripts/new-season.ts",
     "sync-season": "tsx scripts/sync-season.ts",
     "push-all-seasons": "tsx scripts/push-all-seasons.ts",
