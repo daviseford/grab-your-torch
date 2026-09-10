@@ -24,6 +24,7 @@ import {
   describePoolWriteRejection,
   loadPoolWriteRejection,
   PoolCastPicker,
+  PoolEntryBreakdown,
   poolEntryChangedElsewhere,
   PoolHandleField,
   PoolHandleOnlyForm,
@@ -41,6 +42,7 @@ import {
   usePoolEntry,
   type PoolEntrySubmitOutcome,
 } from "../hooks/usePoolEntry";
+import { usePoolEntryScores } from "../hooks/usePoolEntryScores";
 import { useUser } from "../hooks/useUser";
 import type {
   FirestoreTimestamp,
@@ -50,6 +52,7 @@ import type {
   Season,
 } from "../types";
 import { trackEvent } from "../utils/analytics";
+import type { PoolEntryScores } from "../utils/poolEntryScoring";
 // Importing this module is what makes the autosave survive a reload: it
 // replaces the seam's session-only default with browser-local storage (U13).
 import { readPoolEntryDraftForPool } from "../utils/poolDraftStorage";
@@ -131,6 +134,13 @@ export const Pool = () => {
     updateHandle,
     withdrawEntry,
   } = usePoolEntry(poolId);
+  // The entrant's own week-by-week points (R26). Owner scoped inside the hook,
+  // derived live rather than read from the standings cache, and unbounded by
+  // any current-episode spoiler filter because a pool is watched live (KD7).
+  const { scores: entryScores, isLoading: scoresLoading } = usePoolEntryScores(
+    entry,
+    pool?.season_id,
+  );
 
   const [picks, setPicks] = useState<PoolPick[]>([]);
   const [handle, setHandle] = useState("");
@@ -677,7 +687,13 @@ export const Pool = () => {
             {blockerMessage}
           </Notice>
         )}
-        {entry && <SubmittedEntry entry={entry} />}
+        {entry && (
+          <SubmittedEntry
+            entry={entry}
+            scores={entryScores}
+            scoresLoading={scoresLoading}
+          />
+        )}
         {controls === "handle-only" && entry && (
           <section className={classes.section} aria-labelledby="pool-handle">
             <h2 className={classes.heading} id="pool-handle">
@@ -707,6 +723,8 @@ export const Pool = () => {
         )}
         <SubmittedEntry
           entry={entry}
+          scores={entryScores}
+          scoresLoading={scoresLoading}
           actions={
             controls === "edit-and-withdraw" ? (
               <div className={classes.actions}>
@@ -857,13 +875,22 @@ export const Pool = () => {
  * `actions` is where the edit and withdrawal controls attach. They are absent
  * after the freeze, which is `resolvePoolEntryControls`' decision rather than
  * this component's.
+ *
+ * `scores` is the entrant's own week-by-week breakdown (R26). It is safe here
+ * and only here: this section is the one surface in the product that no
+ * second person can reach. It must not be lifted onto the leaderboard or any
+ * other public surface, which R17 bounds to handles, totals and ranks (R25).
  */
 const SubmittedEntry = ({
   entry,
   actions,
+  scores,
+  scoresLoading,
 }: {
   entry: Pick<PoolEntry, "handle" | "picks" | "prop_bets">;
   actions?: ReactNode;
+  scores?: PoolEntryScores;
+  scoresLoading?: boolean;
 }) => (
   <section className={classes.section} aria-labelledby="pool-entry">
     <h2 className={classes.heading} id="pool-entry">
@@ -880,6 +907,7 @@ const SubmittedEntry = ({
         answered
       </dd>
     </dl>
+    <PoolEntryBreakdown scores={scores} isLoading={scoresLoading} />
     {actions}
   </section>
 );

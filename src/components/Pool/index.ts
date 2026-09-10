@@ -1,6 +1,10 @@
 export { buildPoolCastDetails, type PoolCastDetail } from "./poolCastDetails";
 export { PoolCastPicker, type PoolCastPickerProps } from "./PoolCastPicker";
 export {
+  PoolEntryBreakdown,
+  type PoolEntryBreakdownProps,
+} from "./PoolEntryBreakdown";
+export {
   poolEntryChangedElsewhere,
   resolvePoolEntryControls,
   type PoolEntryControls,
