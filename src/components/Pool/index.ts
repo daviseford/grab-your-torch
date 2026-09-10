@@ -1,5 +1,5 @@
-export { PoolCastPicker, type PoolCastPickerProps } from "./PoolCastPicker";
 export { buildPoolCastDetails, type PoolCastDetail } from "./poolCastDetails";
+export { PoolCastPicker, type PoolCastPickerProps } from "./PoolCastPicker";
 export {
   poolEntryChangedElsewhere,
   resolvePoolEntryControls,
@@ -10,6 +10,7 @@ export {
   PoolHandleOnlyForm,
   type PoolHandleOnlyFormProps,
 } from "./PoolHandleOnlyForm";
+export { PoolLeaderboard, type PoolLeaderboardProps } from "./PoolLeaderboard";
 export {
   applyPoolWriteEvent,
   describePoolWriteRejection,
