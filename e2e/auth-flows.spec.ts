@@ -18,6 +18,8 @@
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import admin from "firebase-admin";
 import { RESET_REQUEST_CONFIRMATION } from "../src/components/Auth/authErrors";
+import { PropBetQuestionKeys, PropBetsQuestions } from "../src/data/propbets";
+import { SEASON_51_PLAYERS } from "../src/data/season_51";
 
 // ---------------------------------------------------------------------------
 // Emulator endpoints (ports pinned in firebase.json)
@@ -78,6 +80,27 @@ type SeededUser = { uid: string; email: string; displayName: string };
 const VALID_INVITE_DRAFT = "draft_valid_invite";
 const STARTED_DRAFT = "draft_started";
 const MEMBER_DRAFT = "draft_existing_member";
+
+// The public season pool (U5, U12, U13). Season 51 is deliberately absent from
+// Firestore, so the configuration document's roster is the only cast the entry
+// page has (KTD3): no pool test below seeds a season, and one that did would be
+// describing a page this product never ships.
+const POOL_SEASON_ID = "season_51";
+const POOL_SEASON_NUM = 51;
+const POOL_ID = "pool_season_51";
+const POOL_NAME = "Survivor 51 Season Pool";
+
+// The real cast, ordered the way scripts/create-pool.ts orders it, so
+// `picks_per_entry` is the real 7 of 21 rather than a convenient number.
+const POOL_ROSTER = SEASON_51_PLAYERS.map(({ castaway_id, full_name }) => ({
+  castaway_id,
+  full_name,
+})).sort((a, b) => a.full_name.localeCompare(b.full_name));
+const PICKS_PER_ENTRY = Math.floor(POOL_ROSTER.length / 3);
+
+const POOL_HANDLE = "TorchSnuffer12";
+/** The answer every castaway-typed prop bet question is given. */
+const PROP_BET_PICK = POOL_ROSTER[0];
 
 // ---------------------------------------------------------------------------
 // Emulator REST helpers
@@ -204,6 +227,71 @@ const seedSeason = async () => {
     episodes: [],
     castawayLookup: {},
   });
+};
+
+/**
+ * The pool configuration document and its counters sibling.
+ *
+ * `pools/{poolId}` is never client-writable, admin claim included (KTD3), so
+ * the Admin SDK is the only way it can exist -- the same reason `seedSeason`
+ * above uses it. `freeze_at` is a real Firestore Timestamp: the rules compare
+ * it against `request.time`, and a string in that field would deny every write
+ * for a reason that has nothing to do with the freeze.
+ */
+const seedPool = async (freezeAt: Date) => {
+  await adminDb.doc(`pools/${POOL_ID}`).set({
+    id: POOL_ID,
+    season_id: POOL_SEASON_ID,
+    season_num: POOL_SEASON_NUM,
+    name: POOL_NAME,
+    freeze_at: admin.firestore.Timestamp.fromDate(freezeAt),
+    roster: POOL_ROSTER,
+    picks_per_entry: PICKS_PER_ENTRY,
+    prop_bet_keys: PropBetQuestionKeys,
+    status: "open",
+    display_mode: "full",
+    latest_episode_num: null,
+    season_complete: false,
+  });
+  await adminDb.doc(`pools/${POOL_ID}/meta/counters`).set({
+    entry_count: 0,
+    updated_at: new Date().toISOString(),
+  });
+};
+
+/** Every question answered, which is what an entry the rules accept carries. */
+const seededPropBets = () =>
+  Object.fromEntries(
+    PropBetQuestionKeys.map((key) => [
+      key,
+      PropBetsQuestions[key].answer_type === "boolean"
+        ? "Yes"
+        : PROP_BET_PICK.castaway_id,
+    ]),
+  );
+
+/**
+ * An entry that is already in, written with the Admin SDK so it can exist in a
+ * pool that is already frozen. The shape is exactly what `poolEntryPayload.ts`
+ * builds, because the rules validate the merged document on every later write.
+ */
+const seedPoolEntry = async (uid: string, handle: string) => {
+  const now = admin.firestore.Timestamp.now();
+  await adminDb.doc(`pools/${POOL_ID}/entries/${uid}`).set({
+    id: `pool_entry_${uid}`,
+    pool_id: POOL_ID,
+    season_id: POOL_SEASON_ID,
+    handle,
+    picks: POOL_ROSTER.slice(0, PICKS_PER_ENTRY),
+    prop_bets: seededPropBets(),
+    created_at: now,
+    updated_at: now,
+  });
+};
+
+const readPoolEntry = async (uid: string) => {
+  const snap = await adminDb.doc(`pools/${POOL_ID}/entries/${uid}`).get();
+  return snap.exists ? snap.data() : undefined;
 };
 
 const participantMap = (users: SeededUser[]) =>
@@ -1248,4 +1336,408 @@ test("Google sign-in: a first visit creates the account and user document, a ret
   await expect(dialog(page)).toBeHidden(SLOW);
   await expectSignedIn(page, isMobile);
   expect((await userDocsFor(email)).length).toBe(1);
+});
+
+// ---------------------------------------------------------------------------
+// U5, U12, U13: the public season pool
+// ---------------------------------------------------------------------------
+
+// Two of the pool's behaviours cannot be proven by a pure-function test under
+// this project's conventions, and they are the two the plan leads with: an
+// entry filled in signed out and submitted through the account gate, and a
+// write the boundary actually refuses. Both are here, driven through the real
+// UI against real security rules.
+
+/** Comfortably open for the whole of a test. */
+const openFreeze = () => new Date(Date.now() + 10 * 60_000);
+/** Already past, so every entry write against this pool is refused. */
+const passedFreeze = () => new Date(Date.now() - 10 * 60_000);
+
+/**
+ * Put the browser's clock back to before a freeze that has already passed.
+ *
+ * The page's freeze check is cosmetic and re-evaluated on a 30 second tick, so
+ * an entrant whose form was open when the freeze passed still has a submit
+ * button in front of them. That is the AE2 scenario, and KTD4 names its cause:
+ * browser clocks are not trustworthy, so the gate on screen can disagree with
+ * the boundary. Only `Date` is faked here; timers, the Firestore SDK, and
+ * `serverTimestamp()` are untouched, so the denial the test asserts comes from
+ * the real rules comparing the real `request.time` against the stored
+ * `freeze_at`. Racing the 30 second interval instead would make the same
+ * assertion depend on how fast this machine fills in a form.
+ */
+const holdTheFormOpenPastFreeze = async (page: Page, freezeAt: Date) => {
+  await page.clock.setFixedTime(new Date(freezeAt.getTime() - 5 * 60_000));
+};
+
+// By role, not by label: the picks, handle, and prop bets sections are each
+// labelled by their own heading, so "Your handle" names a region as well as
+// the field inside it.
+const poolHandleField = (page: Page) =>
+  page.getByRole("textbox", { name: "Your handle" });
+
+const poolPicks = () => POOL_ROSTER.slice(0, PICKS_PER_ENTRY);
+
+const choosePoolPicks = async (page: Page, picks = poolPicks()) => {
+  for (const castaway of picks) {
+    await page
+      .getByRole("button", { name: `Pick ${castaway.full_name}` })
+      .click();
+  }
+  await expect(
+    page.getByText(`${picks.length} of ${PICKS_PER_ENTRY} picks chosen`),
+  ).toBeVisible();
+};
+
+// The form renders every question and blocks submit until each one is
+// answered, so the whole set is filled from the question list itself rather
+// than from a copy of it that could drift.
+const answerPropBets = async (page: Page) => {
+  for (const key of PropBetQuestionKeys) {
+    const question = PropBetsQuestions[key];
+    await page
+      .getByLabel(question.description, { exact: false })
+      .first()
+      .click();
+    await page
+      .getByRole("option", {
+        name:
+          question.answer_type === "boolean" ? "Yes" : PROP_BET_PICK.full_name,
+        exact: true,
+      })
+      .click();
+  }
+};
+
+/** A complete entry, in the order the page presents it. */
+const fillPoolEntry = async (page: Page, handle = POOL_HANDLE) => {
+  await choosePoolPicks(page);
+  await poolHandleField(page).fill(handle);
+  await answerPropBets(page);
+};
+
+// AE1 (R1, R6): a signed-out visitor fills the entry in, meets the account
+// gate at submit, and the entry lands under their new uid with nothing
+// entered twice. The gate is at submit and nowhere earlier (KD5), so the
+// whole form is filled in before any account exists.
+test("pool: a signed-out entry survives registration and lands under the new uid (AE1)", async ({
+  page,
+}) => {
+  await seedPool(openFreeze());
+  const email = uniqueEmail("pool-entrant");
+
+  await page.goto(`/pool/${POOL_SEASON_ID}`);
+  await expect(page.getByRole("heading", { name: POOL_NAME })).toBeVisible(
+    SLOW,
+  );
+  // No page-level sign-in gate: the pool is enterable before an account is
+  // (R18), and a modal here would mean the entry could never be filled first.
+  await expect(dialog(page)).toHaveCount(0);
+
+  const picks = poolPicks();
+  await fillPoolEntry(page);
+
+  // Submitting the prop bets is submitting the entry, and is the one moment
+  // the account gate appears.
+  await page.getByRole("button", { name: "Submit my entry" }).click();
+  await expect(dialog(page).getByText(`Enter the ${POOL_NAME}`)).toBeVisible(
+    SLOW,
+  );
+
+  await registerThrough(page, {
+    name: "Pool Entrant",
+    email,
+    password: PASSWORD,
+  });
+
+  // No second submit: the retained intent finishes the entry on its own, and
+  // the page comes back with the entry and its edit affordance.
+  await expect(page.getByRole("heading", { name: "Your entry" })).toBeVisible(
+    SLOW,
+  );
+  await expect(page.getByText("Your entry is in.")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Change my entry" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Withdraw my entry" }),
+  ).toBeVisible();
+
+  // What landed is what was typed before the account existed. This is the
+  // whole claim: not that an entry exists, but that it is that entry.
+  const account = await findAccountByEmail(email, PASSWORD);
+  // Poll rather than read once. The page renders the submitted entry as soon
+  // as the SDK's local cache holds the pending write, which is before the
+  // server has acknowledged it, so the on-screen state is not proof the
+  // document exists server-side yet. The Admin SDK sees only what landed.
+  await expect
+    .poll(async () => (await readPoolEntry(account.localId)) !== undefined, {
+      message: "no entry document at the new uid",
+      timeout: 20_000,
+    })
+    .toBe(true);
+  const entry = await readPoolEntry(account.localId);
+  expect(entry?.id).toBe(`pool_entry_${account.localId}`);
+  expect(entry?.pool_id).toBe(POOL_ID);
+  expect(entry?.handle).toBe(POOL_HANDLE);
+  expect(entry?.picks).toEqual(picks);
+  expect(Object.keys(entry?.prop_bets ?? {}).sort()).toEqual(
+    [...PropBetQuestionKeys].sort(),
+  );
+  expect(entry?.prop_bets.propbet_winner).toBe(PROP_BET_PICK.castaway_id);
+  expect(entry?.prop_bets.propbet_quit).toBe("Yes");
+
+  // Exactly one entry: the intent is single-use, and a Strict Mode effect
+  // replay under the dev server must not produce a second write.
+  const entries = await adminDb.collection(`pools/${POOL_ID}/entries`).get();
+  expect(entries.size).toBe(1);
+
+  // The handle shown back is the one they chose, not their account name.
+  await expect(page.getByText(POOL_HANDLE)).toBeVisible();
+});
+
+// U13: the same fill, but interrupted by a reload before the account exists.
+//
+// This is the case the autosave is actually for. The test above completes in
+// one page context, so its entry is submitted from React state and passes
+// even with browser storage emptied -- proven by wiping it there and watching
+// the test still pass. Only a reload discards that state, which makes this
+// the test that holds U13's claim that the restored entry is sourced from the
+// autosave rather than from memory.
+test("pool: an entry filled in signed out survives a reload and then sign-in (U13)", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(Boolean(isMobile), "desktop-only scenario");
+  await seedPool(openFreeze());
+  const email = uniqueEmail("pool-reload");
+  const picks = poolPicks();
+
+  await page.goto(`/pool/${POOL_SEASON_ID}`);
+  await expect(page.getByRole("heading", { name: POOL_NAME })).toBeVisible(
+    SLOW,
+  );
+  await fillPoolEntry(page);
+
+  // Submitting saves the autosave and the resume marker, then asks for an
+  // account. Dismiss it and reload: every bit of in-memory state is gone.
+  await page.getByRole("button", { name: "Submit my entry" }).click();
+  await expect(dialog(page).getByText(`Enter the ${POOL_NAME}`)).toBeVisible(
+    SLOW,
+  );
+  await page.keyboard.press("Escape");
+  await page.reload();
+
+  // The form comes back filled from browser storage alone.
+  await expect(
+    page.getByText(`${picks.length} of ${PICKS_PER_ENTRY} picks chosen`),
+  ).toBeVisible(SLOW);
+  await expect(poolHandleField(page)).toHaveValue(POOL_HANDLE);
+  for (const castaway of picks) {
+    await expect(
+      page.getByRole("button", { name: `Remove ${castaway.full_name}` }),
+    ).toBeVisible();
+  }
+
+  // And it submits without re-entering anything.
+  await page.getByRole("button", { name: "Submit my entry" }).click();
+  await expect(dialog(page).getByText(`Enter the ${POOL_NAME}`)).toBeVisible(
+    SLOW,
+  );
+  await registerThrough(page, {
+    name: "Reload Entrant",
+    email,
+    password: PASSWORD,
+  });
+
+  await expect(page.getByRole("heading", { name: "Your entry" })).toBeVisible(
+    SLOW,
+  );
+
+  const account = await findAccountByEmail(email, PASSWORD);
+  await expect
+    .poll(async () => (await readPoolEntry(account.localId)) !== undefined, {
+      message: "no entry document after the reload path",
+      timeout: 20_000,
+    })
+    .toBe(true);
+  const entry = await readPoolEntry(account.localId);
+  expect(entry?.handle).toBe(POOL_HANDLE);
+  expect(entry?.picks).toEqual(picks);
+  expect(Object.keys(entry?.prop_bets ?? {}).sort()).toEqual(
+    [...PropBetQuestionKeys].sort(),
+  );
+});
+
+// AE2 (R9, R10): the form is open when the freeze passes. The write is
+// refused by the rules, the picks stay on screen, and one notice says the
+// pool has closed. The refusal is real: `request.time` cannot be mocked, so
+// the pool's stored freeze instant is genuinely in the past.
+test("pool: a write refused after the freeze keeps the picks on screen and says so (AE2)", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(Boolean(isMobile), "desktop-only scenario");
+  const freezeAt = passedFreeze();
+  await seedPool(freezeAt);
+  const user = await createUser(
+    uniqueEmail("pool-frozen"),
+    PASSWORD,
+    "Frozen Entrant",
+  );
+
+  await page.goto("/");
+  await mainNav(page)
+    .getByRole("button", { name: "Sign in", exact: true })
+    .click();
+  await signInThrough(page, { email: user.email, password: PASSWORD });
+  await expect(
+    mainNav(page).getByRole("button", { name: "Logout" }),
+  ).toBeVisible(SLOW);
+
+  await holdTheFormOpenPastFreeze(page, freezeAt);
+  await page.goto(`/pool/${POOL_SEASON_ID}`);
+
+  // The client's own gate still believes the pool is open, which is exactly
+  // the state an entrant with the form open sits in.
+  await expect(page.getByRole("heading", { name: "Your picks" })).toBeVisible(
+    SLOW,
+  );
+  const picks = poolPicks();
+  await fillPoolEntry(page);
+  await page.getByRole("button", { name: "Submit my entry" }).click();
+
+  // The boundary refuses it, and the page says what happened to the entry
+  // rather than only that something failed.
+  await expect(
+    page.getByText(
+      "This pool closed before your entry reached us, so it was not saved.",
+    ),
+  ).toBeVisible(SLOW);
+  await expect(page.getByText("Your picks are still on screen.")).toBeVisible();
+
+  // And they are: every pick, the handle, and the answers are untouched.
+  await expect(
+    page.getByText(`${picks.length} of ${PICKS_PER_ENTRY} picks chosen`),
+  ).toBeVisible();
+  for (const castaway of picks) {
+    await expect(
+      page.getByRole("button", { name: `Remove ${castaway.full_name}` }),
+    ).toBeVisible();
+  }
+  await expect(poolHandleField(page)).toHaveValue(POOL_HANDLE);
+  // By combobox role, not by label: Mantine renders the question text as a
+  // label element as well as the control's accessible name, so a label query
+  // matches two nodes.
+  await expect(
+    page.getByRole("combobox", {
+      name: PropBetsQuestions.propbet_winner.description,
+    }),
+  ).toHaveValue(PROP_BET_PICK.full_name);
+
+  // Nothing was written.
+  expect(await readPoolEntry(user.uid)).toBeUndefined();
+
+  // The refusal is recorded before it is rendered, so it survives a reload
+  // even though the write that caused it is long gone, and the autosaved
+  // entry comes back with it.
+  await page.reload();
+  await expect(
+    page.getByText(
+      "This pool closed before your entry reached us, so it was not saved.",
+    ),
+  ).toBeVisible(SLOW);
+  await expect(
+    page.getByText(`${picks.length} of ${PICKS_PER_ENTRY} picks chosen`),
+  ).toBeVisible();
+
+  // Dismissal clears it: after the freeze there may be no write left that can
+  // succeed, so nothing else would ever take the notice down.
+  await page.getByRole("button", { name: "Got it" }).click();
+  await expect(
+    page.getByText(
+      "This pool closed before your entry reached us, so it was not saved.",
+    ),
+  ).toHaveCount(0);
+});
+
+// AE6 (R5, R9): after the freeze the handle still changes and nothing else
+// does. The rules already pin the accepted write shapes; what only the
+// emulator can show is that the CLIENT sends the two-key diff on the handle
+// path and the full payload on the edit path, so one succeeds and the other
+// is refused by the same rules on the same entry.
+test("pool: after the freeze a handle change is accepted and a pick change is refused (AE6)", async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(Boolean(isMobile), "desktop-only scenario");
+  const freezeAt = passedFreeze();
+  await seedPool(freezeAt);
+  const user = await createUser(
+    uniqueEmail("pool-handle"),
+    PASSWORD,
+    "Handle Entrant",
+  );
+  await seedPoolEntry(user.uid, "OldHandle");
+  const seededPicks = POOL_ROSTER.slice(0, PICKS_PER_ENTRY);
+
+  await page.goto("/");
+  await mainNav(page)
+    .getByRole("button", { name: "Sign in", exact: true })
+    .click();
+  await signInThrough(page, { email: user.email, password: PASSWORD });
+  await expect(
+    mainNav(page).getByRole("button", { name: "Logout" }),
+  ).toBeVisible(SLOW);
+
+  // With the real clock the page knows the pool is frozen: the entry is shown
+  // with no edit or withdrawal control, and the handle is the one thing left.
+  await page.goto(`/pool/${POOL_SEASON_ID}`);
+  await expect(page.getByRole("heading", { name: "Your entry" })).toBeVisible(
+    SLOW,
+  );
+  await expect(
+    page.getByRole("button", { name: "Change my entry" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Withdraw my entry" }),
+  ).toHaveCount(0);
+
+  await poolHandleField(page).fill("NewHandle");
+  await page.getByRole("button", { name: "Save my handle" }).click();
+  await expect(page.getByText("Your handle is now NewHandle")).toBeVisible(
+    SLOW,
+  );
+
+  const renamed = await readPoolEntry(user.uid);
+  expect(renamed?.handle).toBe("NewHandle");
+  expect(renamed?.picks).toEqual(seededPicks);
+
+  // Now the same entrant with the form open across the freeze. The edit path
+  // sends the whole entry, so a changed pick rides along and the rules refuse
+  // the write that the handle-only diff above was allowed to make.
+  await holdTheFormOpenPastFreeze(page, freezeAt);
+  await page.goto(`/pool/${POOL_SEASON_ID}`);
+  await expect(
+    page.getByRole("button", { name: "Change my entry" }),
+  ).toBeVisible(SLOW);
+  await page.getByRole("button", { name: "Change my entry" }).click();
+
+  const dropped = seededPicks[0];
+  const added = POOL_ROSTER[PICKS_PER_ENTRY];
+  await page
+    .getByRole("button", { name: `Remove ${dropped.full_name}` })
+    .click();
+  await page.getByRole("button", { name: `Pick ${added.full_name}` }).click();
+  await page.getByRole("button", { name: "Save my changes" }).click();
+
+  await expect(
+    page.getByText(
+      "This pool closed before your changes reached us, so your entry is unchanged.",
+    ),
+  ).toBeVisible(SLOW);
+
+  const afterEdit = await readPoolEntry(user.uid);
+  expect(afterEdit?.picks).toEqual(seededPicks);
+  expect(afterEdit?.handle).toBe("NewHandle");
 });
