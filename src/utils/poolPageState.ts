@@ -47,8 +47,7 @@ export type ResolvePoolPageStateInput = {
  */
 export const timestampToMillis = (
   ts: Pick<FirestoreTimestamp, "seconds" | "nanoseconds">,
-): number =>
-  ts.seconds * 1000 + Math.floor(ts.nanoseconds / 1_000_000);
+): number => ts.seconds * 1000 + Math.floor(ts.nanoseconds / 1_000_000);
 
 export const resolvePoolPageState = ({
   pool,

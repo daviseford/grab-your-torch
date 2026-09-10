@@ -1,7 +1,7 @@
 import { Button } from "@mantine/core";
 import { useState } from "react";
-import { Notice } from "../Layout";
 import { validatePoolHandle } from "../../utils/poolHandle";
+import { Notice } from "../Layout";
 import { PoolHandleField } from "./PoolHandleField";
 import classes from "./PoolHandleOnlyForm.module.css";
 

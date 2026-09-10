@@ -259,7 +259,10 @@ describe("buildPoolHandleUpdatePayload", () => {
     ]) {
       expect(
         () =>
-          buildPoolHandleUpdatePayload({ handle, timestamp: sentinelTimestamp }),
+          buildPoolHandleUpdatePayload({
+            handle,
+            timestamp: sentinelTimestamp,
+          }),
         handle,
       ).toThrow(PoolEntryPayloadError);
     }
@@ -334,7 +337,9 @@ describe("classifyPoolWriteFailure", () => {
     for (const code of ["unavailable", "deadline-exceeded", "aborted"]) {
       for (const kind of ["create", "update", "handle", "withdraw"] as const) {
         const { message } = classifyPoolWriteFailure(code, kind);
-        expect(message.toLowerCase(), `${code}/${kind}`).not.toContain("closed");
+        expect(message.toLowerCase(), `${code}/${kind}`).not.toContain(
+          "closed",
+        );
       }
     }
   });
@@ -377,9 +382,9 @@ describe("resolvePoolEntryControls", () => {
     // The post-freeze handle rule still requires status == "open", so a closed
     // pool cannot even be renamed. Offering the control would be a dead end.
     expect(controlsFor({ status: "closed" }, NOW)).toBe("none");
-    expect(controlsFor({ status: "closed", freeze_at: pastTimestamp }, NOW)).toBe(
-      "none",
-    );
+    expect(
+      controlsFor({ status: "closed", freeze_at: pastTimestamp }, NOW),
+    ).toBe("none");
   });
 
   it("offers nothing when there is no entry to edit", () => {

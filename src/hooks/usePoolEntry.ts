@@ -81,7 +81,8 @@ export const isPoolWriteAcknowledged = (
 
 const FAILED_MESSAGE: Record<PoolWriteKind, string> = {
   create: "We could not save your entry. Check your connection and try again.",
-  update: "We could not save your changes. Check your connection and try again.",
+  update:
+    "We could not save your changes. Check your connection and try again.",
   handle: "We could not save your handle. Check your connection and try again.",
   withdraw:
     "We could not withdraw your entry. Check your connection and try again.",
@@ -148,7 +149,10 @@ export const usePoolEntry = (poolId?: PoolId) => {
         setLoaded(true);
       },
       (error: FirestoreError) => {
-        console.error(`usePoolEntry(${poolId}/${uid}): onSnapshot error`, error);
+        console.error(
+          `usePoolEntry(${poolId}/${uid}): onSnapshot error`,
+          error,
+        );
         setLoaded(true);
       },
     );
@@ -172,7 +176,11 @@ export const usePoolEntry = (poolId?: PoolId) => {
       } catch (error) {
         if (error instanceof PoolEntryPayloadError) {
           // The client caught it before the rules did, so it names the field.
-          return { status: "denied", reason: "payload", message: error.message };
+          return {
+            status: "denied",
+            reason: "payload",
+            message: error.message,
+          };
         }
         const code = (error as FirestoreError)?.code;
         if (code !== "permission-denied") {

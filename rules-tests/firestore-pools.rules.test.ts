@@ -198,10 +198,12 @@ beforeEach(async () => {
       scoring_revision: "rev_scoring",
       freeze_at: Timestamp.fromMillis(Date.now() - 24 * HOUR),
     };
-    await setDoc(
-      doc(seedDb, "pools", POOL_ID, "standings", EPISODE_ID),
-      { ...stamp, entry_count: 3, rows: [], page_count: 1 },
-    );
+    await setDoc(doc(seedDb, "pools", POOL_ID, "standings", EPISODE_ID), {
+      ...stamp,
+      entry_count: 3,
+      rows: [],
+      page_count: 1,
+    });
     await setDoc(
       doc(seedDb, "pools", POOL_ID, "standings", EPISODE_ID, "pages", "0"),
       { ...stamp, page: 0, rows: [] },
@@ -575,7 +577,9 @@ describe("entries: picks validation (R23)", () => {
   });
 
   it("denies a bare castaway id instead of a pair", async () => {
-    await assertFails(withPicks([ROSTER[0].castaway_id, ROSTER[1].castaway_id]));
+    await assertFails(
+      withPicks([ROSTER[0].castaway_id, ROSTER[1].castaway_id]),
+    );
   });
 
   it("denies a pick carrying an extra field", async () => {

@@ -131,7 +131,8 @@ export const getPoolEntryBlockers = ({
   if (handleError) blockers.push({ field: "handle", message: handleError });
 
   const unanswered =
-    pool.prop_bet_keys.length - answeredKeys(propBets, pool.prop_bet_keys).length;
+    pool.prop_bet_keys.length -
+    answeredKeys(propBets, pool.prop_bet_keys).length;
   if (unanswered > 0) {
     blockers.push({
       field: "prop_bets",

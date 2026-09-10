@@ -34,9 +34,7 @@ export type PoolHandleError = string;
  * Null when the handle is one the rules will accept, otherwise a short
  * sentence naming what to change.
  */
-export const validatePoolHandle = (
-  handle: string,
-): PoolHandleError | null => {
+export const validatePoolHandle = (handle: string): PoolHandleError | null => {
   if (handle.length === 0) return "Enter a handle.";
   if (NEWLINE_GUARD.test(handle)) {
     return "Handles are a single line of text.";
@@ -100,7 +98,9 @@ const pickFrom = <T>(items: readonly T[], value: number): T => {
  * A handle the validator always accepts. The entrant is free to replace it:
  * it is offered next to the field, never written into it on their behalf.
  */
-export const suggestPoolHandle = (random: () => number = Math.random): string => {
+export const suggestPoolHandle = (
+  random: () => number = Math.random,
+): string => {
   const first = pickFrom(HANDLE_FIRST, random());
   const second = pickFrom(HANDLE_SECOND, random());
   const digits = String(10 + Math.floor(random() * 89));

@@ -23,19 +23,22 @@ import {
   getPoolEntryBlockers,
   PoolEntryPayloadError,
 } from "../../utils/poolEntryPayload";
-import { poolIdForSeason, seasonNumFromSeasonId } from "../../utils/poolIds";
-import { resolvePoolPageState, timestampToMillis } from "../../utils/poolPageState";
-import {
-  isPoolPickSelected,
-  nextPoolSwapTarget,
-  togglePoolPick,
-} from "../../utils/poolPicks";
 import {
   POOL_HANDLE_MAX,
   POOL_HANDLE_MIN,
   suggestPoolHandle,
   validatePoolHandle,
 } from "../../utils/poolHandle";
+import { poolIdForSeason, seasonNumFromSeasonId } from "../../utils/poolIds";
+import {
+  resolvePoolPageState,
+  timestampToMillis,
+} from "../../utils/poolPageState";
+import {
+  isPoolPickSelected,
+  nextPoolSwapTarget,
+  togglePoolPick,
+} from "../../utils/poolPicks";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -156,9 +159,9 @@ describe("togglePoolPick", () => {
 
 describe("nextPoolSwapTarget", () => {
   it("names the pick that the next selection would replace", () => {
-    expect(nextPoolSwapTarget([roster[0], roster[1], roster[2]], LIMIT)).toEqual(
-      roster[0],
-    );
+    expect(
+      nextPoolSwapTarget([roster[0], roster[1], roster[2]], LIMIT),
+    ).toEqual(roster[0]);
   });
 
   it("is null below the limit, because nothing would be replaced", () => {
