@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { PoolStandingsRow } from "../../types";
+import {
+  FirestoreTimestamp,
+  PoolStandingsRow,
+  PoolStandingsStamp,
+} from "../../types";
 import {
   POOL_STANDINGS_PAGE_ROWS,
   POOL_STANDINGS_SUMMARY_ROWS,
@@ -15,12 +19,22 @@ const rows = (count: number): PoolStandingsRow[] =>
     rank: i + 1,
   }));
 
-const meta = {
+/** Stand-in for a Firestore Timestamp; only its shape matters here. */
+const timestamp = (iso: string): FirestoreTimestamp => {
+  const date = new Date(iso);
+  return {
+    seconds: Math.floor(date.getTime() / 1000),
+    nanoseconds: (date.getTime() % 1000) * 1e6,
+    toDate: () => date,
+  };
+};
+
+const meta: PoolStandingsStamp = {
   episode_num: 3,
   computed_at: "2026-09-24T04:00:00.000Z",
   data_revision: "aaaaaaaaaaaaaaaa",
   scoring_revision: "bbbbbbbbbbbbbbbb",
-  freeze_at: "2026-09-24T00:00:00.000Z",
+  freeze_at: timestamp("2026-09-24T00:00:00.000Z"),
 };
 
 describe("buildPoolStandingsDocuments", () => {

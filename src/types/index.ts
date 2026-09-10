@@ -434,6 +434,23 @@ export type SeasonRevisionStamp = {
  * Public season pool
  * ------------------------------------------------------------------ */
 
+/**
+ * A Firestore timestamp, structurally typed.
+ *
+ * The web SDK and the Admin SDK export different `Timestamp` classes, and this
+ * file is imported by both the browser bundle and the Node scripts, so neither
+ * concrete class can be named here. The three pool fields that use it are the
+ * ones security rules compare against `request.time` (KTD4): rules cannot
+ * compare a timestamp to a string, so an ISO string in any of these positions
+ * would deny every write rather than enforce the freeze. Everything else in
+ * this project stores ISO strings, and everything else here still does.
+ */
+export type FirestoreTimestamp = {
+  seconds: number;
+  nanoseconds: number;
+  toDate(): Date;
+};
+
 export type PoolId = `pool_${string}`;
 export type PoolEntryId = `pool_entry_${string}`;
 
@@ -473,11 +490,11 @@ export type Pool = {
   name: string;
 
   /**
-   * The instant entries close, as an ISO timestamp. Every surface that
-   * decides whether the pool is open reads this, never SEASON_METADATA
-   * (R11). Security rules compare it against `request.time` (KTD4).
+   * The instant entries close. Every surface that decides whether the pool
+   * is open reads this, never SEASON_METADATA (R11). Security rules compare
+   * it against `request.time` (KTD4), so it is a timestamp, not a string.
    */
-  freeze_at: string;
+  freeze_at: FirestoreTimestamp;
 
   /** The authoritative cast. The entry page reads it instead of a season doc. */
   roster: PoolPick[];
@@ -539,9 +556,15 @@ export type PoolEntry = {
 
   prop_bets: PropBetsFormData;
 
-  /** ISO timestamps pinned to `request.time` by rules (KTD4). */
-  created_at: string;
-  updated_at: string;
+  /**
+   * Pinned to `request.time` by rules (KTD4): `created_at == request.time` on
+   * create, and `updated_at == request.time` with `created_at` unchanged on
+   * update. A client-authored timestamp is worthless and browser clocks are
+   * not trustworthy, so these are set with `serverTimestamp()` and compared
+   * as timestamps.
+   */
+  created_at: FirestoreTimestamp;
+  updated_at: FirestoreTimestamp;
 };
 
 /**
@@ -570,7 +593,7 @@ export type PoolStandingsStamp = {
    * The pool's freeze instant as of this run. Recorded in every standings
    * document so that a moved deadline is loud rather than invisible (KTD4).
    */
-  freeze_at: string;
+  freeze_at: FirestoreTimestamp;
 };
 
 /**
