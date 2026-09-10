@@ -35,6 +35,10 @@ import {
 } from "firebase/firestore";
 import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import {
+  POOL_HANDLE_PATTERN,
+  validatePoolHandle,
+} from "../src/utils/poolHandle";
 
 const PROJECT_ID = "demo-survivor-fantasy-rules";
 
@@ -141,6 +145,7 @@ const poolConfig = (
   roster: ROSTER,
   picks_per_entry: PICKS_PER_ENTRY,
   prop_bet_keys: PROP_BET_KEYS,
+  prop_bet_answers: [...ROSTER.map((pick) => pick.castaway_id), "Yes", "No"],
   status: "open",
   display_mode: "full",
   latest_episode_num: null,
@@ -474,6 +479,37 @@ describe("entries: create shape allowlist", () => {
 });
 
 describe("entries: handle validation (R5)", () => {
+  it("keeps the client allowlist identical to the deployed rules", () => {
+    const rules = readFileSync("firestore.rules", "utf8");
+    expect(rules.match(/handle\.matches\("([^"]+)"\)/)?.[1]).toBe(
+      POOL_HANDLE_PATTERN.source,
+    );
+  });
+
+  it.each([
+    "ab",
+    "A".repeat(24),
+    "A".repeat(25),
+    "A",
+    "",
+    " a",
+    "a ",
+    "A_B-9",
+    "A B",
+    "Ada\n",
+    "Ada\r",
+    "a\u200bb",
+    "a\u202eb",
+    "a.b",
+    "a/b",
+  ])("matches client validation for handle %#", async (handle) => {
+    const write = setDoc(
+      doc(db(ALICE), entryPath(POOL_ID, ALICE)),
+      validEntry(ALICE, { handle }),
+    );
+    if (validatePoolHandle(handle) === null) await assertSucceeds(write);
+    else await assertFails(write);
+  });
   // Each assertion is its own create at its own uid: a second `setDoc` to the
   // same path is an overwrite, and an overwrite carrying a fresh
   // `serverTimestamp()` in `created_at` is correctly denied by the update rule.
@@ -614,6 +650,17 @@ describe("entries: prop bet validation (KTD3)", () => {
 
   it("denies prop_bets that are not a map", async () => {
     await assertFails(withPropBets(["winner"]));
+  });
+
+  it.each([42, { nested: "US0752" }, "x".repeat(100_000), "US9999"])(
+    "denies an answer outside the configured answer set (%#)",
+    async (answer) => {
+      await assertFails(withPropBets({ winner: answer }));
+    },
+  );
+
+  it.each(["Yes", "No"])("accepts the boolean answer %s", async (answer) => {
+    await assertSucceeds(withPropBets({ winner: answer }));
   });
 });
 

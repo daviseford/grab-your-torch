@@ -21,8 +21,8 @@ import type { PoolId } from "../../types";
  * then the truth. Persisting a "we are not sure" message that the very next
  * read contradicts is exactly the stale scare this record must not become.
  *
- * The record is cleared by the next server-acknowledged write, or by the
- * entrant dismissing it. Dismissal is not decoration: after the freeze there
+ * The record is cleared by the next server-acknowledged write, a newer server
+ * snapshot from another device, or the entrant dismissing it. After the freeze there
  * may be no write left that can succeed, so waiting for an acknowledgement
  * would leave the notice on screen forever.
  *
@@ -51,6 +51,8 @@ export type PoolWriteEvent =
   | { type: "started"; pool_id: PoolId }
   /** The server accepted a write. The entrant is up to date; clear. */
   | { type: "acknowledged"; pool_id: PoolId }
+  /** A server snapshot includes a newer write, possibly from another device. */
+  | { type: "observed"; pool_id: PoolId; updated_at: number }
   /** The boundary refused a write. Terminal, and must be surfaced. */
   | { type: "denied"; pool_id: PoolId; kind: PoolWriteKind; at: number }
   /** Transient failure. The live page offers a retry; any record stands. */
@@ -64,6 +66,10 @@ export const reducePoolWriteRejection = (
   event: PoolWriteEvent,
 ): PoolWriteRejection | null => {
   switch (event.type) {
+    case "observed":
+      return current?.pool_id === event.pool_id && event.updated_at > current.at
+        ? null
+        : current;
     case "denied":
       return { pool_id: event.pool_id, kind: event.kind, at: event.at };
     case "acknowledged":

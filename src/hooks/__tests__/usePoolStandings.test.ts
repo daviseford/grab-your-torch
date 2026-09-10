@@ -113,6 +113,7 @@ const poolDoc = (overrides: Partial<Pool> = {}): Pool =>
     roster: [],
     picks_per_entry: 7,
     prop_bet_keys: [],
+    prop_bet_answers: [],
     status: "closed",
     display_mode: "full",
     latest_episode_num: 7,

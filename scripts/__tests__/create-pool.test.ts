@@ -122,6 +122,12 @@ describe("buildPoolDocument", () => {
 
   it("mirrors the prop bet question list", () => {
     expect(buildS51().prop_bet_keys).toEqual(PropBetQuestionKeys);
+    const pool = buildS51();
+    expect(pool.prop_bet_answers).toEqual([
+      ...pool.roster.map((pick) => pick.castaway_id),
+      "Yes",
+      "No",
+    ]);
   });
 
   it("writes the contract fields a closed, unstarted pool needs", () => {

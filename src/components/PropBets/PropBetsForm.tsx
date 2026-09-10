@@ -35,6 +35,8 @@ export type PropBetsFormProps = {
   /** Wording on the submit slate. */
   submitLabel?: string;
   onSubmit: (values: PropBetsFormData) => void;
+  /** Optional draft autosave, called whenever an answer changes. */
+  onValuesChange?: (values: PropBetsFormData) => void;
 };
 
 export const PropBetsForm = ({
@@ -43,6 +45,7 @@ export const PropBetsForm = ({
   initialValues,
   submitLabel = "Submit Prop Bets",
   onSubmit,
+  onValuesChange,
 }: PropBetsFormProps) => {
   const startingValues = useMemo(
     () => normalizePropBetValues(initialValues),
@@ -66,6 +69,7 @@ export const PropBetsForm = ({
   const form = useForm<PropBetsFormData>({
     initialValues: startingValues,
     validate,
+    onValuesChange,
   });
 
   const playerOptions = useMemo(

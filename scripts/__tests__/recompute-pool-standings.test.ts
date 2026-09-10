@@ -128,6 +128,7 @@ const pool = (overrides: Partial<Pool> = {}): RecomputeInput["pool"] => ({
   roster: ROSTER,
   picks_per_entry: 2,
   prop_bet_keys: [...PropBetQuestionKeys],
+  prop_bet_answers: [...ROSTER.map((pick) => pick.castaway_id), "Yes", "No"],
   status: "closed",
   display_mode: "full",
   latest_episode_num: null,

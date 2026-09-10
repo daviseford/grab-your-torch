@@ -42,7 +42,10 @@ export const normalizePropBetValues = (
   }, {});
 
 const answeredKeys = (values: PropBetsFormData): PropBetQuestionKey[] =>
-  PropBetQuestionKeys.filter((key) => Boolean(values[key]));
+  PropBetQuestionKeys.filter((key) => {
+    const value = values[key];
+    return typeof value === "string" && value.trim().length > 0;
+  });
 
 /** How many of the questions currently carry an answer. */
 export const countAnsweredPropBets = (values: PropBetsFormData): number =>

@@ -258,3 +258,6 @@ export const poolEntryEpisodeTotals = (scores: PoolEntryScores): number[] =>
           0,
         ),
       );
+/** Whole points read as integers; half points keep their decimal place. */
+export const formatPoolPoints = (points: number): string =>
+  Number.isInteger(points) ? String(points) : points.toFixed(1);

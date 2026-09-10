@@ -251,6 +251,7 @@ export const buildPoolDocument = ({
     roster,
     picks_per_entry: Math.floor(roster.length / 3),
     prop_bet_keys: [...propBetKeys],
+    prop_bet_answers: [...roster.map((pick) => pick.castaway_id), "Yes", "No"],
     status: "closed",
     display_mode: "full",
     latest_episode_num: null,

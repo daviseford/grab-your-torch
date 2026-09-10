@@ -130,6 +130,7 @@ export const Pool = () => {
   const { slimUser, isAuthReady } = useUser();
   const {
     entry,
+    confirmedUpdatedAt,
     hasEntry,
     isLoading: entryLoading,
     submitEntry,
@@ -188,6 +189,17 @@ export const Pool = () => {
     if (!poolId) return;
     setRejection(loadPoolWriteRejection(poolId));
   }, [poolId]);
+
+  useEffect(() => {
+    if (!poolId || confirmedUpdatedAt === null) return;
+    setRejection(
+      applyPoolWriteEvent({
+        type: "observed",
+        pool_id: poolId,
+        updated_at: confirmedUpdatedAt,
+      }),
+    );
+  }, [poolId, confirmedUpdatedAt]);
 
   // SEASON_METADATA is used for the season's display name, and for choosing
   // between two messages when there is no configuration document at all. It is
@@ -333,7 +345,9 @@ export const Pool = () => {
             type: "denied",
             pool_id: poolId,
             kind,
-            at: Date.now(),
+            // A slow browser clock must not let the unchanged server entry
+            // masquerade as a newer save when a rejected write rolls back.
+            at: Math.max(Date.now(), confirmedUpdatedAt ?? 0),
           }),
         );
         return outcome;
@@ -342,7 +356,7 @@ export const Pool = () => {
       setRetryMessage(outcome.message);
       return outcome;
     },
-    [poolId],
+    [poolId, confirmedUpdatedAt],
   );
 
   /** What the retry button re-runs after a transient failure. */
@@ -871,6 +885,10 @@ export const Pool = () => {
           key={propBetsFormKey}
           cast={pool.roster}
           initialValues={propBets}
+          onValuesChange={(values) => {
+            setPropBets(values);
+            persist({ prop_bets: values });
+          }}
           submitLabel={
             submitting
               ? "Saving..."

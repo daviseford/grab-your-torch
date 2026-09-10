@@ -88,6 +88,7 @@ const pool = (overrides: Partial<Pool> = {}): Pool =>
     roster,
     picks_per_entry: LIMIT,
     prop_bet_keys: [...PropBetQuestionKeys],
+    prop_bet_answers: [...roster.map((pick) => pick.castaway_id), "Yes", "No"],
     status: "open",
     display_mode: "full",
     latest_episode_num: null,
@@ -533,6 +534,36 @@ describe("reducePoolWriteRejection", () => {
 });
 
 describe("describePoolWriteRejection", () => {
+  it("clears a rejection only when a newer server write supersedes it", () => {
+    const rejection: PoolWriteRejection = {
+      pool_id: "pool_season_51",
+      kind: "update",
+      at: 100,
+    };
+    for (const updated_at of [99, 100]) {
+      expect(
+        reducePoolWriteRejection(rejection, {
+          type: "observed",
+          pool_id: rejection.pool_id,
+          updated_at,
+        }),
+      ).toEqual(rejection);
+    }
+    expect(
+      reducePoolWriteRejection(rejection, {
+        type: "observed",
+        pool_id: rejection.pool_id,
+        updated_at: 101,
+      }),
+    ).toBeNull();
+    expect(
+      reducePoolWriteRejection(rejection, {
+        type: "observed",
+        pool_id: "pool_season_52",
+        updated_at: 101,
+      }),
+    ).toEqual(rejection);
+  });
   it("explains every kind of rejected write on screen", () => {
     for (const kind of ["create", "update", "handle", "withdraw"] as const) {
       const notice = describePoolWriteRejection({

@@ -250,6 +250,7 @@ service cloud.firestore {
             // pool config mirrors the keys and is the authority (KTD3).
             && request.resource.data.prop_bets is map
             && request.resource.data.prop_bets.keys().hasOnly(pool.prop_bet_keys)
+            && request.resource.data.prop_bets.values().hasOnly(pool.prop_bet_answers)
             // Pinned to request.time (KTD4): a client-authored timestamp is
             // worthless and browser clocks are not trustworthy. The client must
             // send serverTimestamp().

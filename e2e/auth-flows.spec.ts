@@ -248,6 +248,11 @@ const seedPool = async (freezeAt: Date) => {
     roster: POOL_ROSTER,
     picks_per_entry: PICKS_PER_ENTRY,
     prop_bet_keys: PropBetQuestionKeys,
+    prop_bet_answers: [
+      ...POOL_ROSTER.map((pick) => pick.castaway_id),
+      "Yes",
+      "No",
+    ],
     status: "open",
     display_mode: "full",
     latest_episode_num: null,
@@ -1416,6 +1421,114 @@ const fillPoolEntry = async (page: Page, handle = POOL_HANDLE) => {
   await answerPropBets(page);
 };
 
+test("pool: independent players share picks and a newer device save clears an old rejection", async ({
+  page,
+  browser,
+  baseURL,
+  isMobile,
+}) => {
+  // The Windows WebKit emulator stalls inconsistently on authenticated
+  // reloads across two contexts. Keep this regression on Chromium; the
+  // single-player registration scenario below also runs on mobile WebKit.
+  test.skip(
+    Boolean(isMobile),
+    "two-context emulator regression is desktop-only",
+  );
+  test.setTimeout(180_000);
+  await seedPool(openFreeze());
+  const alice = await createUser(uniqueEmail("pool-alice"), PASSWORD, "Alice");
+  const bob = await createUser(uniqueEmail("pool-bob"), PASSWORD, "Bob");
+  const other = await browser.newContext({
+    ...test.info().project.use,
+    baseURL,
+  });
+  await other.route("**/*", async (route) => {
+    if (isProductionHost(new URL(route.request().url()).hostname)) {
+      productionViolations.push(route.request().url());
+      return route.abort();
+    }
+    return route.continue();
+  });
+  const bobPage = await other.newPage();
+  try {
+    for (const [playerPage, user, handle] of [
+      [page, alice, "AliceTorch"],
+      [bobPage, bob, "BobTorch"],
+    ] as const) {
+      await playerPage.goto(`/pool/${POOL_SEASON_ID}`);
+      await fillPoolEntry(playerPage, handle);
+      await playerPage.getByRole("button", { name: "Submit my entry" }).click();
+      await signInThrough(playerPage, {
+        email: user.email,
+        password: PASSWORD,
+      });
+      await expect(playerPage.getByText("Your entry is in.")).toBeVisible();
+      await expect
+        .poll(async () => (await readPoolEntry(user.uid))?.handle)
+        .toBe(handle);
+    }
+    expect((await readPoolEntry(alice.uid))?.picks).toEqual(
+      (await readPoolEntry(bob.uid))?.picks,
+    );
+    await expect(page.getByText("BobTorch", { exact: true })).toHaveCount(0);
+    await expect(bobPage.getByText("AliceTorch", { exact: true })).toHaveCount(
+      0,
+    );
+
+    // A persisted rejection is legitimate until a newer server save arrives.
+    // Seed it after the existing write so loading the old entry cannot clear it.
+    await page.bringToFront();
+    await page.evaluate((poolId) => {
+      localStorage.setItem(
+        `survivor_pool_write_rejection_v1:${poolId}`,
+        JSON.stringify({ pool_id: poolId, kind: "update", at: Date.now() }),
+      );
+    }, POOL_ID);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(
+      page.getByText(
+        "This pool closed before your changes reached us, so your entry is unchanged. Your picks are still on screen.",
+      ),
+    ).toBeVisible();
+    await adminDb.doc(`pools/${POOL_ID}/entries/${alice.uid}`).update({
+      handle: "AliceNewDevice",
+      updated_at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    // Revisit after the other device saved: the browser-local rejection
+    // survives reload and must be reconciled with the current server entry.
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(
+      page.getByText("AliceNewDevice", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(
+        "This pool closed before your changes reached us, so your entry is unchanged. Your picks are still on screen.",
+      ),
+    ).toHaveCount(0);
+    expect(
+      await page.evaluate(
+        (poolId) =>
+          localStorage.getItem(`survivor_pool_write_rejection_v1:${poolId}`),
+        POOL_ID,
+      ),
+    ).toBeNull();
+
+    await page.getByRole("button", { name: "Withdraw my entry" }).click();
+    await dialog(page)
+      .getByRole("button", { name: "Withdraw my entry" })
+      .click();
+    await expect
+      .poll(async () => (await readPoolEntry(alice.uid)) === undefined)
+      .toBe(true);
+    await bobPage.reload({ waitUntil: "domcontentloaded" });
+    await expect(bobPage.getByText("Your entry is in.")).toBeVisible();
+    expect((await readPoolEntry(bob.uid))?.handle).toBe("BobTorch");
+  } finally {
+    await bobPage.goto("about:blank", { waitUntil: "domcontentloaded" });
+    await other.close();
+  }
+});
+
 // AE1 (R1, R6): a signed-out visitor fills the entry in, meets the account
 // gate at submit, and the entry lands under their new uid with nothing
 // entered twice. The gate is at submit and nowhere earlier (KD5), so the
@@ -1518,6 +1631,19 @@ test("pool: an entry filled in signed out survives a reload and then sign-in (U1
     SLOW,
   );
   await fillPoolEntry(page);
+
+  // Every field survives even before Submit: closing a tab while answering
+  // prop bets must not silently discard those answers.
+  await page.reload();
+  await expect(
+    page.getByText(
+      `${PropBetQuestionKeys.length} of ${PropBetQuestionKeys.length} answered`,
+    ),
+  ).toBeVisible();
+  await expect(poolHandleField(page)).toHaveValue(POOL_HANDLE);
+  await expect(
+    page.getByRole("combobox", { name: "Season winner", exact: true }),
+  ).toHaveValue(PROP_BET_PICK.full_name);
 
   // Submitting saves the autosave and the resume marker, then asks for an
   // account. Dismiss it and reload: every bit of in-memory state is gone.

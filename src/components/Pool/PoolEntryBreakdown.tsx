@@ -1,4 +1,5 @@
 import {
+  formatPoolPoints as formatPoints,
   poolEntryEpisodeTotals,
   type PoolEntryScores,
 } from "../../utils/poolEntryScoring";
@@ -43,10 +44,6 @@ export type PoolEntryBreakdownProps = {
   isLoading?: boolean;
 };
 
-/** Whole points read as integers; halves keep their one decimal place. */
-const formatPoints = (points: number): string =>
-  Number.isInteger(points) ? String(points) : points.toFixed(1);
-
 export const PoolEntryBreakdown = ({
   scores,
   isLoading = false,
@@ -59,8 +56,8 @@ export const PoolEntryBreakdown = ({
     // everyone having scored nothing, so this is never a table of zeros.
     return (
       <EmptySlate title="Scoring starts after the first episode">
-        Your picks are locked in. Points appear here week by week once the
-        premiere airs and its results land.
+        Your entry is saved. Points appear here week by week once the premiere
+        airs and its results land.
       </EmptySlate>
     );
   }

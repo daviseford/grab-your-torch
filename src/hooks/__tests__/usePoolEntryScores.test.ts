@@ -11,6 +11,7 @@ import type {
   PoolStandingsStamp,
 } from "../../types";
 import {
+  formatPoolPoints,
   latestScoredPoolEpisode,
   projectPoolEntryScores,
   resolvePoolEntryBreakdownAccess,
@@ -19,6 +20,15 @@ import {
 import { rankPoolEntries } from "../../utils/poolRanking";
 import { buildPoolStandingsDocuments } from "../../utils/poolStandings";
 import { getSeasonPointsByCastaway } from "../../utils/seasonPoints";
+
+it.each([
+  [0, "0"],
+  [12, "12"],
+  [2.5, "2.5"],
+  [-0.5, "-0.5"],
+] as const)("formats %s points as %s", (points, label) => {
+  expect(formatPoolPoints(points)).toBe(label);
+});
 
 /* ------------------------------------------------------------------ *
  * The fixture

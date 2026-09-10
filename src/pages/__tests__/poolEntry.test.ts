@@ -83,6 +83,7 @@ const pool = (overrides: Partial<Pool> = {}): Pool =>
     roster,
     picks_per_entry: LIMIT,
     prop_bet_keys: [...PropBetQuestionKeys],
+    prop_bet_answers: [...roster.map((pick) => pick.castaway_id), "Yes", "No"],
     status: "open",
     display_mode: "full",
     latest_episode_num: null,

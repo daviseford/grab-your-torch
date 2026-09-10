@@ -508,10 +508,13 @@ export type Pool = {
    */
   prop_bet_keys: PropBetQuestionKey[];
 
+  /** Allowed answer values, mirrored for security-rules validation. */
+  prop_bet_answers: string[];
+
   /** The kill switch. Every write condition consumes it. */
   status: PoolStatus;
 
-  /** "full" while entry is open, "leaderboard" once the season is airing. */
+  /** Rollback lever: "leaderboard" hides the standings; "full" shows them. */
   display_mode: PoolDisplayMode;
 
   /**

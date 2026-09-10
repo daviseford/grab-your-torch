@@ -61,6 +61,7 @@ const pool = (overrides: Partial<Pool> = {}): Pool => ({
   roster: roster(21),
   picks_per_entry: 7,
   prop_bet_keys: [],
+  prop_bet_answers: [],
   status: "open",
   display_mode: "full",
   latest_episode_num: null,

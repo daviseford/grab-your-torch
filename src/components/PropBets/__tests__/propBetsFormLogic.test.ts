@@ -107,6 +107,11 @@ const everyAnswer = () =>
   }, {});
 
 describe("countAnsweredPropBets", () => {
+  it("treats whitespace-only answers as unanswered", () => {
+    const values = { ...everyAnswer(), propbet_winner: "  \t " };
+    expect(countAnsweredPropBets(values)).toBe(PropBetQuestionKeys.length - 1);
+    expect(isPropBetFormComplete(values)).toBe(false);
+  });
   it("counts nothing for a blank form", () => {
     expect(countAnsweredPropBets(normalizePropBetValues())).toBe(0);
   });

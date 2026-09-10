@@ -22,6 +22,7 @@ import {
   PoolEntryPayloadError,
   type PoolEntryPayloadPool,
 } from "../utils/poolEntryPayload";
+import { timestampToMillis } from "../utils/poolPageState";
 import { useUser } from "./useUser";
 
 /**
@@ -129,8 +130,12 @@ export const usePoolEntry = (poolId?: PoolId) => {
 
   const [entry, setEntry] = useState<PoolEntry | undefined>(undefined);
   const [loaded, setLoaded] = useState(false);
+  const [confirmedUpdatedAt, setConfirmedUpdatedAt] = useState<number | null>(
+    null,
+  );
 
   useEffect(() => {
+    setConfirmedUpdatedAt(null);
     if (!isAuthReady) return;
     if (!poolId || !uid) {
       // A signed-out visitor has no entry to read, and must still reach the
@@ -144,8 +149,16 @@ export const usePoolEntry = (poolId?: PoolId) => {
     const ref = doc(db, "pools", poolId, "entries", uid);
     const unsubscribe = onSnapshot(
       ref,
+      { includeMetadataChanges: true },
       (snap) => {
         setEntry(snap.exists() ? (snap.data() as PoolEntry) : undefined);
+        setConfirmedUpdatedAt(
+          snap.exists() &&
+            !snap.metadata.hasPendingWrites &&
+            !snap.metadata.fromCache
+            ? timestampToMillis((snap.data() as PoolEntry).updated_at)
+            : null,
+        );
         setLoaded(true);
       },
       (error: FirestoreError) => {
@@ -281,6 +294,7 @@ export const usePoolEntry = (poolId?: PoolId) => {
 
   return {
     entry,
+    confirmedUpdatedAt,
     hasEntry: entry !== undefined,
     isLoading: !loaded,
     submitEntry,
