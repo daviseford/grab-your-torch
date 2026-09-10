@@ -11,6 +11,7 @@ import { IconMoon, IconSun } from "@tabler/icons-react";
 import { Link, useLocation } from "react-router-dom";
 import { auth } from "../../firebase";
 import { useUser } from "../../hooks/useUser";
+import { clearAllPoolEntryDrafts } from "../../utils/poolDraftStorage";
 import { clearAuthIntents } from "../Auth/authIntent";
 import classes from "./Navbar.module.css";
 
@@ -57,9 +58,12 @@ export const Navbar = ({ id, opened, onClose }: NavbarProps) => {
   const isDark = computedColorScheme === "dark";
 
   const handleLogout = () => {
-    // Drop any abandoned Start/Join intent so a later account can never
-    // inherit it (R10 + KTD1).
+    // Drop any abandoned Start/Join/enter-pool intent so a later account can
+    // never inherit it (R10 + KTD1), and the in-progress pool entry with it.
+    // This is the sign-out path people actually take: it signs out in place
+    // rather than routing through /logout, so Logout.tsx never runs for it.
     clearAuthIntents();
+    clearAllPoolEntryDrafts();
     auth.signOut();
   };
 

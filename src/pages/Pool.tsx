@@ -23,8 +23,8 @@ import {
   buildPoolCastDetails,
   describePoolWriteRejection,
   loadPoolWriteRejection,
-  poolEntryChangedElsewhere,
   PoolCastPicker,
+  poolEntryChangedElsewhere,
   PoolHandleField,
   PoolHandleOnlyForm,
   resolvePoolEntryControls,
@@ -32,8 +32,8 @@ import {
   type PoolWriteRejection,
 } from "../components/Pool";
 import { PropBetsForm } from "../components/PropBets";
-import { SEASON_METADATA, type SeasonMeta } from "../data/season-metadata";
 import { PropBetQuestionKeys } from "../data/propbets";
+import { SEASON_METADATA, type SeasonMeta } from "../data/season-metadata";
 import { useAuthContinuation } from "../hooks/useAuthContinuation";
 import { usePool, usePoolCounters } from "../hooks/usePool";
 import {
@@ -50,14 +50,19 @@ import type {
   Season,
 } from "../types";
 import { trackEvent } from "../utils/analytics";
+// Importing this module is what makes the autosave survive a reload: it
+// replaces the seam's session-only default with browser-local storage (U13).
+import { readPoolEntryDraftForPool } from "../utils/poolDraftStorage";
 import {
   clearPoolEntryDraft,
   hasPoolEntryDraft,
-  loadPoolEntryDraft,
   savePoolEntryDraft,
 } from "../utils/poolEntryDraft";
 import { getPoolEntryBlockers } from "../utils/poolEntryPayload";
-import { resolvePoolPageState, timestampToMillis } from "../utils/poolPageState";
+import {
+  resolvePoolPageState,
+  timestampToMillis,
+} from "../utils/poolPageState";
 import { togglePoolPick } from "../utils/poolPicks";
 import { getSeasonAirStatus } from "../utils/seasonAirStatus";
 import classes from "./Pool.module.css";
@@ -178,19 +183,22 @@ export const Pool = () => {
 
   useBugContext(pool ? pool.name : null);
 
-  // Restore whatever this browser had in progress, once per pool. The store
-  // is the autosave seam (U13); until that unit lands it is session-lifetime.
+  // Restore whatever this browser had in progress, once per pool, and only
+  // once the configuration has arrived: the cast and the question set are what
+  // decide whether a stored draft is one this page could have produced, and
+  // browser-local storage is writable by anything on the origin. An invalid
+  // draft is dropped whole rather than partly restored.
   const restoredFor = useRef<string | null>(null);
   useEffect(() => {
-    if (!poolId || restoredFor.current === poolId) return;
+    if (!poolId || !pool || restoredFor.current === poolId) return;
     restoredFor.current = poolId;
-    const draft = loadPoolEntryDraft(poolId);
+    const draft = readPoolEntryDraftForPool(poolId, pool);
     if (!draft) return;
     setPicks(draft.picks);
     setHandle(draft.handle);
     setPropBets(draft.prop_bets);
     setPropBetsFormKey((key) => key + 1);
-  }, [poolId]);
+  }, [poolId, pool]);
 
   const persist = useCallback(
     (next: {
@@ -198,16 +206,27 @@ export const Pool = () => {
       handle?: string;
       prop_bets?: PropBetsFormData;
     }) => {
-      if (!poolId) return;
+      if (!poolId || !pool) return;
+      // The prop bets form renders every question; a pool asks for a subset,
+      // and the submit payload keeps only that subset. The autosave stores the
+      // same subset, so what is restored is exactly what would be submitted.
+      const answers = next.prop_bets ?? propBets;
+      const prop_bets: PropBetsFormData = {};
+      for (const key of pool.prop_bet_keys) {
+        const answer = answers[key];
+        if (typeof answer === "string" && answer.length > 0) {
+          prop_bets[key] = answer;
+        }
+      }
       savePoolEntryDraft({
         pool_id: poolId,
         picks: next.picks ?? picks,
         handle: next.handle ?? handle,
-        prop_bets: next.prop_bets ?? propBets,
+        prop_bets,
         saved_at: Date.now(),
       });
     },
-    [poolId, picks, handle, propBets],
+    [poolId, pool, picks, handle, propBets],
   );
 
   const limit = pool?.picks_per_entry ?? 0;
@@ -430,7 +449,9 @@ export const Pool = () => {
         };
       }
       // After a reload the form state is gone; the autosave is the one copy.
-      const stored = intent.resume ? loadPoolEntryDraft(poolId) : null;
+      const stored = intent.resume
+        ? readPoolEntryDraftForPool(poolId, pool)
+        : null;
       const values = stored
         ? {
             picks: stored.picks,
@@ -526,7 +547,8 @@ export const Pool = () => {
   const saveHandleOnly = useCallback(
     async (next: string) => {
       const outcome = await runWrite("handle", () => updateHandle(next));
-      if (isPoolWriteAcknowledged(outcome)) return { ok: true, retryable: false };
+      if (isPoolWriteAcknowledged(outcome))
+        return { ok: true, retryable: false };
       return { ok: false, retryable: outcome.status === "failed" };
     },
     [runWrite, updateHandle],
