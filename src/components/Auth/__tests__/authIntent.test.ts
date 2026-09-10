@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
-import type { Draft, Season } from "../../../types";
+import type { Draft, PoolId, Season } from "../../../types";
 import type {
   AuthIntent,
   AuthIntentStorage,
+  EnterPoolIntent,
   JoinDraftIntent,
   StartDraftIntent,
 } from "../authIntent";
 import {
+  AUTH_INTENT_TTL_BY_KIND,
   AUTH_INTENT_TTL_MS,
   claimAuthIntent,
   claimAuthIntentMatching,
@@ -41,6 +43,13 @@ const joinIntent: JoinDraftIntent = {
   kind: "join-draft",
   draftId: "draft_invite_1" as Draft["id"],
   returnPath: "/draft/draft_invite_1",
+};
+
+const enterPoolIntent: EnterPoolIntent = {
+  kind: "enter-pool",
+  poolId: "pool_season_51" as PoolId,
+  resume: true,
+  returnPath: "/pools/pool_season_51/enter",
 };
 
 describe("authIntent", () => {
@@ -420,6 +429,227 @@ describe("authIntent", () => {
       const stateKey = saveAuthIntent(startIntent, { storage });
 
       expect(claimAuthIntent(stateKey, { storage })).toEqual(startIntent);
+    });
+  });
+
+  describe("enter-pool intent", () => {
+    const STORAGE_KEY = "survivor_auth_intents";
+
+    it("round-trips an enter-pool intent through serialization", () => {
+      const storage = createMemoryStorage();
+      const stateKey = saveAuthIntent(enterPoolIntent, { storage });
+
+      expect(readAuthIntent(stateKey, { storage })).toEqual(enterPoolIntent);
+    });
+
+    it("round-trips an entry with no autosave to resume", () => {
+      const storage = createMemoryStorage();
+      const intent: EnterPoolIntent = { ...enterPoolIntent, resume: false };
+      const stateKey = saveAuthIntent(intent, { storage });
+
+      expect(readAuthIntent(stateKey, { storage })).toEqual(intent);
+    });
+
+    it("is single-use: the second claim returns null", () => {
+      const storage = createMemoryStorage();
+      const stateKey = saveAuthIntent(enterPoolIntent, { storage });
+
+      expect(claimAuthIntent(stateKey, { storage })).toEqual(enterPoolIntent);
+      expect(claimAuthIntent(stateKey, { storage })).toBeNull();
+    });
+
+    it("is recoverable by a pool-matching scan after a refresh loses the state key", () => {
+      const storage = createMemoryStorage();
+      const stateKey = saveAuthIntent(enterPoolIntent, { storage });
+
+      const claimed = claimAuthIntentMatching(
+        (intent) =>
+          intent.kind === "enter-pool" &&
+          intent.poolId === enterPoolIntent.poolId,
+        { storage },
+      );
+
+      expect(claimed).toEqual({ stateKey, intent: enterPoolIntent });
+      expect(readAuthIntent(stateKey, { storage })).toBeNull();
+    });
+
+    it("is restorable under its original state key after a transient failure", () => {
+      const storage = createMemoryStorage();
+      const stateKey = saveAuthIntent(enterPoolIntent, { storage });
+      claimAuthIntent(stateKey, { storage });
+
+      restoreClaimedIntent(stateKey, enterPoolIntent, { storage });
+
+      expect(claimAuthIntent(stateKey, { storage })).toEqual(enterPoolIntent);
+    });
+
+    it("rejects a pool id that does not match the pool id shape", () => {
+      const storage = createMemoryStorage();
+
+      expect(() =>
+        saveAuthIntent(
+          { ...enterPoolIntent, poolId: "season_51" as PoolId },
+          { storage },
+        ),
+      ).toThrow();
+    });
+
+    it("rejects a pool id carrying path traversal characters", () => {
+      const storage = createMemoryStorage();
+
+      expect(() =>
+        saveAuthIntent(
+          { ...enterPoolIntent, poolId: "pool_../../admin" as PoolId },
+          { storage },
+        ),
+      ).toThrow();
+    });
+
+    it("rejects an empty pool id suffix", () => {
+      const storage = createMemoryStorage();
+
+      expect(() =>
+        saveAuthIntent(
+          { ...enterPoolIntent, poolId: "pool_" as PoolId },
+          { storage },
+        ),
+      ).toThrow();
+    });
+
+    it("rejects a cross-origin return path", () => {
+      const storage = createMemoryStorage();
+
+      expect(() =>
+        saveAuthIntent(
+          { ...enterPoolIntent, returnPath: "https://evil.example.com/steal" },
+          { storage },
+        ),
+      ).toThrow();
+    });
+
+    it("rejects a backslash return path that URL parsers treat as protocol-relative", () => {
+      const storage = createMemoryStorage();
+
+      expect(() =>
+        saveAuthIntent(
+          { ...enterPoolIntent, returnPath: "/\\evil.example.com" },
+          { storage },
+        ),
+      ).toThrow();
+    });
+
+    it("rejects a missing resume marker", () => {
+      const storage = createMemoryStorage();
+      const withoutMarker: Record<string, unknown> = { ...enterPoolIntent };
+      delete withoutMarker.resume;
+
+      expect(() =>
+        saveAuthIntent(withoutMarker as unknown as AuthIntent, { storage }),
+      ).toThrow();
+    });
+
+    it("rejects a non-boolean resume marker", () => {
+      const storage = createMemoryStorage();
+
+      expect(() =>
+        saveAuthIntent(
+          { ...enterPoolIntent, resume: "yes" } as unknown as AuthIntent,
+          { storage },
+        ),
+      ).toThrow();
+    });
+
+    it("discards a stored enter-pool record whose pool id was tampered with", () => {
+      const storage = createMemoryStorage();
+      const stateKey = saveAuthIntent(enterPoolIntent, { storage });
+      const raw = JSON.parse(storage.getItem(STORAGE_KEY) as string);
+      raw.records[stateKey].intent.poolId = "pool_ someone elses";
+      storage.setItem(STORAGE_KEY, JSON.stringify(raw));
+
+      expect(readAuthIntent(stateKey, { storage })).toBeNull();
+      expect(claimAuthIntent(stateKey, { storage })).toBeNull();
+    });
+  });
+
+  describe("per-kind expiry", () => {
+    const STORAGE_KEY = "survivor_auth_intents";
+    const poolTtl = AUTH_INTENT_TTL_BY_KIND["enter-pool"];
+
+    it("keeps both draft intents on the shared 60 minute window", () => {
+      expect(AUTH_INTENT_TTL_BY_KIND["start-draft"]).toBe(AUTH_INTENT_TTL_MS);
+      expect(AUTH_INTENT_TTL_BY_KIND["join-draft"]).toBe(AUTH_INTENT_TTL_MS);
+      expect(AUTH_INTENT_TTL_MS).toBe(60 * 60 * 1000);
+    });
+
+    it("gives enter-pool a longer window than the draft intents", () => {
+      expect(poolTtl).toBeGreaterThan(AUTH_INTENT_TTL_MS);
+    });
+
+    it("keeps an enter-pool intent alive past the draft window", () => {
+      const storage = createMemoryStorage();
+      let now = 1_000_000;
+      const options = { storage, now: () => now };
+      const poolKey = saveAuthIntent(enterPoolIntent, options);
+      const draftKey = saveAuthIntent(startIntent, options);
+
+      now += AUTH_INTENT_TTL_MS + 1;
+
+      expect(readAuthIntent(draftKey, options)).toBeNull();
+      expect(readAuthIntent(poolKey, options)).toEqual(enterPoolIntent);
+    });
+
+    it("accepts an enter-pool intent just inside its own window", () => {
+      const storage = createMemoryStorage();
+      let now = 1_000_000;
+      const options = { storage, now: () => now };
+      const stateKey = saveAuthIntent(enterPoolIntent, options);
+
+      now += poolTtl - 1;
+
+      expect(claimAuthIntent(stateKey, options)).toEqual(enterPoolIntent);
+    });
+
+    it("drops an enter-pool intent once its own window elapses", () => {
+      const storage = createMemoryStorage();
+      let now = 1_000_000;
+      const options = { storage, now: () => now };
+      const stateKey = saveAuthIntent(enterPoolIntent, options);
+
+      now += poolTtl + 1;
+
+      expect(readAuthIntent(stateKey, options)).toBeNull();
+      expect(claimAuthIntent(stateKey, options)).toBeNull();
+    });
+
+    it("applies each kind's own window while scanning a mixed store", () => {
+      const storage = createMemoryStorage();
+      let now = 1_000_000;
+      const options = { storage, now: () => now };
+      const draftKey = saveAuthIntent(joinIntent, options);
+      const poolKey = saveAuthIntent(enterPoolIntent, options);
+
+      now += AUTH_INTENT_TTL_MS + 1;
+
+      expect(claimAuthIntentMatching(() => true, options)).toEqual({
+        stateKey: poolKey,
+        intent: enterPoolIntent,
+      });
+      expect(readAuthIntent(draftKey, options)).toBeNull();
+    });
+
+    it("does not let an inherited object key masquerade as an intent kind", () => {
+      const storage = createMemoryStorage();
+      let now = 1_000_000;
+      const options = { storage, now: () => now };
+      const stateKey = saveAuthIntent(startIntent, options);
+      const raw = JSON.parse(storage.getItem(STORAGE_KEY) as string);
+      raw.records[stateKey].intent.kind = "constructor";
+      storage.setItem(STORAGE_KEY, JSON.stringify(raw));
+
+      now += AUTH_INTENT_TTL_MS + 1;
+
+      expect(readAuthIntent(stateKey, options)).toBeNull();
+      expect(storage.getItem(STORAGE_KEY)).toBeNull();
     });
   });
 });

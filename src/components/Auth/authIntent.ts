@@ -1,13 +1,14 @@
-import type { Draft, Season } from "../../types";
+import type { Draft, PoolId, Season } from "../../types";
 
 /**
  * Single-use authentication intents (KTD1).
  *
- * When a signed-out visitor starts a protected action (start or join a draft),
- * the action is stored here under an unguessable state key so authentication,
- * including a password reset completed in another tab, can resume it later.
- * Records live in browser-local storage for at most 60 minutes, are removed
- * when claimed, and are validated on every read so malformed, expired,
+ * When a signed-out visitor starts a protected action (start or join a draft,
+ * enter a public season pool), the action is stored here under an unguessable
+ * state key so authentication, including a password reset completed in another
+ * tab, can resume it later. Records live in browser-local storage for a window
+ * that depends on their kind (see AUTH_INTENT_TTL_BY_KIND), are removed when
+ * claimed, and are validated on every read so malformed, expired,
  * cross-origin, or forged data can never execute an action.
  */
 
@@ -26,7 +27,27 @@ export type JoinDraftIntent = {
   returnPath: string;
 };
 
-export type AuthIntent = StartDraftIntent | JoinDraftIntent;
+/**
+ * Enter a public season pool (R1, R18).
+ *
+ * Deliberately carries a pool ID and a resume marker and nothing else. The
+ * in-progress entry (picks, prop bets, handle) lives in exactly one
+ * browser-local place, the entry autosave; a second copy here would need a
+ * precedence rule, a divergence test, and coordinated cleanup, and its
+ * validation would duplicate the checks the entry form already performs.
+ */
+export type EnterPoolIntent = {
+  kind: "enter-pool";
+  poolId: PoolId;
+  /**
+   * True when a locally autosaved entry exists and should be restored after
+   * sign-in; false when the visitor signed in before filling anything in.
+   */
+  resume: boolean;
+  returnPath: string;
+};
+
+export type AuthIntent = StartDraftIntent | JoinDraftIntent | EnterPoolIntent;
 
 /** Minimal Storage-shaped boundary; injectable for deterministic tests. */
 export interface AuthIntentStorage {
@@ -40,13 +61,32 @@ export interface AuthIntentOptions {
   now?: () => number;
 }
 
-export const AUTH_INTENT_TTL_MS = 60 * 60 * 1000;
+/**
+ * Time-to-live per intent kind, in milliseconds. The window belongs beside the
+ * kind because the kinds are interrupted differently: a draft intent is a
+ * button press followed immediately by a sign-in, while a pool entry is filled
+ * in over minutes and may be interrupted by a password reset completed in
+ * another tab the next morning.
+ */
+export const AUTH_INTENT_TTL_BY_KIND = {
+  "start-draft": 60 * 60 * 1000,
+  "join-draft": 60 * 60 * 1000,
+  "enter-pool": 24 * 60 * 60 * 1000,
+} as const satisfies Record<AuthIntent["kind"], number>;
+
+/**
+ * The draft-intent window (60 minutes). Kept as a named export because it is
+ * the shared window for `start-draft` and `join-draft`, and the fallback for a
+ * record whose stored kind is unrecognised.
+ */
+export const AUTH_INTENT_TTL_MS = AUTH_INTENT_TTL_BY_KIND["start-draft"];
 
 const STORAGE_KEY = "survivor_auth_intents";
 const STORAGE_VERSION = 1;
 
 const SEASON_ID_PATTERN = /^season_\d+$/;
 const DRAFT_ID_PATTERN = /^draft_[A-Za-z0-9_-]+$/;
+const POOL_ID_PATTERN = /^pool_[A-Za-z0-9_-]+$/;
 
 type StoredIntentRecord = {
   intent: AuthIntent;
@@ -130,6 +170,15 @@ const isValidIntent = (value: unknown): value is AuthIntent => {
       DRAFT_ID_PATTERN.test(candidate.draftId)
     );
   }
+  if (candidate.kind === "enter-pool") {
+    // Pool ID shape and resume marker only. The entry itself is validated
+    // where it is autosaved, not here; see EnterPoolIntent.
+    return (
+      typeof candidate.poolId === "string" &&
+      POOL_ID_PATTERN.test(candidate.poolId) &&
+      typeof candidate.resume === "boolean"
+    );
+  }
   return false;
 };
 
@@ -173,8 +222,21 @@ const writeFile = (
   }
 };
 
+/**
+ * Resolve the window for a stored record's kind. Expiry is checked before the
+ * record's shape is validated, so the kind here is untrusted: an unrecognised
+ * or inherited key (`"constructor"`) falls back to the shortest window rather
+ * than indexing the prototype chain and producing a non-numeric comparison.
+ */
+const ttlForIntentKind = (kind: unknown): number =>
+  typeof kind === "string" &&
+  Object.prototype.hasOwnProperty.call(AUTH_INTENT_TTL_BY_KIND, kind)
+    ? AUTH_INTENT_TTL_BY_KIND[kind as AuthIntent["kind"]]
+    : AUTH_INTENT_TTL_MS;
+
 const isExpired = (record: StoredIntentRecord, now: number): boolean =>
-  now - record.createdAt >= AUTH_INTENT_TTL_MS;
+  now - record.createdAt >=
+  ttlForIntentKind((record.intent as { kind?: unknown } | undefined)?.kind);
 
 const assertValidIntent = (intent: AuthIntent): void => {
   if (!isValidIntent(intent)) {
