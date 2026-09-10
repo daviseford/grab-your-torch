@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { getActivePropBetKeys, PropBetsQuestions } from "../../data/propbets";
+import {
+  getActivePropBetKeys,
+  PropBetQuestionKey,
+  PropBetQuestionKeys,
+  PropBetsQuestions,
+} from "../../data/propbets";
 import {
   CastawayId,
   Challenge,
@@ -7,7 +12,10 @@ import {
   Elimination,
   GameEvent,
 } from "../../types";
-import { getPropBetScoresForUser } from "../propBetUtils";
+import {
+  getPropBetScoresByUser,
+  getPropBetScoresForUser,
+} from "../propBetUtils";
 
 // --- Factories ---
 
@@ -101,6 +109,37 @@ const noElims: Record<string, Elimination> = {};
 const noChallenges: Record<string, Challenge> = {};
 const postMergeEpisodes = new Set<number>([8, 9, 10, 11, 12, 13]);
 
+/**
+ * Adapts the competition-shaped fixtures in this file onto the narrowed
+ * scorer input, so every assertion below is unchanged by the narrowing.
+ * Production competition code does the same adaptation in
+ * `getPropBetScoresByUser`.
+ */
+const scoreForUser = (
+  uid: string,
+  events: Record<string, GameEvent>,
+  eliminations: Record<string, Elimination>,
+  challenges: Record<string, Challenge>,
+  postMergeEpisodeNumbers: Set<number>,
+  hasFinaleOccurred: boolean,
+  activeKeys: PropBetQuestionKey[],
+  competition: Competition,
+) =>
+  getPropBetScoresForUser({
+    uid,
+    displayName:
+      competition.team_names?.[uid] ||
+      competition.participants.find((x) => x.uid === uid)?.displayName ||
+      "",
+    answers: competition.prop_bets?.find((x) => x.user_uid === uid)?.values,
+    events: Object.values(events),
+    eliminations: Object.values(eliminations),
+    challenges: Object.values(challenges),
+    postMergeEpisodeNumbers,
+    hasFinaleOccurred,
+    activeKeys,
+  });
+
 const getStatus = (
   key: keyof typeof PropBetsQuestions,
   overrides?: {
@@ -113,7 +152,7 @@ const getStatus = (
   },
 ) => {
   const competition = overrides?.competition ?? baseCompetition;
-  const result = getPropBetScoresForUser(
+  const result = scoreForUser(
     "user1",
     overrides?.events ?? noEvents,
     overrides?.eliminations ?? noElims,
@@ -947,7 +986,7 @@ describe("getPropBetScoresForUser", () => {
       const elims = {
         e1: makeElimination("1", 1, BOB, 1),
       };
-      const result = getPropBetScoresForUser(
+      const result = scoreForUser(
         "user1",
         noEvents,
         elims,
@@ -979,7 +1018,7 @@ describe("getPropBetScoresForUser", () => {
         ...baseCompetition,
         prop_bets: [],
       };
-      const result = getPropBetScoresForUser(
+      const result = scoreForUser(
         "user1",
         noEvents,
         noElims,
@@ -1013,7 +1052,7 @@ describe("getPropBetScoresForUser", () => {
         ev1: makeEvent("1", 13, ALICE, "win_survivor"),
       };
 
-      const result = getPropBetScoresForUser(
+      const result = scoreForUser(
         "user1",
         events,
         noElims,
@@ -1056,5 +1095,134 @@ describe("getPropBetScoresForUser", () => {
       });
       expect(answer.status).toBe("definitive_correct");
     });
+  });
+});
+
+describe("getPropBetScoresForUser display name (KTD12)", () => {
+  const scoreWithHandle = (uid: string, displayName: string) =>
+    getPropBetScoresForUser({
+      uid,
+      displayName,
+      answers: { propbet_first_vote: BOB, propbet_winner: ALICE },
+      events: [makeEvent("1", 13, ALICE, "win_survivor")],
+      eliminations: [makeElimination("1", 1, BOB, 1)],
+      challenges: [makeChallenge("1", 8, [ALICE])],
+      postMergeEpisodeNumbers: postMergeEpisodes,
+      hasFinaleOccurred: true,
+      activeKeys: [...PropBetQuestionKeys],
+    });
+
+  const namesIn = (scores: ReturnType<typeof scoreWithHandle>) =>
+    PropBetQuestionKeys.map((key) => scores[key].user_name);
+
+  it("uses the supplied handle verbatim", () => {
+    expect(namesIn(scoreWithHandle("user1", "torchsnuffer"))).toEqual(
+      PropBetQuestionKeys.map(() => "torchsnuffer"),
+    );
+  });
+
+  it("falls back to the uid, never an email, when the handle is empty", () => {
+    const scores = scoreWithHandle("uid-abc123", "");
+    expect(namesIn(scores)).toEqual(
+      PropBetQuestionKeys.map(() => "uid-abc123"),
+    );
+  });
+
+  it("emits no '@' anywhere in its output for any of these inputs", () => {
+    const cases = [
+      scoreWithHandle("uid-abc123", "torchsnuffer"),
+      scoreWithHandle("uid-abc123", ""),
+      scoreWithHandle("uid-abc123", "  "),
+      getPropBetScoresForUser({
+        uid: "uid-abc123",
+        displayName: "",
+        answers: undefined,
+        events: [],
+        eliminations: [],
+        challenges: [],
+        postMergeEpisodeNumbers: postMergeEpisodes,
+        hasFinaleOccurred: false,
+        activeKeys: [],
+      }),
+    ];
+
+    cases.forEach((scores) => {
+      expect(JSON.stringify(scores)).not.toContain("@");
+    });
+  });
+
+  it("scores identically whichever handle is supplied", () => {
+    const a = scoreWithHandle("uid-abc123", "torchsnuffer");
+    const b = scoreWithHandle("uid-abc123", "someone else");
+
+    expect(a.total).toBe(b.total);
+    expect(
+      PropBetQuestionKeys.map((key: PropBetQuestionKey) => a[key].status),
+    ).toEqual(
+      PropBetQuestionKeys.map((key: PropBetQuestionKey) => b[key].status),
+    );
+  });
+});
+
+describe("getPropBetScoresByUser (competition adapter)", () => {
+  it("scores every participant and keeps the competition's own name resolution", () => {
+    const competition: Competition = {
+      ...baseCompetition,
+      participant_uids: ["user1", "user2", "user3"],
+      participants: [
+        {
+          uid: "user1",
+          displayName: "Player One",
+          email: null,
+          isAdmin: false,
+        },
+        {
+          uid: "user2",
+          displayName: null,
+          email: "two@example.com",
+          isAdmin: false,
+        },
+        { uid: "user3", displayName: null, email: null, isAdmin: false },
+      ],
+      team_names: { user3: "Team Three" },
+      prop_bets: [
+        baseCompetition.prop_bets![0],
+        {
+          id: "propbet_user2",
+          user_name: "Two",
+          user_uid: "user2",
+          values: { propbet_first_vote: CHARLIE },
+        },
+      ],
+    };
+
+    const scores = getPropBetScoresByUser(
+      {},
+      { elimination_1: makeElimination("1", 1, BOB, 1) },
+      {},
+      postMergeEpisodes,
+      false,
+      competition,
+    );
+
+    expect(Object.keys(scores).sort()).toEqual(["user1", "user2", "user3"]);
+
+    // Unchanged from before the narrowing: team name wins, then displayName,
+    // then email, then uid.
+    expect(scores.user1.propbet_first_vote.user_name).toBe("Player One");
+    expect(scores.user2.propbet_first_vote.user_name).toBe("two@example.com");
+    expect(scores.user3.propbet_first_vote.user_name).toBe("Team Three");
+
+    expect(scores.user1.propbet_first_vote.status).toBe("definitive_correct");
+    expect(scores.user2.propbet_first_vote.status).toBe("definitive_incorrect");
+    // No answers submitted at all.
+    expect(scores.user3.propbet_first_vote.status).toBe("pending");
+    expect(scores.user3.total).toBe(0);
+  });
+
+  it("returns an empty map without a competition", () => {
+    expect(
+      getPropBetScoresByUser({}, {}, {}, postMergeEpisodes, false, undefined),
+    ).toEqual({});
   });
 });

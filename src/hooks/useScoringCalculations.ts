@@ -6,9 +6,9 @@ import {
   filterRecordByEpisode,
 } from "../utils/episodeFilter";
 import {
-  EnhancedScores,
-  getEnhancedSurvivorPoints,
-} from "../utils/scoringUtils";
+  getSeasonPointsByCastaway,
+  getSeasonTotalsByCastaway,
+} from "../utils/seasonPoints";
 import { getOwnedCastawaysAtEpisode } from "../utils/tradeUtils";
 import { useChallenges } from "./useChallenges";
 import { useCompetition } from "./useCompetition";
@@ -53,23 +53,12 @@ export const useScoringCalculations = () => {
   const survivorPointsByEpisode = useMemo(() => {
     if (!season?.players) return {};
 
-    return season?.players.reduce<Record<string, EnhancedScores[]>>(
-      (accum, player) => {
-        const p = filteredEpisodes.map((e) =>
-          getEnhancedSurvivorPoints(
-            Object.values(filteredChallenges),
-            Object.values(filteredEliminations),
-            Object.values(filteredEvents),
-            e.order,
-            player.castaway_id,
-          ),
-        );
-
-        accum[player.castaway_id] = p;
-
-        return accum;
-      },
-      {},
+    return getSeasonPointsByCastaway(
+      Object.values(filteredChallenges),
+      Object.values(filteredEliminations),
+      Object.values(filteredEvents),
+      filteredEpisodes,
+      season.players.map((player) => player.castaway_id),
     );
   }, [
     filteredChallenges,
@@ -142,14 +131,7 @@ export const useScoringCalculations = () => {
   );
 
   const survivorPointsTotalSeason = useMemo(
-    () =>
-      Object.entries(survivorPointsByEpisode).reduce<Record<string, number>>(
-        (accum, [key, value]) => {
-          accum[key] = sum(value.map((x) => x.total));
-          return accum;
-        },
-        {},
-      ),
+    () => getSeasonTotalsByCastaway(survivorPointsByEpisode),
     [survivorPointsByEpisode],
   );
 
