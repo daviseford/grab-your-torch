@@ -6,10 +6,12 @@ Shared domain vocabulary for this project — entities, named processes, and sta
 
 - A **Season** owns its **Castaways** and **Episodes**. Every **Challenge win**, **Elimination**, **Game event**, **Tribal council vote**, and **Tribe** is scoped to exactly one season.
 - A **Draft** produces exactly one **Competition**, once, at completion. The competition holds a forward copy of the **Draft picks** and prop-bet answers rather than reading live draft state.
-- A **Draft pick** binds a **Castaway** to the **Participant** who drafted them, permanently; a **Trade** moves ownership afterwards. A **Roster** is the set of castaways a participant owns _now_, which is the picks they made only until their first accepted trade.
-- **Scores are never stored.** Standings are derived on demand: challenge wins, eliminations, and game events produce a per-castaway per-episode **Episode score**, summed across a roster and added to separately-derived **Prop bet** points.
+- _Within a **Competition**_, a **Draft pick** binds a **Castaway** to the **Participant** who drafted them, permanently; a **Trade** moves ownership afterwards. A **Roster** is the set of castaways a participant owns _now_, which is the picks they made only until their first accepted trade. Ownership is a competition-only idea: a **Pool entry**'s picks are non-exclusive, confer nothing exclusive, and are never traded, so no pool surface may reach for the ownership or draft-grid helpers. That boundary is asserted mechanically in `src/utils/__tests__/importBoundaries.test.ts`, because no type check will catch it.
+- **Scores are never stored.** Standings are derived on demand: challenge wins, eliminations, and game events produce a per-castaway per-episode **Episode score**, summed across a roster and added to separately-derived **Prop bet** points. A **Pool**'s **Standings cache** is not an exception to this: it is the same derivation written down so a signed-out reader needs no computation, keyed by episode and stamped with the inputs it came from, and it is never a score of record.
 - The three **Player action** families map onto three different record collections. Choosing the wrong collection scores nothing, silently.
-- The **Current episode** boundary sits between every result collection and every consumer. The only sanctioned bypass is an **Unfiltered read**.
+- The **Current episode** boundary is competition-scoped, and inside a **Competition** it sits between every result collection and every consumer. Exactly two bypasses are sanctioned: an **Unfiltered read**, and the **Public standings bypass** that the pool leaderboard runs on.
+- A **Pool** belongs to exactly one not-yet-premiered **Season** and holds many **Pool entries**, at most one per user. It has no **Draft**, no **Trade**, no **Roster**, and no participant list: an entrant enters alone, and the only thing shown beside their score is their **Handle**.
+- The **Freeze** is a pool's only lifecycle event. Before it a **Pool entry** can be created, edited, or withdrawn; after it only its **Handle** may change. It is a stored instant enforced by security rules, never derived from season metadata.
 - **Tribe** membership is episode-scoped — a snapshot per episode, not a property of a castaway.
 - Pipeline direction is one-way: **survivoR** → generated season data → **Season registration** → published copy. Nothing flows back upstream, and the local data wins any disagreement with the published copy.
 - Live **Drafts** are held in realtime storage; everything else is document storage. The split is by write pattern — fast collaborative turn-taking versus read-heavy persistence — not by subject.
@@ -63,6 +65,42 @@ Answers are submitted during the draft and frozen into the competition. Only que
 The resolution state of one participant's answer, distinguishing settled outcomes from a provisional front-runner and from not-yet-decidable.
 
 Single-event bets settle when the event occurs, and can settle negatively early once the picked castaway is definitively out of contention. Cumulative "who does it most" bets stay provisional until the finale: a leading pick is marked as leading, not correct, and a trailing pick becomes wrong only once it can no longer catch up. Only definitively-correct answers award points.
+
+## Season pool
+
+### Pool
+
+One public, season-long contest attached to a single not-yet-premiered **Season**, which any signed-in user enters alone.
+
+The pool is the counterpart to a **Competition** for someone with nobody to play with: no lobby, no host, no minimum, no turn order, and no waiting on another person. It runs on its own configuration document, which is the sole authority for the roster, the pick count, the prop bet questions, and the **Freeze** instant, and which no client may write. Season metadata is never an input to a pool decision, because security rules cannot read a local TypeScript module and the two would drift apart. A pool covers one season and one season only: it accepts entries until the freeze and is a leaderboard for the rest of the season.
+_Avoid:_ competition (a different entity with different rules), draft (a pool has none).
+
+### Pool entry
+
+One user's single submission to a **Pool**: their castaway picks, their prop bet answers, and their **Handle**.
+
+At most one per user per pool, stored under their account id, so an entry never carries an owner field. Its picks are **non-exclusive**: any number of entrants may hold the same castaway, and no castaway is ever taken, unavailable, or claimed. That is what lets an unbounded number of people enter at once, and it is why an entry's picks are not **Draft picks** and never become a **Roster** — nothing about ownership, availability, "drafted by", or trading applies to them. Each pick records the castaway's full name beside the identifier so a later upstream name change is auditable rather than silent. An entry is readable only by the person who wrote it, before and after the freeze; only the derived **Standings cache** is public.
+
+### Handle
+
+The short public name an entrant chooses for themselves in a **Pool**, and the only thing about them the leaderboard shows.
+
+Deliberately never defaulted from an account name: sign-in supplies legal names and the leaderboard is public and crawlable. Handles are not unique, and the entry form says so. A handle is the one part of a **Pool entry** that stays editable after the **Freeze**, and an edit takes effect at the next standings recompute rather than immediately. It is its own field and must stay one: routing a handle through a competition's `team_names` map is rejected, because "team" already means two different things here (see Flagged ambiguities) and the competition path falls back to an email address when a name is missing.
+_Avoid:_ team name, display name, username.
+
+### Freeze
+
+The single stored instant at which a **Pool** stops accepting entries and starts scoring.
+
+Before it, an entry can be created, edited, or withdrawn; after it, only the **Handle** may change. It is enforced by security rules against server time rather than by the interface, because browser clocks are not trustworthy and the freeze is the thing that stops someone entering after watching the premiere. It is config-locked rather than time-locked: whoever can write the pool configuration can move it after it has passed, so every published standings document records the freeze it was computed under and a move is detected rather than assumed impossible. A pool's status can also be closed independently, which stops writes without moving the instant.
+_Avoid:_ finished (which already means two things — see Flagged ambiguities), closed (a separable status).
+
+### Standings cache
+
+The published, episode-keyed copy of a **Pool**'s leaderboard that a signed-out visitor reads with no computation.
+
+Not a contradiction of "scores are never stored": it is keyed by episode, stamped with the data and scoring revisions it was derived from, and rewritten wholesale rather than patched, so it holds no correctness the derivation cannot rebuild from scratch. It exists because the public read path has no recompute fallback, which is also why it is never deleted in production — deleting one takes the leaderboard down until the next recompute runs. It carries handles, totals, and ranks only; account ids are deliberately absent, and it is paginated so the payload does not grow with the entrant count.
+_Avoid:_ score of record, stored score.
 
 ## Survivor game model
 
@@ -187,9 +225,15 @@ Every result-bearing collection — challenges, eliminations, events, votes, and
 
 ### Unfiltered read
 
-The narrow, deliberate exception where code reads results past the spoiler boundary — currently only to detect that a season has ended so a competition can close.
+The narrow, deliberate exception where **competition** code reads results past its own spoiler boundary — currently only to detect that a season has ended so a competition can close.
 
-Safe only because it produces no user-visible result beyond a state flag, and still gated so a group behind the finale is not closed out early. Anything that would render past-boundary information is not eligible.
+Safe only because it produces no user-visible result beyond a state flag, and still gated so a group behind the finale is not closed out early. Inside a competition, anything that would render past-boundary information is not eligible; the wider **Public standings bypass** is a separate exception with its own bound, and code inside a competition may not claim it.
+
+### Public standings bypass
+
+The second sanctioned exception: a **Pool**'s leaderboard publishes totals as of the newest aired episode to everyone, signed out included, with no episode boundary at all.
+
+It is not an **Unfiltered read** widened. A pool has no group and therefore nothing to be behind, so there is no boundary to bypass; the exception is bounded by _what may be shown_ instead of by an episode. That bound is: **Handles**, total points, and rank, and nothing else — no castaway names, no elimination state, no per-castaway breakdown. What it unavoidably discloses is accepted by design: that scoring has occurred, which episode the totals are as of, that the season has ended when it has, and that a large swing implies something happened. An entrant's own per-episode breakdown sits outside this bound because it is visible only to them, on their own **Pool entry**. Anything later added to a public pool surface inherits the same bound, and no other public surface is covered by this exception.
 
 ## Data pipeline
 
@@ -232,3 +276,9 @@ Its central invariant is monotonicity: a regenerated season may never contain fe
 - **"Current episode"** carries three distinguishable states: absent (**Live mode**, everything visible), zero (**Watch-along mode**, nothing revealed), and positive. "No episodes revealed" is easily confused with "no boundary set".
 - **"Drafted"** had been used for both senses of ownership — who made the pick, and whose roster a castaway is on. Since **Trades** exist these are distinct: _drafted by_ is fixed history, _on this roster_ is current ownership.
 - **"Eliminated"** has two senses: an **Elimination** record exists, versus the castaway is actually out — a later event or challenge win overrides an earlier elimination for returnee twists.
+- **"Pick"** means a **Draft pick** in a **Competition** (exclusive, permanent, the origin of every ownership claim) and an entry pick in a **Pool** (non-exclusive, editable until the **Freeze**, conferring nothing). Prefer _draft pick_ and _entry pick_; never say "pick number" or "pick order" of a pool, which has neither.
+- **"Entry"** is a whole **Pool entry** by one person, not a single pick within it, and not a draft record. "Entrant" is the pool's word for a person; **Participant** is the competition's. Neither is a **Castaway**.
+- **"Available"**, **"taken"**, **"owner"**, and **"owns"** describe a castaway during a **Draft**, where a pick removes them from the board. None of these words mean anything in a **Pool**: picks are non-exclusive, so no castaway is ever taken or unavailable, and nobody owns one. Copy borrowed from a draft surface becomes false the moment it lands on a pool surface.
+- **"Roster"** now names two unrelated things. In a **Competition** it is the set of castaways one **Participant** owns right now. On a **Pool** configuration document, `roster` is the field holding the season's entire eligible cast, which nobody owns and which is identical for every entrant. The field name is fixed by the data model; user-facing pool copy must say _cast_ or _the season's castaways_, and must never say "roster", least of all "your roster".
+- **"Handle"** versus "team name" versus "display name": a **Handle** is pool-only and chosen by the entrant for a public page; `team_names` is a competition-scoped map keyed by account id and already carries the ambiguous word "team"; a display name comes from the auth provider and may be a legal name or absent. Never route one through another's field.
+- **"Standings"**: in a **Competition** they are always derived live and spoiler-filtered against **Current episode**; in a **Pool** they are read from a **Standings cache** as of the newest aired episode with no boundary at all. Same word, opposite spoiler behaviour.
