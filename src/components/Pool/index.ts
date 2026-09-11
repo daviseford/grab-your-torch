@@ -9,11 +9,6 @@ export {
   resolvePoolEntryControls,
   type PoolEntryControls,
 } from "./poolEntryControls";
-export { PoolHandleField, type PoolHandleFieldProps } from "./PoolHandleField";
-export {
-  PoolHandleOnlyForm,
-  type PoolHandleOnlyFormProps,
-} from "./PoolHandleOnlyForm";
 export { PoolLeaderboard, type PoolLeaderboardProps } from "./PoolLeaderboard";
 export {
   applyPoolWriteEvent,

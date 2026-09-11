@@ -83,10 +83,9 @@ At most one per user per pool, stored under their account id, so an entry never 
 
 ### Handle
 
-The short public name an entrant chooses for themselves in a **Pool**, and the only thing about them the leaderboard shows.
+The account username shown beside an entrant's score. The database field remains `handle`, but entrants no longer choose a separate pool name. A saved entry requires an authenticated account and copies its display name at submission. Signed-out picks are only a local draft until registration or sign-in completes. No email fallback is published; an incomplete account profile uses "Survivor fan".
 
-Deliberately never defaulted from an account name: sign-in supplies legal names and the leaderboard is public and crawlable. Handles are not unique, and the entry form says so. A handle is the one part of a **Pool entry** that stays editable after the **Freeze**, and an edit takes effect at the next standings recompute rather than immediately. It is its own field and must stay one: routing a handle through a competition's `team_names` map is rejected, because "team" already means two different things here (see Flagged ambiguities) and the competition path falls back to an email address when a name is missing.
-_Avoid:_ team name, display name, username.
+Names are rendered as plain text and may contain Unicode and punctuation. Control characters are removed and names are bounded to 100 characters. The entry screen has no separate handle field or rename form. The legacy handle-only write remains accepted by the rules after the freeze, but has no UI control.
 
 ### Freeze
 

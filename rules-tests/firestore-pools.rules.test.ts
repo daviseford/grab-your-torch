@@ -482,7 +482,9 @@ describe("entries: handle validation (R5)", () => {
   it("keeps the client allowlist identical to the deployed rules", () => {
     const rules = readFileSync("firestore.rules", "utf8");
     expect(rules.match(/handle\.matches\("([^"]+)"\)/)?.[1]).toBe(
-      POOL_HANDLE_PATTERN.source,
+      POOL_HANDLE_PATTERN.source
+        .replace(/\\u([0-9a-f]{4})/g, "\\x{$1}")
+        .replace(/\\/g, "\\\\"),
     );
   });
 
@@ -500,8 +502,14 @@ describe("entries: handle validation (R5)", () => {
     "Ada\r",
     "a\u200bb",
     "a\u202eb",
+    "a\u2066b",
     "a.b",
     "a/b",
+    "Jos? O?Neill",
+    "???",
+    "Torch ??",
+    "A".repeat(100),
+    "A".repeat(101),
   ])("matches client validation for handle %#", async (handle) => {
     const write = setDoc(
       doc(db(ALICE), entryPath(POOL_ID, ALICE)),
@@ -525,12 +533,12 @@ describe("entries: handle validation (R5)", () => {
     await assertSucceeds(withHandle("A".repeat(24), BOB));
   });
 
-  it("denies a 1 character handle", async () => {
-    await assertFails(withHandle("A"));
+  it("accepts a one-character username", async () => {
+    await assertSucceeds(withHandle("A"));
   });
 
-  it("denies a 25 character handle", async () => {
-    await assertFails(withHandle("A".repeat(25)));
+  it("denies a username longer than 100 characters", async () => {
+    await assertFails(withHandle("A".repeat(101)));
   });
 
   it("denies an empty handle", async () => {
@@ -565,14 +573,14 @@ describe("entries: handle validation (R5)", () => {
     await assertFails(withHandle("Ada\u2066Alpha"));
   });
 
-  it("denies a URL", async () => {
-    await assertFails(withHandle("http://evil.example"));
-    await assertFails(withHandle("evil.example/x"));
+  it("accepts account punctuation as plain text", async () => {
+    await assertSucceeds(withHandle("http://evil.example"));
+    await assertSucceeds(withHandle("evil.example/x", BOB));
   });
 
-  it("denies markup and emoji", async () => {
-    await assertFails(withHandle("<b>Ada</b>"));
-    await assertFails(withHandle("Ada \u{1f525}"));
+  it("accepts printable account names, including emoji", async () => {
+    await assertSucceeds(withHandle("<b>Ada</b>"));
+    await assertSucceeds(withHandle("Ada \u{1f525}", BOB));
   });
 });
 
@@ -728,7 +736,7 @@ describe("entries: update before the freeze", () => {
   it("denies an update to an invalid handle", async () => {
     await assertFails(
       updateDoc(doc(db(ALICE), entryPath(POOL_ID, ALICE)), {
-        handle: "A",
+        handle: "",
         updated_at: serverTimestamp(),
       }),
     );
@@ -813,7 +821,7 @@ describe("entries: update after the freeze (AE2, AE6)", () => {
   it("denies a post-freeze handle edit that is invalid", async () => {
     await assertFails(
       updateDoc(doc(db(ALICE), path), {
-        handle: "http://evil.example",
+        handle: "hidden\u200bname",
         updated_at: serverTimestamp(),
       }),
     );

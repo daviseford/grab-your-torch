@@ -213,7 +213,7 @@ describe("buildPoolEntryUpdatePayload", () => {
       buildPoolEntryUpdatePayload({ ...validInput(), picks: [roster[0]] }),
     ).toThrow(PoolEntryPayloadError);
     expect(() =>
-      buildPoolEntryUpdatePayload({ ...validInput(), handle: "a" }),
+      buildPoolEntryUpdatePayload({ ...validInput(), handle: "" }),
     ).toThrow(PoolEntryPayloadError);
     expect(() =>
       buildPoolEntryUpdatePayload({
@@ -252,12 +252,7 @@ describe("buildPoolHandleUpdatePayload", () => {
   });
 
   it("refuses a handle the rules would deny", () => {
-    for (const handle of [
-      "a",
-      "a".repeat(25),
-      " torch",
-      "https://evil.example",
-    ]) {
+    for (const handle of ["", "a".repeat(101), " torch", "hidden\u200bname"]) {
       expect(
         () =>
           buildPoolHandleUpdatePayload({
