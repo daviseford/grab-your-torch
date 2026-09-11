@@ -226,14 +226,14 @@ describe("validatePoolHandle", () => {
     expect(validatePoolHandle("tor\u202ech")).not.toBeNull();
   });
 
-  it("rejects a URL", () => {
-    expect(validatePoolHandle("https://evil.example")).not.toBeNull();
-    expect(validatePoolHandle("evil.example/x")).not.toBeNull();
+  it("accepts punctuation in account usernames as plain text", () => {
+    expect(validatePoolHandle("https://evil.example")).toBeNull();
+    expect(validatePoolHandle("evil.example/x")).toBeNull();
   });
 
-  it("rejects markup and other punctuation", () => {
-    expect(validatePoolHandle("<b>hi</b>")).not.toBeNull();
-    expect(validatePoolHandle("a@b")).not.toBeNull();
+  it("accepts account names as plain text rather than HTML", () => {
+    expect(validatePoolHandle("<b>hi</b>")).toBeNull();
+    expect(validatePoolHandle("a@b")).toBeNull();
   });
 
   it("rejects a trailing newline, which a bare JS $ anchor would allow", () => {
@@ -425,7 +425,7 @@ describe("buildPoolEntryPayload", () => {
 
   it("refuses an invalid handle", () => {
     expect(() =>
-      buildPoolEntryPayload({ ...validInput(), handle: "a" }),
+      buildPoolEntryPayload({ ...validInput(), handle: "" }),
     ).toThrow(PoolEntryPayloadError);
   });
 

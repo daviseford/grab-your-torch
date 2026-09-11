@@ -26,8 +26,6 @@ import {
   PoolCastPicker,
   PoolEntryBreakdown,
   poolEntryChangedElsewhere,
-  PoolHandleField,
-  PoolHandleOnlyForm,
   PoolLeaderboard,
   resolvePoolEntryControls,
   type PoolWriteKind,
@@ -69,6 +67,7 @@ import {
   timestampToMillis,
 } from "../utils/poolPageState";
 import { togglePoolPick } from "../utils/poolPicks";
+import { poolUsername } from "../utils/poolUsername";
 import { getSeasonAirStatus } from "../utils/seasonAirStatus";
 import classes from "./Pool.module.css";
 
@@ -109,7 +108,6 @@ const FREEZE_TICK_MS = 30_000;
 /** One complete entry, as the form holds it. */
 type EntryValues = {
   picks: PoolPick[];
-  handle: string;
   propBets: PropBetsFormData;
 };
 
@@ -127,7 +125,8 @@ export const Pool = () => {
   // The entrant count lives on the counters document, never on the config
   // (KTD3), and is readable signed-out along with it.
   const { data: counters } = usePoolCounters(poolId);
-  const { slimUser, isAuthReady } = useUser();
+  const { user, slimUser, isAuthReady } = useUser();
+  const username = poolUsername(user?.displayName);
   const {
     entry,
     confirmedUpdatedAt,
@@ -135,7 +134,6 @@ export const Pool = () => {
     isLoading: entryLoading,
     submitEntry,
     updateEntry,
-    updateHandle,
     withdrawEntry,
   } = usePoolEntry(poolId);
   // The entrant's own week-by-week points (R26). Owner scoped inside the hook,
@@ -157,10 +155,9 @@ export const Pool = () => {
   } = usePoolStandings({ pool, isPoolLoaded: Boolean(pool) });
 
   const [picks, setPicks] = useState<PoolPick[]>([]);
-  const [handle, setHandle] = useState("");
   const [propBets, setPropBets] = useState<PropBetsFormData>({});
   const [announcement, setAnnouncement] = useState<string | null>(null);
-  const [showHandleError, setShowHandleError] = useState(false);
+  const [awaitingAccount, setAwaitingAccount] = useState(false);
   const [blockerMessage, setBlockerMessage] = useState<string | null>(null);
   const [retryMessage, setRetryMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -230,17 +227,12 @@ export const Pool = () => {
     const draft = readPoolEntryDraftForPool(poolId, pool);
     if (!draft) return;
     setPicks(draft.picks);
-    setHandle(draft.handle);
     setPropBets(draft.prop_bets);
     setPropBetsFormKey((key) => key + 1);
   }, [poolId, pool]);
 
   const persist = useCallback(
-    (next: {
-      picks?: PoolPick[];
-      handle?: string;
-      prop_bets?: PropBetsFormData;
-    }) => {
+    (next: { picks?: PoolPick[]; prop_bets?: PropBetsFormData }) => {
       if (!poolId || !pool) return;
       // The prop bets form renders every question; a pool asks for a subset,
       // and the submit payload keeps only that subset. The autosave stores the
@@ -256,12 +248,12 @@ export const Pool = () => {
       savePoolEntryDraft({
         pool_id: poolId,
         picks: next.picks ?? picks,
-        handle: next.handle ?? handle,
+        handle: "",
         prop_bets,
         saved_at: Date.now(),
       });
     },
-    [poolId, pool, picks, handle, propBets],
+    [poolId, pool, picks, propBets],
   );
 
   const limit = pool?.picks_per_entry ?? 0;
@@ -285,21 +277,12 @@ export const Pool = () => {
     [picks, limit, persist],
   );
 
-  const onHandleChange = useCallback(
-    (value: string) => {
-      setHandle(value);
-      persist({ handle: value });
-      setBlockerMessage(null);
-    },
-    [persist],
-  );
-
   // The values a continuation needs after the account modal closes, without
   // rebuilding every callback whenever one of them changes.
-  const latest = useRef({ picks, handle, propBets });
+  const latest = useRef({ picks, propBets });
   useEffect(() => {
-    latest.current = { picks, handle, propBets };
-  }, [picks, handle, propBets]);
+    latest.current = { picks, propBets };
+  }, [picks, propBets]);
 
   /**
    * Run one write and record what came back.
@@ -375,7 +358,7 @@ export const Pool = () => {
         (isEdit ? updateEntry : submitEntry)({
           pool,
           picks: values.picks,
-          handle: values.handle,
+          handle: poolUsername(user?.displayName),
           propBets: values.propBets,
         }),
       );
@@ -397,7 +380,7 @@ export const Pool = () => {
         denied: outcome.status === "denied",
       };
     },
-    [pool, poolId, runWrite, submitEntry, updateEntry],
+    [pool, poolId, runWrite, submitEntry, updateEntry, user],
   );
 
   /**
@@ -433,13 +416,12 @@ export const Pool = () => {
       if (!pool || !poolId) return;
       setPropBets(values);
       persist({ prop_bets: values });
-      setShowHandleError(true);
       setStatusMessage(null);
 
       const blockers = getPoolEntryBlockers({
         pool,
         picks,
-        handle,
+        handle: username,
         propBets: values,
       });
       if (blockers.length > 0) {
@@ -459,20 +441,23 @@ export const Pool = () => {
           returnPath: `/pool/${pool.season_id}`,
         });
         setPendingStateKey(stateKey);
+        setAwaitingAccount(true);
         modals.openContextModal({
           modal: "AuthModal",
+          onClose: () => setAwaitingAccount(false),
           innerProps: {
             initialMode: "register",
             actionDescription: `Enter the ${pool.name}`,
             pendingStateKey: stateKey,
+            onAuthenticated: () => setAwaitingAccount(false),
           },
         });
         return;
       }
 
-      await saveEntry({ picks, handle, propBets: values });
+      await saveEntry({ picks, propBets: values });
     },
-    [pool, poolId, picks, handle, persist, slimUser, saveEntry],
+    [pool, poolId, picks, username, persist, slimUser, saveEntry],
   );
 
   const matchesEnterPool = useCallback(
@@ -497,18 +482,19 @@ export const Pool = () => {
       const values = stored
         ? {
             picks: stored.picks,
-            handle: stored.handle,
             propBets: stored.prop_bets,
           }
         : latest.current;
 
-      const blockers = getPoolEntryBlockers({ pool, ...values });
+      const blockers = getPoolEntryBlockers({
+        pool,
+        ...values,
+        handle: poolUsername(user?.displayName),
+      });
       if (blockers.length > 0) {
         // Nothing was lost: the entry is still on screen, just unfinished.
         setPicks(values.picks);
-        setHandle(values.handle);
         setPropBets(values.propBets);
-        setShowHandleError(true);
         setBlockerMessage(blockers.map((b) => b.message).join(" "));
         return { result: "invalid" as const, message: blockers[0].message };
       }
@@ -520,11 +506,11 @@ export const Pool = () => {
         message: outcome.message,
       };
     },
-    [pool, poolId, slimUser, saveEntry],
+    [pool, poolId, slimUser, saveEntry, user],
   );
 
   const continuation = useAuthContinuation({
-    isReady: !!slimUser && !!pool && isAuthReady,
+    isReady: !!slimUser && !!pool && isAuthReady && !awaitingAccount,
     stateKey: pendingStateKey,
     matches: matchesEnterPool,
     execute: executeEnterPool,
@@ -534,11 +520,9 @@ export const Pool = () => {
   const startEditing = useCallback(() => {
     if (!entry) return;
     setPicks(entry.picks);
-    setHandle(entry.handle);
     setPropBets(entry.prop_bets);
     setPropBetsFormKey((key) => key + 1);
     setEditBaseline(entry.updated_at);
-    setShowHandleError(false);
     setBlockerMessage(null);
     setRetryMessage(null);
     setStatusMessage(null);
@@ -562,7 +546,6 @@ export const Pool = () => {
       // The listener drops the entry on its own; clear the form behind it so
       // the empty entry form is genuinely empty.
       setPicks([]);
-      setHandle("");
       setPropBets({});
       setPropBetsFormKey((key) => key + 1);
       setEditing(false);
@@ -576,8 +559,8 @@ export const Pool = () => {
       title: "Withdraw your entry?",
       children: (
         <Text size="sm">
-          Your picks, handle, and prop bets are removed from this pool. You can
-          enter again any time before entries close.
+          Your picks and prop bets are removed from this pool. You can enter
+          again any time before entries close.
         </Text>
       ),
       labels: { confirm: "Withdraw my entry", cancel: "Keep my entry" },
@@ -585,16 +568,6 @@ export const Pool = () => {
       onConfirm: () => void run(),
     });
   }, [poolId, runWrite, withdrawEntry]);
-
-  const saveHandleOnly = useCallback(
-    async (next: string) => {
-      const outcome = await runWrite("handle", () => updateHandle(next));
-      if (isPoolWriteAcknowledged(outcome))
-        return { ok: true, retryable: false };
-      return { ok: false, retryable: outcome.status === "failed" };
-    },
-    [runWrite, updateHandle],
-  );
 
   const dismissRejection = useCallback(() => {
     if (!poolId) return;
@@ -644,9 +617,9 @@ export const Pool = () => {
       description={
         <>
           Pick {pool.picks_per_entry} of the {pool.roster.length} castaways,
-          answer the prop bets, and choose a handle. You play on your own: there
-          is no lobby and nobody else to wait for. Anyone can pick the same
-          castaways you do.
+          answer the prop bets, and compete against everyone else who enters.
+          Your account username appears on the sitewide leaderboard. Anyone can
+          pick the same castaways you do.
         </>
       }
       meta={
@@ -731,14 +704,6 @@ export const Pool = () => {
             scores={entryScores}
             scoresLoading={scoresLoading}
           />
-        )}
-        {controls === "handle-only" && entry && (
-          <section className={classes.section} aria-labelledby="pool-handle">
-            <h2 className={classes.heading} id="pool-handle">
-              Your handle
-            </h2>
-            <PoolHandleOnlyForm handle={entry.handle} onSave={saveHandleOnly} />
-          </section>
         )}
       </div>
     );
@@ -842,17 +807,6 @@ export const Pool = () => {
         />
       </section>
 
-      <section className={classes.section} aria-labelledby="pool-handle">
-        <h2 className={classes.heading} id="pool-handle">
-          Your handle
-        </h2>
-        <PoolHandleField
-          value={handle}
-          onChange={onHandleChange}
-          showError={showHandleError}
-        />
-      </section>
-
       <section className={classes.section} aria-labelledby="pool-propbets">
         <h2 className={classes.heading} id="pool-propbets">
           Prop bets
@@ -939,7 +893,7 @@ const SubmittedEntry = ({
       Your entry
     </h2>
     <dl className={classes.summary}>
-      <dt>Handle</dt>
+      <dt>Username</dt>
       <dd>{entry.handle}</dd>
       <dt>Picks</dt>
       <dd>{entry.picks.map((pick) => pick.full_name).join(", ")}</dd>

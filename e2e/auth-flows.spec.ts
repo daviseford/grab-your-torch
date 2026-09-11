@@ -98,7 +98,6 @@ const POOL_ROSTER = SEASON_51_PLAYERS.map(({ castaway_id, full_name }) => ({
 })).sort((a, b) => a.full_name.localeCompare(b.full_name));
 const PICKS_PER_ENTRY = Math.floor(POOL_ROSTER.length / 3);
 
-const POOL_HANDLE = "TorchSnuffer12";
 /** The answer every castaway-typed prop bet question is given. */
 const PROP_BET_PICK = POOL_ROSTER[0];
 
@@ -1415,11 +1414,53 @@ const answerPropBets = async (page: Page) => {
 };
 
 /** A complete entry, in the order the page presents it. */
-const fillPoolEntry = async (page: Page, handle = POOL_HANDLE) => {
+const fillPoolEntry = async (page: Page) => {
   await choosePoolPicks(page);
-  await poolHandleField(page).fill(handle);
+  await expect(poolHandleField(page)).toHaveCount(0);
   await answerPropBets(page);
 };
+
+test("pool: photos open and zoom without selecting a castaway", async ({
+  page,
+}) => {
+  await seedPool(openFreeze());
+  await page.goto(`/pool/${POOL_SEASON_ID}`);
+  const portrait = page.getByRole("button", {
+    name: "View full photo of Aaliyah Puglia",
+    exact: true,
+  });
+  await portrait.click();
+  const photo = page.getByRole("dialog", { name: "Aaliyah Puglia" });
+  await expect(photo).toBeVisible();
+  await expect
+    .poll(() =>
+      photo
+        .getByRole("img", { name: "Aaliyah Puglia", exact: true })
+        .evaluate((img: HTMLImageElement) => img.naturalWidth),
+    )
+    .toBe(1536);
+  await photo.getByRole("button", { name: "Zoom in", exact: true }).click();
+  await expect(
+    photo.getByRole("button", { name: "Fit photo", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect
+    .poll(() =>
+      photo
+        .getByRole("region")
+        .evaluate((el) => el.scrollWidth > el.clientWidth),
+    )
+    .toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(photo).toHaveCount(0);
+  await expect(portrait).toBeFocused();
+  await expect(
+    page.getByText(`0 of ${PICKS_PER_ENTRY} picks chosen`),
+  ).toBeVisible();
+  await expect(poolHandleField(page)).toHaveCount(0);
+  expect(
+    (await adminDb.collection(`pools/${POOL_ID}/entries`).get()).size,
+  ).toBe(0);
+});
 
 test("pool: independent players share picks and a newer device save clears an old rejection", async ({
   page,
@@ -1452,11 +1493,11 @@ test("pool: independent players share picks and a newer device save clears an ol
   const bobPage = await other.newPage();
   try {
     for (const [playerPage, user, handle] of [
-      [page, alice, "AliceTorch"],
-      [bobPage, bob, "BobTorch"],
+      [page, alice, "Alice"],
+      [bobPage, bob, "Bob"],
     ] as const) {
       await playerPage.goto(`/pool/${POOL_SEASON_ID}`);
-      await fillPoolEntry(playerPage, handle);
+      await fillPoolEntry(playerPage);
       await playerPage.getByRole("button", { name: "Submit my entry" }).click();
       await signInThrough(playerPage, {
         email: user.email,
@@ -1470,10 +1511,8 @@ test("pool: independent players share picks and a newer device save clears an ol
     expect((await readPoolEntry(alice.uid))?.picks).toEqual(
       (await readPoolEntry(bob.uid))?.picks,
     );
-    await expect(page.getByText("BobTorch", { exact: true })).toHaveCount(0);
-    await expect(bobPage.getByText("AliceTorch", { exact: true })).toHaveCount(
-      0,
-    );
+    await expect(page.getByText("Bob", { exact: true })).toHaveCount(0);
+    await expect(bobPage.getByText("Alice", { exact: true })).toHaveCount(0);
 
     // A persisted rejection is legitimate until a newer server save arrives.
     // Seed it after the existing write so loading the old entry cannot clear it.
@@ -1522,7 +1561,7 @@ test("pool: independent players share picks and a newer device save clears an ol
       .toBe(true);
     await bobPage.reload({ waitUntil: "domcontentloaded" });
     await expect(bobPage.getByText("Your entry is in.")).toBeVisible();
-    expect((await readPoolEntry(bob.uid))?.handle).toBe("BobTorch");
+    expect((await readPoolEntry(bob.uid))?.handle).toBe("Bob");
   } finally {
     await bobPage.goto("about:blank", { waitUntil: "domcontentloaded" });
     await other.close();
@@ -1592,7 +1631,7 @@ test("pool: a signed-out entry survives registration and lands under the new uid
   const entry = await readPoolEntry(account.localId);
   expect(entry?.id).toBe(`pool_entry_${account.localId}`);
   expect(entry?.pool_id).toBe(POOL_ID);
-  expect(entry?.handle).toBe(POOL_HANDLE);
+  expect(entry?.handle).toBe("Pool Entrant");
   expect(entry?.picks).toEqual(picks);
   expect(Object.keys(entry?.prop_bets ?? {}).sort()).toEqual(
     [...PropBetQuestionKeys].sort(),
@@ -1605,8 +1644,12 @@ test("pool: a signed-out entry survives registration and lands under the new uid
   const entries = await adminDb.collection(`pools/${POOL_ID}/entries`).get();
   expect(entries.size).toBe(1);
 
-  // The handle shown back is the one they chose, not their account name.
-  await expect(page.getByText(POOL_HANDLE)).toBeVisible();
+  // The entry uses the completed account profile, not an email or draft handle.
+  await expect(
+    page
+      .getByRole("region", { name: "Your entry" })
+      .getByText("Pool Entrant", { exact: true }),
+  ).toBeVisible();
 });
 
 // U13: the same fill, but interrupted by a reload before the account exists.
@@ -1640,7 +1683,7 @@ test("pool: an entry filled in signed out survives a reload and then sign-in (U1
       `${PropBetQuestionKeys.length} of ${PropBetQuestionKeys.length} answered`,
     ),
   ).toBeVisible();
-  await expect(poolHandleField(page)).toHaveValue(POOL_HANDLE);
+  await expect(poolHandleField(page)).toHaveCount(0);
   await expect(
     page.getByRole("combobox", { name: "Season winner", exact: true }),
   ).toHaveValue(PROP_BET_PICK.full_name);
@@ -1658,7 +1701,7 @@ test("pool: an entry filled in signed out survives a reload and then sign-in (U1
   await expect(
     page.getByText(`${picks.length} of ${PICKS_PER_ENTRY} picks chosen`),
   ).toBeVisible(SLOW);
-  await expect(poolHandleField(page)).toHaveValue(POOL_HANDLE);
+  await expect(poolHandleField(page)).toHaveCount(0);
   for (const castaway of picks) {
     await expect(
       page.getByRole("button", { name: `Remove ${castaway.full_name}` }),
@@ -1688,7 +1731,7 @@ test("pool: an entry filled in signed out survives a reload and then sign-in (U1
     })
     .toBe(true);
   const entry = await readPoolEntry(account.localId);
-  expect(entry?.handle).toBe(POOL_HANDLE);
+  expect(entry?.handle).toBe("Reload Entrant");
   expect(entry?.picks).toEqual(picks);
   expect(Object.keys(entry?.prop_bets ?? {}).sort()).toEqual(
     [...PropBetQuestionKeys].sort(),
@@ -1751,7 +1794,7 @@ test("pool: a write refused after the freeze keeps the picks on screen and says 
       page.getByRole("button", { name: `Remove ${castaway.full_name}` }),
     ).toBeVisible();
   }
-  await expect(poolHandleField(page)).toHaveValue(POOL_HANDLE);
+  await expect(poolHandleField(page)).toHaveCount(0);
   // By combobox role, not by label: Mantine renders the question text as a
   // label element as well as the control's accessible name, so a label query
   // matches two nodes.
@@ -1787,12 +1830,8 @@ test("pool: a write refused after the freeze keeps the picks on screen and says 
   ).toHaveCount(0);
 });
 
-// AE6 (R5, R9): after the freeze the handle still changes and nothing else
-// does. The rules already pin the accepted write shapes; what only the
-// emulator can show is that the CLIENT sends the two-key diff on the handle
-// path and the full payload on the edit path, so one succeeds and the other
-// is refused by the same rules on the same entry.
-test("pool: after the freeze a handle change is accepted and a pick change is refused (AE6)", async ({
+// The entry stays read-only after the freeze, including its account username.
+test("pool: after the freeze there is no handle form and a pick change is refused", async ({
   page,
   isMobile,
 }) => {
@@ -1804,7 +1843,7 @@ test("pool: after the freeze a handle change is accepted and a pick change is re
     PASSWORD,
     "Handle Entrant",
   );
-  await seedPoolEntry(user.uid, "OldHandle");
+  await seedPoolEntry(user.uid, "Handle Entrant");
   const seededPicks = POOL_ROSTER.slice(0, PICKS_PER_ENTRY);
 
   await page.goto("/");
@@ -1817,7 +1856,7 @@ test("pool: after the freeze a handle change is accepted and a pick change is re
   ).toBeVisible(SLOW);
 
   // With the real clock the page knows the pool is frozen: the entry is shown
-  // with no edit or withdrawal control, and the handle is the one thing left.
+  // with no edit, withdrawal, or separate handle control.
   await page.goto(`/pool/${POOL_SEASON_ID}`);
   await expect(page.getByRole("heading", { name: "Your entry" })).toBeVisible(
     SLOW,
@@ -1829,19 +1868,12 @@ test("pool: after the freeze a handle change is accepted and a pick change is re
     page.getByRole("button", { name: "Withdraw my entry" }),
   ).toHaveCount(0);
 
-  await poolHandleField(page).fill("NewHandle");
-  await page.getByRole("button", { name: "Save my handle" }).click();
-  await expect(page.getByText("Your handle is now NewHandle")).toBeVisible(
-    SLOW,
-  );
+  await expect(poolHandleField(page)).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Save my handle" }),
+  ).toHaveCount(0);
 
-  const renamed = await readPoolEntry(user.uid);
-  expect(renamed?.handle).toBe("NewHandle");
-  expect(renamed?.picks).toEqual(seededPicks);
-
-  // Now the same entrant with the form open across the freeze. The edit path
-  // sends the whole entry, so a changed pick rides along and the rules refuse
-  // the write that the handle-only diff above was allowed to make.
+  // A stale browser clock cannot allow edits after the server freeze.
   await holdTheFormOpenPastFreeze(page, freezeAt);
   await page.goto(`/pool/${POOL_SEASON_ID}`);
   await expect(
@@ -1865,5 +1897,5 @@ test("pool: after the freeze a handle change is accepted and a pick change is re
 
   const afterEdit = await readPoolEntry(user.uid);
   expect(afterEdit?.picks).toEqual(seededPicks);
-  expect(afterEdit?.handle).toBe("NewHandle");
+  expect(afterEdit?.handle).toBe("Handle Entrant");
 });

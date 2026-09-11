@@ -1,5 +1,7 @@
-import type { ReactNode } from "react";
+import { IconZoomIn } from "@tabler/icons-react";
+import { useRef, useState, type ReactNode } from "react";
 import classes from "./CastawayCard.module.css";
+import { CastawayPhotoModal } from "./CastawayPhotoModal";
 
 type CastawayCardProps = {
   name: string;
@@ -50,6 +52,8 @@ export const CastawayCard = ({
   compact = false,
   className,
 }: CastawayCardProps) => {
+  const [photoOpened, setPhotoOpened] = useState(false);
+  const portraitButton = useRef<HTMLButtonElement>(null);
   const rootClass = [
     classes.root,
     out && classes.out,
@@ -63,7 +67,24 @@ export const CastawayCard = ({
     <article className={rootClass}>
       <div className={classes.portrait}>
         {img ? (
-          <img src={img} alt={imgAlt ?? name} loading="lazy" decoding="async" />
+          <button
+            ref={portraitButton}
+            type="button"
+            className={classes.portraitButton}
+            aria-label={`View full photo of ${name}`}
+            aria-haspopup="dialog"
+            onClick={() => setPhotoOpened(true)}
+          >
+            <img
+              src={img}
+              alt={imgAlt ?? name}
+              loading="lazy"
+              decoding="async"
+            />
+            <span className={classes.zoomHint} aria-hidden="true">
+              <IconZoomIn size={18} />
+            </span>
+          </button>
         ) : (
           <span className={classes.initials} aria-hidden="true">
             {initials(name)}
@@ -77,6 +98,17 @@ export const CastawayCard = ({
         {meta && <div className={classes.meta}>{meta}</div>}
         {actions && <div className={classes.actions}>{actions}</div>}
       </div>
+      {img && photoOpened && (
+        <CastawayPhotoModal
+          name={name}
+          img={img}
+          imgAlt={imgAlt}
+          onClose={() => {
+            setPhotoOpened(false);
+            requestAnimationFrame(() => portraitButton.current?.focus());
+          }}
+        />
+      )}
     </article>
   );
 };

@@ -209,16 +209,14 @@ service cloud.firestore {
           return request.auth != null && request.auth.uid == uid;
         }
 
-        // 2 to 24 characters from an explicit allowlist, with no leading or
-        // trailing space (R5). An allowlist rather than a length cap because
-        // handles land on a crawlable public leaderboard: this is what keeps a
-        // URL, markup, a control character, a zero-width joiner or a
-        // bidi-override out of that page.
+        // Account display names are stored as plain text in the legacy
+        // handle field. Allow Unicode names and punctuation, but not controls.
         function handleIsValid(handle) {
           return handle is string
-            && handle.size() >= 2
-            && handle.size() <= 24
-            && handle.matches("^[A-Za-z0-9_-][A-Za-z0-9 _-]{0,22}[A-Za-z0-9_-]$");
+            && handle.size() >= 1
+            && handle.size() <= 100
+            && handle.matches("^[^\\p{C}\\x{2060}-\\x{206f}]+$")
+            && handle.matches("^\\S(.*\\S)?$");
         }
 
         // Shape allowlist, not just field checks. Without hasOnly an entrant
