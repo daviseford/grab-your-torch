@@ -9,6 +9,7 @@ import type {
 import {
   describePoolLifecycle,
   describePoolModule,
+  getPoolCountdown,
   getPoolModuleState,
   POOL_LOW_ENTRANT_THRESHOLD,
   POOL_PREMIERE_AIRING_MS,
@@ -24,6 +25,50 @@ import type { PoolStandingsView } from "../poolStandingsRead";
 /** KTD9: 8:00 PM Eastern on the 2026-09-23 premiere. */
 const FREEZE_ISO = "2026-09-24T00:00:00.000Z";
 const FREEZE_MS = Date.parse(FREEZE_ISO);
+
+describe("getPoolCountdown", () => {
+  it("splits the remaining time into days, hours, minutes, and seconds", () => {
+    expect(getPoolCountdown(FREEZE_MS, FREEZE_MS - 93784000)).toEqual({
+      days: 1,
+      hours: 2,
+      minutes: 3,
+      seconds: 4,
+    });
+  });
+
+  it("keeps the last second visible until the deadline, then clamps to zero", () => {
+    expect(getPoolCountdown(FREEZE_MS, FREEZE_MS - 1).seconds).toBe(1);
+    for (const now of [FREEZE_MS, FREEZE_MS + 5000]) {
+      expect(getPoolCountdown(FREEZE_MS, now)).toEqual({
+        days: 0,
+        hours: 0,
+        minutes: 0,
+        seconds: 0,
+      });
+    }
+  });
+
+  it("rolls over at a day boundary and catches up after a suspended tab", () => {
+    expect(getPoolCountdown(FREEZE_MS, FREEZE_MS - 86400000)).toEqual({
+      days: 1,
+      hours: 0,
+      minutes: 0,
+      seconds: 0,
+    });
+    expect(getPoolCountdown(FREEZE_MS, FREEZE_MS - 86399000)).toEqual({
+      days: 0,
+      hours: 23,
+      minutes: 59,
+      seconds: 59,
+    });
+    expect(getPoolCountdown(FREEZE_MS, FREEZE_MS - 3000)).toEqual({
+      days: 0,
+      hours: 0,
+      minutes: 0,
+      seconds: 3,
+    });
+  });
+});
 
 const ts = (iso: string): FirestoreTimestamp => {
   const ms = Date.parse(iso);

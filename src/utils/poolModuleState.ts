@@ -35,7 +35,7 @@ import type { PoolStandingsView } from "./poolStandingsRead";
 // ---------------------------------------------------------------------------
 
 /**
- * Below this many entrants the open state leads with being early instead of
+ * Below this many entrants the open state explains the competition without
  * quoting the count as social proof.
  *
  * The plan leaves the number open ("a judgment call to revisit with real
@@ -43,8 +43,7 @@ import type { PoolStandingsView } from "./poolStandingsRead";
  * arrivals at the rate the 2026-09-06 Reddit launch actually produced (62
  * signups over several days), and it is about the size of field that reads as
  * "a handful of people" rather than as a crowd. Under it a printed count
- * discourages more than it reassures, and the honest thing to sell is that
- * getting in early is possible; over it the count is the strongest evidence
+ * discourages more than it reassures; over it the count is useful evidence
  * on the page that the thing is real.
  *
  * It gates copy only. No leaderboard is ever suppressed by it, because the
@@ -233,6 +232,17 @@ const entries = (n: number): string =>
 
 const poolRoute = (seasonId: Pool["season_id"]): string => `/pool/${seasonId}`;
 
+/** Recompute from the deadline so a suspended tab never accumulates drift. */
+export const getPoolCountdown = (freezeAtMs: number, now: number) => {
+  const remaining = Math.max(0, Math.ceil((freezeAtMs - now) / 1000));
+  return {
+    days: Math.floor(remaining / 86400),
+    hours: Math.floor((remaining % 86400) / 3600),
+    minutes: Math.floor((remaining % 3600) / 60),
+    seconds: remaining % 60,
+  };
+};
+
 /**
  * Every string the module says, per state.
  *
@@ -279,13 +289,13 @@ export const describePoolModule = (
     case "open": {
       const { seasonNum, seasonId, castCount, picksPerEntry, entryCount } =
         state.facts;
-      const how = `Pick ${picksPerEntry} of the ${castCount} castaways, answer the predictions, and you are playing.`;
+      const how = `Pick ${picksPerEntry} of the ${castCount} castaways and answer the predictions. Compete against everyone on Grab Your Torch on one sitewide leaderboard.`;
       return {
-        headline: `Play Survivor ${seasonNum} on your own`,
+        headline: `Survivor ${seasonNum}: You vs. everyone`,
         support:
           state.variant === "first-movers"
-            ? `${how} No group to gather and nobody to wait for, and the field is still small enough to get in early.`
-            : `${people(entryCount)} entered. ${how} No group to gather and nobody to wait for.`,
+            ? how
+            : `${people(entryCount)} entered. ${how}`,
         action: { label: "Enter the season pool", to: poolRoute(seasonId) },
         standings: {
           kind: "none",

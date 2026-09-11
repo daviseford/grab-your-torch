@@ -6,6 +6,7 @@ import { usePoolStandings } from "../../hooks/usePoolStandings";
 import { seasonIdForNum } from "../../utils/poolIds";
 import {
   describePoolModule,
+  getPoolCountdown,
   getPoolModuleState,
   type PoolModuleState,
 } from "../../utils/poolModuleState";
@@ -53,10 +54,8 @@ const HOME_POOL_SEASON_NUM = 51;
 const HOME_POOL_SEASON_ID = seasonIdForNum(HOME_POOL_SEASON_NUM);
 
 /**
- * How often the clock is re-read, matching `src/pages/Pool.tsx`. The module
- * changes state at the freeze instant, and a homepage left open across it
- * should stop offering entry without waiting for a navigation. Nothing here is
- * a security boundary: the rules are (KTD4).
+ * Open entries tick each second for the countdown; later lifecycle states
+ * only need a periodic check. The rules still enforce the freeze (KTD4).
  */
 const FREEZE_TICK_MS = 30_000;
 
@@ -105,11 +104,6 @@ export const HomePool = ({ fallback }: HomePoolProps) => {
   const { view } = usePoolStandings({ pool, isPoolLoaded: isLoaded });
 
   const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), FREEZE_TICK_MS);
-    return () => clearInterval(timer);
-  }, []);
-
   const state = getPoolModuleState({
     pool,
     poolLoaded: isLoaded,
@@ -118,6 +112,11 @@ export const HomePool = ({ fallback }: HomePoolProps) => {
     displayMode: pool?.display_mode,
     now,
   });
+  const tickMs = state.kind === "open" ? 1_000 : FREEZE_TICK_MS;
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), tickMs);
+    return () => clearInterval(timer);
+  }, [tickMs]);
 
   if (state.kind === "pending") {
     // A fixed-height stand-in occupying the open state's footprint. Without it
@@ -156,9 +155,31 @@ export const HomePool = ({ fallback }: HomePoolProps) => {
       <p className={classes.support}>{copy.support}</p>
 
       {state.kind === "open" && (
-        <p className={classes.deadline}>
-          Entries close {formatFreeze(state.facts.freezeAtMs)}.
-        </p>
+        <div className={classes.deadlineBlock}>
+          <p id="home-pool-countdown-label" className={classes.countdownLabel}>
+            Season starts. Picks lock in:
+          </p>
+          <div
+            className={classes.countdown}
+            role="timer"
+            aria-labelledby="home-pool-countdown-label"
+            aria-live="off"
+          >
+            {Object.entries(getPoolCountdown(state.facts.freezeAtMs, now)).map(
+              ([unit, value]) => (
+                <div key={unit} className={classes.countdownUnit}>
+                  <span className={classes.countdownValue}>
+                    {String(value).padStart(2, "0")}
+                  </span>
+                  <span className={classes.countdownUnitLabel}>{unit}</span>
+                </div>
+              ),
+            )}
+          </div>
+          <p className={classes.deadline}>
+            Entries close {formatFreeze(state.facts.freezeAtMs)}.
+          </p>
+        </div>
       )}
 
       {/*
@@ -194,6 +215,10 @@ export const HomePool = ({ fallback }: HomePoolProps) => {
           component={Link}
           to={copy.action.to}
           size={copy.dominant ? "lg" : "sm"}
+          classNames={{
+            root: classes.actionButton,
+            label: classes.actionLabel,
+          }}
           variant={copy.dominant ? "filled" : "outline"}
           // The torch, not the league blue. The hero already carries a filled
           // primary button, and two of them in one viewport would leave R20's

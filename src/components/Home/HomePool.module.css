@@ -75,7 +75,7 @@
  * height: the copy is generated and a long entrant count must not be clipped.
  */
 .dominant {
-  min-height: 336px;
+  min-height: 460px;
 }
 
 .compact {
@@ -125,10 +125,61 @@
   color: var(--mantine-color-dimmed);
 }
 
+.deadlineBlock {
+  width: 100%;
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--gyt-rule);
+}
+
+.countdownLabel {
+  margin: 0;
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 600;
+}
+
+.countdown {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.countdownUnit {
+  display: flex;
+  flex-direction: column;
+}
+
+.countdownValue {
+  font-family: var(--mantine-headings-font-family);
+  font-size: 2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+
+.countdownUnitLabel {
+  font-size: 0.625rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+
 .action {
   margin-top: 4px;
   display: flex;
   max-width: 100%;
+}
+
+.actionButton {
+  height: auto;
+  min-height: var(--button-height);
+  padding-block: 12px;
+}
+
+.actionLabel {
+  white-space: normal;
+  text-align: center;
 }
 
 .note {
