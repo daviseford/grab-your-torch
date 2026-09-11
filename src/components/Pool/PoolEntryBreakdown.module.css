@@ -45,6 +45,7 @@
 /* A season runs to a dozen or more episodes, so this is the one thing here
    allowed to scroll sideways. Nothing else may push the page wide at 375px. */
 .tableWrap {
+  position: relative;
   overflow-x: auto;
 }
 
@@ -99,7 +100,7 @@
   min-width: 9rem;
 }
 
-.pick {
+.table .pick {
   display: table-cell;
   border-bottom: 1px solid var(--gyt-rule);
   text-transform: none;
@@ -124,15 +125,16 @@
   color: var(--mantine-color-dimmed);
 }
 
-.episodeCol {
+.table .episodeCol {
   width: 2.5rem;
+  min-width: 2.5rem;
   text-align: right;
   padding-right: 0;
   padding-left: 8px;
   font-variant-numeric: tabular-nums;
 }
 
-.points {
+.table .points {
   text-align: right;
   padding-right: 0;
   padding-left: 8px;
@@ -143,8 +145,8 @@
   color: var(--mantine-color-dimmed);
 }
 
-.totalCol,
-.pickTotal {
+.table .totalCol,
+.table .pickTotal {
   width: 4rem;
   text-align: right;
   padding-right: 0;

@@ -40,6 +40,7 @@
 /* The table is the only thing here allowed to scroll sideways, and only if a
    long handle forces it. Nothing else may push the page wide at 375px. */
 .tableWrap {
+  position: relative;
   overflow-x: auto;
 }
 
@@ -122,7 +123,7 @@
   min-width: 8rem;
 }
 
-.pointsCol {
+.table .pointsCol {
   width: 5rem;
   text-align: right;
   padding-right: 0;
@@ -142,6 +143,10 @@
 
 .compact .table td {
   padding: 5px 8px 5px 0;
+}
+
+.compact .table .pointsCol {
+  padding-right: 0;
 }
 
 .compact .rankCol {

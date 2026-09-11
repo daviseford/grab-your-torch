@@ -48,7 +48,7 @@ export type PoolLeaderboardProps = {
   canExpand?: boolean;
   /** True while those pages are in flight. */
   isExpanding?: boolean;
-  /** Tighter type and spacing for the homepage module (KD6). */
+  /** Five-row preview with tighter type and spacing for the homepage (KD6). */
   compact?: boolean;
   /** Overrides for the empty-state copy, so each caller can word its own. */
   emptyTitle?: string;
@@ -92,8 +92,9 @@ export const PoolLeaderboard = ({
   }
 
   const asOf = describePoolStandingsAsOf(view);
-  const grouped = groupPoolStandingsRows(view.rows);
-  const shown = view.rows.length;
+  const allGrouped = groupPoolStandingsRows(view.rows);
+  const grouped = compact ? allGrouped.slice(0, 5) : allGrouped;
+  const shown = grouped.length;
   const hidden = Math.max(view.totalRows - shown, 0);
 
   return (
@@ -106,6 +107,7 @@ export const PoolLeaderboard = ({
       <header className={classes.header}>
         <h3 className={classes.label}>{asOf.label}</h3>
         <p className={classes.count}>
+          {shown < view.entryCount && `Showing ${shown} of `}
           {view.entryCount === 1 ? "1 entrant" : `${view.entryCount} entrants`}
         </p>
       </header>
