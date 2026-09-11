@@ -1,6 +1,12 @@
 import { ActionIcon, Modal } from "@mantine/core";
 import { IconChevronLeft, IconChevronRight } from "@tabler/icons-react";
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import photoSources from "../../data/castawayPhotos.json";
 import classes from "./CastawayPhotoModal.module.css";
 
@@ -20,6 +26,7 @@ export const CastawayPhotoModal = ({
   onClose,
   gallery,
   meta,
+  aspectRatio,
 }: {
   name: string;
   img: string;
@@ -27,6 +34,7 @@ export const CastawayPhotoModal = ({
   onClose: () => void;
   gallery?: readonly CastawayPhoto[];
   meta?: ReactNode;
+  aspectRatio: number;
 }) => {
   const [activeId, setActiveId] = useState(
     gallery?.find((photo) => photo.img === img && photo.name === name)?.id,
@@ -71,12 +79,22 @@ export const CastawayPhotoModal = ({
         }
       }}
     >
-      <Photo
-        key={currentImg}
-        img={currentImg}
-        alt={current ? currentName : (imgAlt ?? name)}
-        hasDetails={Boolean(currentMeta || canNavigate || current?.action)}
-      />
+      <div
+        className={[
+          classes.photoFrame,
+          (currentMeta || canNavigate || current?.action) &&
+            classes.withDetails,
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        style={{ "--photo-ratio": aspectRatio } as CSSProperties}
+      >
+        <Photo
+          key={currentImg}
+          img={currentImg}
+          alt={current ? currentName : (imgAlt ?? name)}
+        />
+      </div>
       <div className={classes.details}>
         {currentMeta && <div className={classes.bio}>{currentMeta}</div>}
         {(canNavigate || current?.action) && (
@@ -117,26 +135,30 @@ export const CastawayPhotoModal = ({
   );
 };
 
-const Photo = ({
-  img,
-  alt,
-  hasDetails,
-}: {
-  img: string;
-  alt: string;
-  hasDetails: boolean;
-}) => {
+const Photo = ({ img, alt }: { img: string; alt: string }) => {
   const [source, setSource] = useState(
     (photoSources as Record<string, string>)[img] ?? img,
   );
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
   return (
-    <img
-      className={[classes.photo, hasDetails && classes.withDetails]
-        .filter(Boolean)
-        .join(" ")}
-      src={source}
-      alt={alt}
-      onError={() => setSource(img)}
-    />
+    <>
+      {!loaded && (
+        <div className={classes.placeholder} aria-live="polite">
+          {failed ? "Photo unavailable." : "Loading photo…"}
+        </div>
+      )}
+      <img
+        className={classes.photo}
+        style={{ visibility: loaded ? "visible" : "hidden" }}
+        src={source}
+        alt={alt}
+        onLoad={() => setLoaded(true)}
+        onError={() => {
+          if (source !== img) setSource(img);
+          else setFailed(true);
+        }}
+      />
+    </>
   );
 };

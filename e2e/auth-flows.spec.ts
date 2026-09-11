@@ -1420,6 +1420,67 @@ const fillPoolEntry = async (page: Page) => {
   await answerPropBets(page);
 };
 
+test("pool: photo gallery keeps its size while the next image loads", async ({
+  page,
+}) => {
+  await seedPool(openFreeze());
+  let releaseImage!: () => void;
+  const imageGate = new Promise<void>((resolve) => {
+    releaseImage = resolve;
+  });
+  await page.route(
+    "**/portraits/season_51/Alexis-Levine.webp",
+    async (route) => {
+      await imageGate;
+      await route.continue();
+    },
+  );
+  await page.goto(`/pool/${POOL_SEASON_ID}`);
+  await page
+    .getByRole("button", {
+      name: "View full photo of Aaliyah Puglia",
+      exact: true,
+    })
+    .click();
+  const modal = page.getByRole("dialog");
+  await expect(
+    modal.getByRole("img", { name: "Aaliyah Puglia", exact: true }),
+  ).toBeVisible();
+  await modal
+    .getByRole("button", { name: "Next castaway" })
+    .click({ trial: true });
+  const before = await modal.boundingBox();
+  expect(before).not.toBeNull();
+  try {
+    await modal.getByRole("button", { name: "Next castaway" }).click();
+    await expect(modal).toHaveAccessibleName("Alexis Levine");
+    await expect(
+      modal.getByText("Loading photo…", { exact: true }),
+    ).toBeVisible();
+    const during = await modal.boundingBox();
+    expect(during).not.toBeNull();
+    expect(during!.width).toBeCloseTo(before!.width, 0);
+    expect(during!.height).toBeCloseTo(before!.height, 0);
+    expect(during!.y).toBeCloseTo(before!.y, 0);
+    await page.screenshot({
+      path: test.info().outputPath("photo-loading.png"),
+    });
+  } finally {
+    releaseImage();
+  }
+  await expect(
+    modal.getByRole("img", { name: "Alexis Levine", exact: true }),
+  ).toBeVisible();
+  await expect(modal.getByText("Loading photo…", { exact: true })).toHaveCount(
+    0,
+  );
+  const after = await modal.boundingBox();
+  expect(after).not.toBeNull();
+  expect(after!.width).toBeCloseTo(before!.width, 0);
+  expect(after!.height).toBeCloseTo(before!.height, 0);
+  expect(after!.y).toBeCloseTo(before!.y, 0);
+});
+
 test("pool: photo gallery supports keyboard browsing and local picks", async ({
   page,
 }) => {
