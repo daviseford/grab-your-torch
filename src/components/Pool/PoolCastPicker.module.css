@@ -4,21 +4,16 @@
   gap: var(--mantine-spacing-sm);
 }
 
-/* Four across, then three, then the compact two-column treatment at phone
-   width, where square portraits keep the first row's control on the first
-   screen. Carried over from the draft cast grid, which is the only thing
-   this picker borrows from it. */
+/* Use the draft's castaway slates at a bounded size, even on wide screens.
+   Equal rows keep names, bios, and controls aligned across the whole cast. */
 .grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  grid-auto-rows: 1fr;
   gap: 12px;
   margin: 0;
   padding: 0;
   list-style: none;
-
-  @media (max-width: $mantine-breakpoint-md) {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
 
   @media (max-width: $mantine-breakpoint-xs) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
