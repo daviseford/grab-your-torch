@@ -168,7 +168,7 @@ service cloud.firestore {
     // readers, which no collection in this project does. The public leaderboard
     // carries handles, not uids.
     //
-    // Nothing under /pools is client-writable except an entrant's own entry.
+    // An entry create/withdraw and its counter change must commit together.
     // The config in particular is admin-SDK-only: `.env` holds real admin
     // credentials, so a browser session carrying the admin claim must not be
     // able to move the deadline or throw the kill switch (KTD3).
@@ -184,10 +184,29 @@ service cloud.firestore {
       allow read: if true;
       allow write: if false;
 
-      // Job-written counters (entrant count). Public, never client-written.
+      function counterChangesBy(delta) {
+        let path = /databases/$(database)/documents/pools/$(poolId)/meta/counters;
+        return getAfter(path).data.entry_count == get(path).data.entry_count + delta;
+      }
+
+      // A client may change only the count, by exactly one, alongside its
+      // own entry's creation or withdrawal. Entry rules enforce the other half.
       match /meta/{docId} {
         allow read: if true;
-        allow write: if false;
+        allow update: if docId == "counters"
+          && request.auth != null
+          && request.resource.data.keys().hasOnly(["entry_count", "updated_at"])
+          && request.resource.data.entry_count is int
+          && request.resource.data.entry_count >= 0
+          && request.resource.data.updated_at == request.time
+          && (
+            (!exists(/databases/$(database)/documents/pools/$(poolId)/entries/$(request.auth.uid))
+              && existsAfter(/databases/$(database)/documents/pools/$(poolId)/entries/$(request.auth.uid))
+              && request.resource.data.entry_count == resource.data.entry_count + 1)
+            || (exists(/databases/$(database)/documents/pools/$(poolId)/entries/$(request.auth.uid))
+              && !existsAfter(/databases/$(database)/documents/pools/$(poolId)/entries/$(request.auth.uid))
+              && request.resource.data.entry_count == resource.data.entry_count - 1)
+          );
       }
 
       // Published leaderboard, one document per episode.
@@ -275,7 +294,8 @@ service cloud.firestore {
           && poolIsOpen(poolData())
           && beforeFreeze(poolData())
           && entryIsValid(poolData())
-          && request.resource.data.created_at == request.time;
+          && request.resource.data.created_at == request.time
+          && counterChangesBy(1);
 
         // Full edit, only while the pool is open and unfrozen.
         allow update: if isOwner()
@@ -300,7 +320,8 @@ service cloud.firestore {
         allow delete: if isOwner()
           && poolExists()
           && poolIsOpen(poolData())
-          && beforeFreeze(poolData());
+          && beforeFreeze(poolData())
+          && counterChangesBy(-1);
       }
     }
   }

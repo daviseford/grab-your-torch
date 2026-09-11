@@ -533,21 +533,12 @@ describe("refusals", () => {
  * ------------------------------------------------------------------ */
 
 describe("clean exits", () => {
-  it("publishes only the entrant count for a pool with no entries", () => {
+  it("writes nothing for a pool with no entries", () => {
     const plan = planRecompute(input({ entries: [] }));
     expect(plan.status).toBe("empty");
     expect(plan.episodes).toEqual([]);
 
-    // The counters document is the exception to "an unpublishable plan
-    // writes nothing": the entrant count is the one number the pre-premiere
-    // homepage shows, and every run during the entry window is unpublishable.
-    const writes = buildStandingsWrites(POOL_ID, plan);
-    expect(writes.map((w) => w.path)).toEqual([
-      `pools/${POOL_ID}/meta/counters`,
-    ]);
-    expect(writes[0].data).toMatchObject({ entry_count: 0 });
-    expect(writes.some((w) => w.kind === "config")).toBe(false);
-    expect(writes.some((w) => w.kind === "standings")).toBe(false);
+    expect(buildStandingsWrites(POOL_ID, plan)).toEqual([]);
   });
 
   it("exits cleanly when the season has no episodes yet", () => {
@@ -558,14 +549,7 @@ describe("clean exits", () => {
     );
     expect(plan.status).toBe("no_data");
 
-    // Season 51 ships in exactly this state for the whole entry window, so
-    // the entrant count has to survive it while nothing else is published.
-    const writes = buildStandingsWrites(POOL_ID, plan);
-    expect(writes.map((w) => w.path)).toEqual([
-      `pools/${POOL_ID}/meta/counters`,
-    ]);
-    expect(writes[0].data).toMatchObject({ entry_count: 2 });
-    expect(writes.some((w) => w.kind === "config")).toBe(false);
+    expect(buildStandingsWrites(POOL_ID, plan)).toEqual([]);
   });
 
   it("exits cleanly when episodes exist but no result has landed", () => {
@@ -592,12 +576,8 @@ describe("write order", () => {
     const plan = planRecompute(input());
     const writes = buildStandingsWrites(POOL_ID, plan);
 
-    // Counters lead because they are written for every plan, publishable or
-    // not. The invariant that matters is unchanged: episodes ascend and the
-    // config pointer is last, so a reader never lands on a fresh pointer
-    // aimed at documents that are still stale or absent.
+    // Publish episodes before the pointer so readers never land on absent data.
     expect(writes.map((w) => w.path)).toEqual([
-      `pools/${POOL_ID}/meta/counters`,
       `pools/${POOL_ID}/standings/episode_1`,
       `pools/${POOL_ID}/standings/episode_2`,
       `pools/${POOL_ID}/standings/episode_3`,
@@ -664,10 +644,7 @@ describe("write order", () => {
     await expect(applyStandingsWrites(writer, writes)).rejects.toThrow(
       "network",
     );
-    expect(applied).toEqual([
-      `pools/${POOL_ID}/meta/counters`,
-      `pools/${POOL_ID}/standings/episode_1`,
-    ]);
+    expect(applied).toEqual([`pools/${POOL_ID}/standings/episode_1`]);
     expect(applied).not.toContain(`pools/${POOL_ID}`);
   });
 
@@ -685,12 +662,11 @@ describe("write order", () => {
     });
   });
 
-  it("writes entry_count to the counters document and not to the config", () => {
+  it("never overwrites the live entrant count from an earlier entry snapshot", () => {
     const writes = buildStandingsWrites(POOL_ID, planRecompute(input()));
-    const counters = writes.find((w) => w.kind === "counters")!;
+    expect(writes.some((w) => w.path.endsWith("/meta/counters"))).toBe(false);
     const config = writes.find((w) => w.kind === "config")!;
 
-    expect(counters.data).toMatchObject({ entry_count: 2 });
     expect(Object.keys(config.data as object)).toEqual([
       "latest_episode_num",
       "season_complete",
