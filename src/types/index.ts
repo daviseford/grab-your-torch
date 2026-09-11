@@ -540,15 +540,15 @@ export type Pool = {
 };
 
 /**
- * `pools/{poolId}/meta/counters` -- everything the recompute job counts.
+ * `pools/{poolId}/meta/counters` -- the live entrant count.
  *
  * Separate from the config on purpose: the config is a rules input for every
  * entry write.
  */
 export type PoolCounters = {
   entry_count: number;
-  /** ISO timestamp of the last job run that wrote these counters. */
-  updated_at: string;
+  /** Server timestamp of the count change; provisioning uses an ISO string. */
+  updated_at: FirestoreTimestamp | string;
 };
 
 /**

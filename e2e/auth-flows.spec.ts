@@ -1659,10 +1659,20 @@ test("pool: independent players share picks and a newer device save clears an ol
         password: PASSWORD,
       });
       await expect(playerPage.getByText("Your entry is in.")).toBeVisible();
+      await expect(
+        playerPage.getByText(
+          user.uid === alice.uid ? "1 entrant" : "2 entrants",
+          { exact: true },
+        ),
+      ).toBeVisible();
       await expect
         .poll(async () => (await readPoolEntry(user.uid))?.handle)
         .toBe(handle);
     }
+    await expect(page.getByText("2 entrants", { exact: true })).toBeVisible();
+    await expect(
+      bobPage.getByText("2 entrants", { exact: true }),
+    ).toBeVisible();
     expect((await readPoolEntry(alice.uid))?.picks).toEqual(
       (await readPoolEntry(bob.uid))?.picks,
     );
@@ -1714,8 +1724,11 @@ test("pool: independent players share picks and a newer device save clears an ol
     await expect
       .poll(async () => (await readPoolEntry(alice.uid)) === undefined)
       .toBe(true);
+    await expect(bobPage.getByText("1 entrant", { exact: true })).toBeVisible();
     await bobPage.reload({ waitUntil: "domcontentloaded" });
     await expect(bobPage.getByText("Your entry is in.")).toBeVisible();
+    await expect(page.getByText("1 entrant", { exact: true })).toBeVisible();
+    await expect(bobPage.getByText("1 entrant", { exact: true })).toBeVisible();
     expect((await readPoolEntry(bob.uid))?.handle).toBe("Bob");
   } finally {
     await bobPage.goto("about:blank", { waitUntil: "domcontentloaded" });

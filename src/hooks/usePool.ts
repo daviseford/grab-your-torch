@@ -35,9 +35,9 @@ export const usePool = (seasonId?: string) => {
 /**
  * `pools/{poolId}/meta/counters` -- the entrant count.
  *
- * Written only by the recompute job and by the provisioning script, and
- * readable signed-out. Kept separate from the config on purpose: a bad job
- * payload must not be able to take the freeze instant with it (KTD3).
+ * Updated atomically when an entry is created or withdrawn, and readable
+ * signed-out. Rules tie each increment/decrement to that owner's entry.
+ * Kept separate from the configuration and its freeze instant (KTD3).
  */
 export const usePoolCounters = (poolId?: string) => {
   const { data, loaded } = useSharedSnapshot(

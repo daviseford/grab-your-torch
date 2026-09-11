@@ -25,13 +25,16 @@ import {
   collection,
   deleteDoc,
   doc,
+  DocumentReference,
   Firestore,
   getDoc,
   getDocs,
+  increment,
   serverTimestamp,
   setDoc,
   Timestamp,
   updateDoc,
+  writeBatch,
 } from "firebase/firestore";
 import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -87,6 +90,30 @@ const adminDb = (): Firestore =>
 
 const entryPath = (poolId: string, uid: string) =>
   `pools/${poolId}/entries/${uid}`;
+
+const createCounted = (
+  ref: DocumentReference,
+  payload: Record<string, unknown>,
+  delta = 1,
+) => {
+  const batch = writeBatch(ref.firestore);
+  batch.set(ref, payload);
+  batch.update(doc(ref.parent.parent!, "meta", "counters"), {
+    entry_count: increment(delta),
+    updated_at: serverTimestamp(),
+  });
+  return batch.commit();
+};
+
+const deleteCounted = (ref: DocumentReference) => {
+  const batch = writeBatch(ref.firestore);
+  batch.delete(ref);
+  batch.update(doc(ref.parent.parent!, "meta", "counters"), {
+    entry_count: increment(-1),
+    updated_at: serverTimestamp(),
+  });
+  return batch.commit();
+};
 
 /**
  * A create payload the rules must accept. `created_at`/`updated_at` are
@@ -191,10 +218,12 @@ beforeEach(async () => {
     );
     // GHOST_POOL_ID is deliberately never written.
 
-    await setDoc(doc(seedDb, "pools", POOL_ID, "meta", "counters"), {
-      entry_count: 3,
-      updated_at: "2026-09-10T00:00:00.000Z",
-    });
+    for (const poolId of [POOL_ID, FROZEN_POOL_ID, CLOSED_POOL_ID]) {
+      await setDoc(doc(seedDb, "pools", poolId, "meta", "counters"), {
+        entry_count: 3,
+        updated_at: "2026-09-10T00:00:00.000Z",
+      });
+    }
 
     const stamp = {
       episode_num: 1,
@@ -364,7 +393,7 @@ describe("entries: create", () => {
     overrides: Record<string, unknown> = {},
     poolId: string = POOL_ID,
   ) =>
-    setDoc(
+    createCounted(
       doc(db(uid), entryPath(poolId, atUid)),
       validEntry(atUid, { pool_id: poolId, ...overrides }),
     );
@@ -381,7 +410,7 @@ describe("entries: create", () => {
 
   it("denies a signed-out create", async () => {
     await assertFails(
-      setDoc(doc(db(), entryPath(POOL_ID, ALICE)), validEntry(ALICE)),
+      createCounted(doc(db(), entryPath(POOL_ID, ALICE)), validEntry(ALICE)),
     );
   });
 
@@ -402,7 +431,7 @@ describe("entries: create", () => {
 describe("entries: create timestamps", () => {
   it("denies a client-authored created_at", async () => {
     await assertFails(
-      setDoc(
+      createCounted(
         doc(db(ALICE), entryPath(POOL_ID, ALICE)),
         validEntry(ALICE, {
           created_at: Timestamp.fromMillis(Date.now() - 5 * HOUR),
@@ -413,7 +442,7 @@ describe("entries: create timestamps", () => {
 
   it("denies a client-authored updated_at", async () => {
     await assertFails(
-      setDoc(
+      createCounted(
         doc(db(ALICE), entryPath(POOL_ID, ALICE)),
         validEntry(ALICE, {
           updated_at: Timestamp.fromMillis(Date.now() + 5 * HOUR),
@@ -424,7 +453,7 @@ describe("entries: create timestamps", () => {
 
   it("denies an ISO string in place of a timestamp", async () => {
     await assertFails(
-      setDoc(
+      createCounted(
         doc(db(ALICE), entryPath(POOL_ID, ALICE)),
         validEntry(ALICE, { created_at: "2026-09-10T00:00:00.000Z" }),
       ),
@@ -434,7 +463,7 @@ describe("entries: create timestamps", () => {
 
 describe("entries: create shape allowlist", () => {
   const createWith = (overrides: Record<string, unknown>) =>
-    setDoc(
+    createCounted(
       doc(db(ALICE), entryPath(POOL_ID, ALICE)),
       validEntry(ALICE, overrides),
     );
@@ -460,7 +489,7 @@ describe("entries: create shape allowlist", () => {
     const { prop_bets, ...withoutPropBets } = validEntry(ALICE);
     expect(prop_bets).toBeTruthy();
     await assertFails(
-      setDoc(doc(db(ALICE), entryPath(POOL_ID, ALICE)), withoutPropBets),
+      createCounted(doc(db(ALICE), entryPath(POOL_ID, ALICE)), withoutPropBets),
     );
   });
 
@@ -511,7 +540,7 @@ describe("entries: handle validation (R5)", () => {
     "A".repeat(100),
     "A".repeat(101),
   ])("matches client validation for handle %#", async (handle) => {
-    const write = setDoc(
+    const write = createCounted(
       doc(db(ALICE), entryPath(POOL_ID, ALICE)),
       validEntry(ALICE, { handle }),
     );
@@ -522,7 +551,10 @@ describe("entries: handle validation (R5)", () => {
   // same path is an overwrite, and an overwrite carrying a fresh
   // `serverTimestamp()` in `created_at` is correctly denied by the update rule.
   const withHandle = (handle: unknown, uid: string = ALICE) =>
-    setDoc(doc(db(uid), entryPath(POOL_ID, uid)), validEntry(uid, { handle }));
+    createCounted(
+      doc(db(uid), entryPath(POOL_ID, uid)),
+      validEntry(uid, { handle }),
+    );
 
   it("accepts letters, digits, spaces, hyphens and underscores", async () => {
     await assertSucceeds(withHandle("Ada_the-Snuffer 51"));
@@ -586,7 +618,7 @@ describe("entries: handle validation (R5)", () => {
 
 describe("entries: picks validation (R23)", () => {
   const withPicks = (picks: unknown) =>
-    setDoc(
+    createCounted(
       doc(db(ALICE), entryPath(POOL_ID, ALICE)),
       validEntry(ALICE, { picks }),
     );
@@ -637,7 +669,7 @@ describe("entries: picks validation (R23)", () => {
 
 describe("entries: prop bet validation (KTD3)", () => {
   const withPropBets = (propBets: unknown, uid: string = ALICE) =>
-    setDoc(
+    createCounted(
       doc(db(uid), entryPath(POOL_ID, uid)),
       validEntry(uid, { prop_bets: propBets }),
     );
@@ -884,30 +916,154 @@ describe("entries: delete", () => {
   });
 
   it("lets an entrant withdraw before the freeze", async () => {
-    await assertSucceeds(deleteDoc(doc(db(ALICE), entryPath(POOL_ID, ALICE))));
+    await assertSucceeds(
+      deleteCounted(doc(db(ALICE), entryPath(POOL_ID, ALICE))),
+    );
   });
 
   it("denies a non-owner delete", async () => {
-    await assertFails(deleteDoc(doc(db(BOB), entryPath(POOL_ID, ALICE))));
+    await assertFails(deleteCounted(doc(db(BOB), entryPath(POOL_ID, ALICE))));
   });
 
   it("denies a signed-out delete", async () => {
-    await assertFails(deleteDoc(doc(db(), entryPath(POOL_ID, ALICE))));
+    await assertFails(deleteCounted(doc(db(), entryPath(POOL_ID, ALICE))));
   });
 
   it("denies a delete after the freeze", async () => {
     await assertFails(
-      deleteDoc(doc(db(ALICE), entryPath(FROZEN_POOL_ID, ALICE))),
+      deleteCounted(doc(db(ALICE), entryPath(FROZEN_POOL_ID, ALICE))),
     );
   });
 
   it("denies a delete when the pool is closed", async () => {
     await assertFails(
-      deleteDoc(doc(db(ALICE), entryPath(CLOSED_POOL_ID, ALICE))),
+      deleteCounted(doc(db(ALICE), entryPath(CLOSED_POOL_ID, ALICE))),
     );
   });
 
   it("denies an admin-claimed client deleting someone's entry", async () => {
-    await assertFails(deleteDoc(doc(adminDb(), entryPath(POOL_ID, ALICE))));
+    await assertFails(deleteCounted(doc(adminDb(), entryPath(POOL_ID, ALICE))));
+  });
+});
+
+describe("live entrant count", () => {
+  const counter = (firestore = db()) =>
+    doc(firestore, "pools", POOL_ID, "meta", "counters");
+  const count = async () => (await getDoc(counter())).data()!.entry_count;
+
+  it("counts concurrent entrants and one withdrawal, without double-counting edits", async () => {
+    const alice = doc(db(ALICE), entryPath(POOL_ID, ALICE));
+    const bob = doc(db(BOB), entryPath(POOL_ID, BOB));
+    await Promise.all([
+      assertSucceeds(createCounted(alice, validEntry(ALICE))),
+      assertSucceeds(createCounted(bob, validEntry(BOB))),
+    ]);
+    expect(await count()).toBe(5);
+    await assertSucceeds(
+      updateDoc(alice, { handle: "New Name", updated_at: serverTimestamp() }),
+    );
+    expect(await count()).toBe(5);
+    await assertSucceeds(deleteCounted(alice));
+    expect(await count()).toBe(4);
+    await assertFails(deleteCounted(alice));
+    expect(await count()).toBe(4);
+    await assertSucceeds(createCounted(alice, validEntry(ALICE)));
+    expect(await count()).toBe(5);
+  });
+
+  it("requires the counter update when creating or withdrawing an entry", async () => {
+    const ref = doc(db(ALICE), entryPath(POOL_ID, ALICE));
+    await assertFails(setDoc(ref, validEntry(ALICE)));
+    await seedEntry(POOL_ID, ALICE);
+    await assertFails(deleteDoc(ref));
+    expect(await count()).toBe(3);
+    expect((await getDoc(ref)).exists()).toBe(true);
+  });
+
+  it.each([0, 2, -1])(
+    "rejects a creation with counter delta %s and rolls back both writes",
+    async (delta) => {
+      const ref = doc(db(ALICE), entryPath(POOL_ID, ALICE));
+      await assertFails(createCounted(ref, validEntry(ALICE), delta));
+      expect(await count()).toBe(3);
+      expect((await getDoc(ref)).exists()).toBe(false);
+    },
+  );
+
+  it("rejects an invalid entry without incrementing the count", async () => {
+    const ref = doc(db(ALICE), entryPath(POOL_ID, ALICE));
+    await assertFails(createCounted(ref, validEntry(ALICE, { picks: [] })));
+    expect(await count()).toBe(3);
+    expect((await getDoc(ref)).exists()).toBe(false);
+  });
+
+  it("rejects incrementing the count when editing an existing entry", async () => {
+    await seedEntry(POOL_ID, ALICE);
+    const ref = doc(db(ALICE), entryPath(POOL_ID, ALICE));
+    const batch = writeBatch(ref.firestore);
+    batch.update(ref, {
+      handle: "Another Name",
+      updated_at: serverTimestamp(),
+    });
+    batch.update(counter(ref.firestore), {
+      entry_count: increment(1),
+      updated_at: serverTimestamp(),
+    });
+    await assertFails(batch.commit());
+    expect(await count()).toBe(3);
+  });
+
+  it("rejects standalone count changes, replacement and deletion even by an admin client", async () => {
+    for (const firestore of [db(), db(ALICE), adminDb()]) {
+      await assertFails(
+        updateDoc(counter(firestore), {
+          entry_count: increment(1),
+          updated_at: serverTimestamp(),
+        }),
+      );
+      await assertFails(
+        updateDoc(counter(firestore), {
+          entry_count: increment(-1),
+          updated_at: serverTimestamp(),
+        }),
+      );
+      await assertFails(
+        setDoc(counter(firestore), {
+          entry_count: 99,
+          updated_at: serverTimestamp(),
+        }),
+      );
+      await assertFails(deleteDoc(counter(firestore)));
+    }
+    expect(await count()).toBe(3);
+  });
+
+  it("rejects client-authored counter timestamps and extra fields", async () => {
+    for (const overrides of [
+      { updated_at: Timestamp.fromMillis(0) },
+      { extra: "payload" },
+    ]) {
+      const firestore = db(ALICE);
+      const batch = writeBatch(firestore);
+      batch.set(doc(firestore, entryPath(POOL_ID, ALICE)), validEntry(ALICE));
+      batch.update(counter(firestore), {
+        entry_count: increment(1),
+        updated_at: serverTimestamp(),
+        ...overrides,
+      });
+      await assertFails(batch.commit());
+    }
+    expect(await count()).toBe(3);
+  });
+
+  it("does not allow a withdrawal to make the count negative", async () => {
+    await seedEntry(POOL_ID, ALICE);
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(counter(ctx.firestore() as unknown as Firestore), {
+        entry_count: 0,
+      });
+    });
+    await assertFails(deleteCounted(doc(db(ALICE), entryPath(POOL_ID, ALICE))));
+    expect(await count()).toBe(0);
   });
 });

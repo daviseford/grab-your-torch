@@ -8,7 +8,6 @@ import type {
   FirestoreTimestamp,
   GameEvent,
   Pool,
-  PoolCounters,
   PoolPick,
   PoolStandings,
   PoolStandingsPage,
@@ -542,11 +541,7 @@ export const planRecompute = (input: RecomputeInput): RecomputePlan => {
  * Writes
  * ------------------------------------------------------------------ */
 
-export type StandingsWriteKind =
-  | "standings"
-  | "standings_page"
-  | "counters"
-  | "config";
+export type StandingsWriteKind = "standings" | "standings_page" | "config";
 
 export type StandingsWrite = {
   path: string;
@@ -564,7 +559,7 @@ export type StandingsWriter = {
  * Every write a run performs, in the order it performs them.
  *
  * Overflow pages precede the summary that counts them, episodes ascend
- * numerically, counters follow, and the config pointer flips last. A reader
+ * numerically, and the config pointer flips last. A reader
  * that lands mid-run therefore sees the previous episode's complete
  * standings, never a fresh pointer aimed at documents that are still stale or
  * absent.
@@ -576,25 +571,8 @@ export const buildStandingsWrites = (
   const writes: StandingsWrite[] = [];
   const base = `pools/${poolId}`;
 
-  // Counters live beside the config, never on it (KTD3): the config is a
-  // rules input for every entry write, and a bad job payload must not be able
-  // to take the freeze with it.
-  //
-  // They are written for every plan, including "empty" and "no_data". The
-  // entry window is weeks of runs with no episode data at all, and the
-  // entrant count is the one number the homepage shows during it, so gating
-  // this on a publishable plan would pin it at zero for exactly the window
-  // the pool exists for.
-  const counters: PoolCounters = {
-    entry_count: plan.entry_count,
-    updated_at: plan.computed_at,
-  };
-  writes.push({
-    path: `${base}/meta/counters`,
-    op: "set",
-    kind: "counters",
-    data: counters,
-  });
+  // Entry creates/withdrawals maintain the live counter atomically. A job's
+  // earlier entry snapshot must never overwrite that newer count.
 
   if (plan.status !== "ok") return writes;
 

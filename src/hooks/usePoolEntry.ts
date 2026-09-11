@@ -1,10 +1,10 @@
 import {
-  deleteDoc,
   doc,
+  increment,
   onSnapshot,
   serverTimestamp,
-  setDoc,
   updateDoc,
+  writeBatch,
   type DocumentReference,
   type FirestoreError,
 } from "firebase/firestore";
@@ -222,7 +222,13 @@ export const usePoolEntry = (poolId?: PoolId) => {
             propBets: input.propBets,
             timestamp: serverTimestamp,
           });
-          await setDoc(ref, payload);
+          const batch = writeBatch(db);
+          batch.set(ref, payload);
+          batch.update(doc(ref.parent.parent!, "meta", "counters"), {
+            entry_count: increment(1),
+            updated_at: serverTimestamp(),
+          });
+          await batch.commit();
         },
         { status: "created" },
       ),
@@ -285,7 +291,13 @@ export const usePoolEntry = (poolId?: PoolId) => {
       runWrite(
         "withdraw",
         async (ref) => {
-          await deleteDoc(ref);
+          const batch = writeBatch(db);
+          batch.delete(ref);
+          batch.update(doc(ref.parent.parent!, "meta", "counters"), {
+            entry_count: increment(-1),
+            updated_at: serverTimestamp(),
+          });
+          await batch.commit();
         },
         { status: "saved" },
       ),
