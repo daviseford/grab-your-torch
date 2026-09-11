@@ -68,6 +68,38 @@ export const PoolCastPicker = ({
 }: PoolCastPickerProps) => {
   const swapTarget = nextPoolSwapTarget(picks, limit);
   const remaining = limit - picks.length;
+  const pickButton = (castaway: PoolPick, inModal = false) => {
+    const picked = isPoolPickSelected(picks, castaway.castaway_id);
+    return (
+      <Button
+        fullWidth
+        size={inModal ? "sm" : "xs"}
+        variant={picked ? "filled" : "default"}
+        aria-pressed={picked}
+        aria-label={
+          picked ? `Remove ${castaway.full_name}` : `Pick ${castaway.full_name}`
+        }
+        onClick={() => onToggle(castaway)}
+      >
+        {picked ? (inModal ? "Remove pick" : "Remove") : "Pick"}
+      </Button>
+    );
+  };
+  const photoGallery = cast.flatMap((castaway) => {
+    const detail = details.get(castaway.castaway_id);
+    if (!detail?.img) return [];
+    const picked = isPoolPickSelected(picks, castaway.castaway_id);
+    return [
+      {
+        id: castaway.castaway_id,
+        name: castaway.full_name,
+        img: detail.img,
+        meta: castMeta(detail),
+        action: pickButton(castaway, true),
+        status: `${picks.length} of ${limit} picks chosen.${!picked && swapTarget ? ` Picking ${castaway.full_name} replaces ${swapTarget.full_name}.` : ""}`,
+      },
+    ];
+  });
 
   const note =
     announcement ??
@@ -101,24 +133,8 @@ export const PoolCastPicker = ({
                 meta={castMeta(detail)}
                 picked={picked}
                 compact
-                actions={
-                  // Every card stays enabled at the limit: nothing in a pool
-                  // is ever unavailable (R3), and the swap is named above.
-                  <Button
-                    fullWidth
-                    size="xs"
-                    variant={picked ? "filled" : "default"}
-                    aria-pressed={picked}
-                    aria-label={
-                      picked
-                        ? `Remove ${castaway.full_name}`
-                        : `Pick ${castaway.full_name}`
-                    }
-                    onClick={() => onToggle(castaway)}
-                  >
-                    {picked ? "Remove" : "Pick"}
-                  </Button>
-                }
+                photoGallery={photoGallery}
+                actions={pickButton(castaway)}
               />
             </li>
           );

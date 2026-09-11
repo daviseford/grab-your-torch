@@ -51,6 +51,43 @@ export const DraftCastGrid = ({
   // Two columns at 375 px: square portraits keep the first row's Draft slate
   // inside the first screen under the board spine.
   const compact = useMediaQuery("(max-width: 36em)") ?? false;
+  const draftAction = (player: Player, inModal = false) => {
+    const pick = pickByCastaway.get(player.castaway_id);
+    return pick ? (
+      <div className={classes.draftedBy}>
+        <span className={classes.label}>Drafted by</span>
+        <span className={classes.draftedByName}>{pick.user_name}</span>
+      </div>
+    ) : (
+      <Button
+        fullWidth
+        size={inModal ? "sm" : "xs"}
+        variant={canDraft ? "filled" : "default"}
+        onClick={() => onDraft(player)}
+        disabled={!canDraft}
+        aria-label={`Draft ${player.full_name}`}
+      >
+        Draft
+      </Button>
+    );
+  };
+  const photoGallery = players.flatMap((player) =>
+    player.img
+      ? [
+          {
+            id: player.castaway_id,
+            name: player.full_name,
+            img: player.img,
+            meta: castMeta(player),
+            action: draftAction(player, true),
+            status:
+              !pickByCastaway.has(player.castaway_id) && !canDraft
+                ? "You can draft when it is your turn."
+                : undefined,
+          },
+        ]
+      : [],
+  );
   return (
     <ul className={classes.castGrid} aria-label={`${seasonName} cast`}>
       {players.map((player) => {
@@ -75,6 +112,7 @@ export const DraftCastGrid = ({
               meta={castMeta(player)}
               picked={isMine}
               compact={compact}
+              photoGallery={photoGallery}
               className={[pick && classes.taken, isFresh && classes.fresh]
                 .filter(Boolean)
                 .join(" ")}
@@ -93,25 +131,7 @@ export const DraftCastGrid = ({
               }
               actions={
                 <div className={classes.castActions}>
-                  {pick ? (
-                    <div className={classes.draftedBy}>
-                      <span className={classes.label}>Drafted by</span>
-                      <span className={classes.draftedByName}>
-                        {pick.user_name}
-                      </span>
-                    </div>
-                  ) : (
-                    <Button
-                      fullWidth
-                      size="xs"
-                      variant={canDraft ? "filled" : "default"}
-                      onClick={() => onDraft(player)}
-                      disabled={!canDraft}
-                      aria-label={`Draft ${player.full_name}`}
-                    >
-                      Draft
-                    </Button>
-                  )}
+                  {draftAction(player)}
                   {details}
                 </div>
               }

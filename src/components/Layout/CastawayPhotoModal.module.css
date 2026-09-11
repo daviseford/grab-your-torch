@@ -5,3 +5,43 @@
   max-width: calc(100vw - 48px);
   max-height: calc(100dvh - 100px);
 }
+
+.withDetails {
+  max-height: max(280px, calc(100dvh - 260px));
+}
+
+.details {
+  width: 0;
+  min-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.bio {
+  margin-top: 12px;
+  font-size: var(--mantine-font-size-sm);
+  line-height: 1.4;
+}
+
+.controls {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.action {
+  text-align: center;
+  font-size: var(--mantine-font-size-sm);
+}
+
+.action button {
+  min-height: 44px;
+}
+
+.status {
+  margin: 8px 0 0;
+  font-size: var(--mantine-font-size-xs);
+  line-height: 1.4;
+  color: var(--mantine-color-dimmed);
+}
