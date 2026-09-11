@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   CastawayId,
   Challenge,
@@ -13,6 +13,15 @@ import {
   getLatestDataEpisode,
   getNextAiringEpisode,
 } from "../episodeAirDate";
+
+// Keep scheduling cases stable when the real season is marked complete.
+vi.mock("../../data/season-metadata", () => ({
+  SEASON_METADATA: {
+    season_50: { complete: true },
+    season_51: { complete: false, premiere: "2026-09-23" },
+    season_52: { complete: false },
+  },
+}));
 
 const ALICE = "US0001" as CastawayId;
 
@@ -72,8 +81,8 @@ const makeEvent = (id: string, episodeNum: number): GameEvent => ({
 });
 
 // Fixed instants so tests are deterministic in every local timezone.
-const BEFORE_BROADCAST = new Date("2026-03-12T19:59:00-07:00");
-const AFTER_BROADCAST = new Date("2026-03-12T20:00:00-07:00");
+const BEFORE_BROADCAST = new Date("2026-03-12T19:59:00-04:00");
+const AFTER_BROADCAST = new Date("2026-03-12T20:00:00-04:00");
 
 describe("getLatestDataEpisode", () => {
   it("returns 0 when there is no scoring data", () => {
@@ -115,7 +124,7 @@ describe("getAwaitingDataEpisode", () => {
     expect(getAwaitingDataEpisode(season, 2, BEFORE_BROADCAST)).toBeNull();
   });
 
-  it("does not treat an episode as aired before its 8 PM PT broadcast", () => {
+  it("does not treat an episode as aired before its 8 PM ET broadcast", () => {
     const season = makeSeason([
       makeEpisode(1, "2026-02-25"),
       makeEpisode(2, "2026-03-12"),
@@ -123,7 +132,7 @@ describe("getAwaitingDataEpisode", () => {
     expect(getAwaitingDataEpisode(season, 1, BEFORE_BROADCAST)).toBeNull();
   });
 
-  it("treats an episode as aired at its 8 PM PT broadcast", () => {
+  it("treats an episode as aired at its 8 PM ET broadcast", () => {
     const season = makeSeason([
       makeEpisode(1, "2026-02-25"),
       makeEpisode(2, "2026-03-12"),
@@ -148,6 +157,126 @@ describe("getAwaitingDataEpisode", () => {
   it("returns the premiere once it has aired but data is missing", () => {
     const season = makeSeason([makeEpisode(1, "2026-03-11")]);
     expect(getAwaitingDataEpisode(season, 0, BEFORE_BROADCAST)?.order).toBe(1);
+  });
+
+  it("uses the announced premiere before any episode records exist", () => {
+    const season = { ...makeSeason([]), id: "season_51" as const };
+    expect(
+      getAwaitingDataEpisode(season, 0, new Date("2026-09-23T19:59:59-04:00")),
+    ).toBeNull();
+    expect(
+      getAwaitingDataEpisode(season, 0, new Date("2026-09-23T20:00:00-04:00"))
+        ?.order,
+    ).toBe(1);
+    expect(
+      getAwaitingDataEpisode(season, 1, new Date("2026-09-24T10:00:00-04:00")),
+    ).toBeNull();
+  });
+
+  it("keeps the notice after 12 hours until stats arrive", () => {
+    const season = makeSeason([makeEpisode(1, "2026-03-11")]);
+    expect(getAwaitingDataEpisode(season, 0, BEFORE_BROADCAST)?.order).toBe(1);
+    expect(getAwaitingDataEpisode(season, 1, BEFORE_BROADCAST)).toBeNull();
+  });
+
+  it("covers the next weekly broadcast when its episode record has not arrived", () => {
+    const season = {
+      ...makeSeason([makeEpisode(1, "2026-09-23")]),
+      id: "season_52" as const,
+    };
+    expect(
+      getAwaitingDataEpisode(season, 1, new Date("2026-09-30T19:59:59-04:00")),
+    ).toBeNull();
+    expect(
+      getAwaitingDataEpisode(season, 1, new Date("2026-09-30T20:00:00-04:00")),
+    ).toMatchObject({ order: 2, air_date: "2026-09-30" });
+    const updated = {
+      ...season,
+      episodes: [...season.episodes, makeEpisode(2, "2026-09-30")],
+    };
+    expect(
+      getAwaitingDataEpisode(updated, 2, new Date("2026-10-01T12:00:00-04:00")),
+    ).toBeNull();
+  });
+
+  it.each([
+    [1, "2026-09-23", "-04:00"],
+    [2, "2026-09-30", "-04:00"],
+    [3, "2026-10-07", "-04:00"],
+    [4, "2026-10-14", "-04:00"],
+    [5, "2026-10-21", "-04:00"],
+    [6, "2026-10-28", "-04:00"],
+    [7, "2026-11-04", "-05:00"],
+    [8, "2026-11-11", "-05:00"],
+    [9, "2026-11-18", "-05:00"],
+  ])(
+    "uses the advance listing for episode %s without scoring episode records",
+    (order, airDate, offset) => {
+      const season = { ...makeSeason([]), id: "season_51" as const };
+      const start = new Date(`${airDate}T20:00:00${offset}`);
+      expect(
+        getAwaitingDataEpisode(
+          season,
+          Number(order) - 1,
+          new Date(start.getTime() - 1),
+        ),
+      ).toBeNull();
+      expect(getAwaitingDataEpisode(season, Number(order) - 1, start)).toEqual({
+        order,
+        air_date: airDate,
+      });
+      expect(getAwaitingDataEpisode(season, Number(order), start)).toBeNull();
+    },
+  );
+
+  it("keeps the earliest unscored listing when several broadcasts have passed", () => {
+    const season = { ...makeSeason([]), id: "season_51" as const };
+    expect(
+      getAwaitingDataEpisode(season, 2, new Date("2026-11-18T20:00:00-05:00")),
+    ).toEqual({ order: 3, air_date: "2026-10-07" });
+  });
+
+  it("does not let a later source episode hide an earlier unscored listing", () => {
+    const season = {
+      ...makeSeason([makeEpisode(4, "2026-10-14")]),
+      id: "season_51" as const,
+    };
+    expect(
+      getAwaitingDataEpisode(season, 1, new Date("2026-09-30T20:00:00-04:00")),
+    ).toEqual({ order: 2, air_date: "2026-09-30" });
+  });
+
+  it("prefers an explicit schedule over a weekly estimate", () => {
+    const season = {
+      ...makeSeason([
+        makeEpisode(1, "2026-09-23"),
+        makeEpisode(2, "2026-10-07"),
+      ]),
+      id: "season_51" as const,
+    };
+    expect(
+      getAwaitingDataEpisode(season, 1, new Date("2026-09-30T20:00:00-04:00")),
+    ).toBeNull();
+  });
+
+  it("does not estimate new episodes for completed seasons", () => {
+    expect(
+      getAwaitingDataEpisode(
+        makeSeason([makeEpisode(1, "2026-03-11")]),
+        1,
+        new Date("2026-09-30T20:00:00-04:00"),
+      ),
+    ).toBeNull();
+  });
+
+  it("uses Eastern standard time after daylight saving ends", () => {
+    const season = makeSeason([makeEpisode(1, "2026-11-11")]);
+    expect(
+      getAwaitingDataEpisode(season, 0, new Date("2026-11-12T00:59:59Z")),
+    ).toBeNull();
+    expect(
+      getAwaitingDataEpisode(season, 0, new Date("2026-11-12T01:00:00Z")),
+    ).toMatchObject({ order: 1 });
   });
 });
 
