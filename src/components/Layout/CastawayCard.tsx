@@ -55,6 +55,7 @@ export const CastawayCard = ({
   photoGallery,
 }: CastawayCardProps) => {
   const [photoOpened, setPhotoOpened] = useState(false);
+  const [photoAspectRatio, setPhotoAspectRatio] = useState(2 / 3);
   const portraitButton = useRef<HTMLButtonElement>(null);
   const rootClass = [
     classes.root,
@@ -75,7 +76,15 @@ export const CastawayCard = ({
             className={classes.portraitButton}
             aria-label={`View full photo of ${name}`}
             aria-haspopup="dialog"
-            onClick={() => setPhotoOpened(true)}
+            onClick={() => {
+              const portrait = portraitButton.current?.querySelector("img");
+              setPhotoAspectRatio(
+                portrait?.naturalHeight
+                  ? portrait.naturalWidth / portrait.naturalHeight
+                  : 2 / 3,
+              );
+              setPhotoOpened(true);
+            }}
           >
             <img
               src={img}
@@ -107,6 +116,7 @@ export const CastawayCard = ({
           imgAlt={imgAlt}
           gallery={photoGallery}
           meta={meta}
+          aspectRatio={photoAspectRatio}
           onClose={() => {
             setPhotoOpened(false);
             requestAnimationFrame(() => portraitButton.current?.focus());
