@@ -52,6 +52,7 @@
 
 .copy {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 24px;
   justify-items: start;
 
@@ -102,6 +103,15 @@
 
     & > * {
       flex: 1 1 100%;
+      min-width: 0;
+      height: auto;
+      min-height: var(--button-height);
+      padding-block: 12px;
+    }
+
+    & :global(.mantine-Button-label) {
+      white-space: normal;
+      text-align: center;
     }
   }
 }
