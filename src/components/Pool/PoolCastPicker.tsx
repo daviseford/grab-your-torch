@@ -1,5 +1,4 @@
 import { Button } from "@mantine/core";
-import { useMediaQuery } from "@mantine/hooks";
 import type { CastawayId, PoolPick } from "../../types";
 import { isPoolPickSelected, nextPoolSwapTarget } from "../../utils/poolPicks";
 import { CastawayCard } from "../Layout";
@@ -67,9 +66,6 @@ export const PoolCastPicker = ({
   onToggle,
   announcement,
 }: PoolCastPickerProps) => {
-  // Two columns at 375px: square portraits keep the first row's control
-  // inside the first screen, and the counter above stays in view.
-  const compact = useMediaQuery("(max-width: 36em)") ?? false;
   const swapTarget = nextPoolSwapTarget(picks, limit);
   const remaining = limit - picks.length;
 
@@ -104,7 +100,7 @@ export const PoolCastPicker = ({
                 img={detail?.img}
                 meta={castMeta(detail)}
                 picked={picked}
-                compact={compact}
+                compact
                 actions={
                   // Every card stays enabled at the limit: nothing in a pool
                   // is ever unavailable (R3), and the swap is named above.

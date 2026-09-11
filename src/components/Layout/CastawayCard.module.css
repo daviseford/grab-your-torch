@@ -10,6 +10,7 @@
 
 .portrait {
   position: relative;
+  flex-shrink: 0;
   aspect-ratio: 3 / 4;
   background: var(--gyt-plate);
   display: grid;
@@ -21,6 +22,8 @@
 }
 
 .portrait img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -51,6 +54,7 @@
 
 .body {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: 2px;
   padding: 10px 12px 12px;
@@ -69,7 +73,8 @@
 }
 
 .actions {
-  margin-top: 8px;
+  margin-top: auto;
+  padding-top: 8px;
 }
 
 .out .portrait img,
