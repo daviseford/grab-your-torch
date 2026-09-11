@@ -14,7 +14,7 @@ import {
 } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { IconArrowLeft, IconLogin, IconUserPlus } from "@tabler/icons-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { AwaitingDataBanner } from "../components/AwaitingDataBanner";
 import { EpisodeAdvanceControl } from "../components/EpisodeAdvanceControl";
@@ -81,6 +81,11 @@ const SectionHead = ({
 );
 
 export const SingleCompetition = () => {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
   const [searchParams, setSearchParams] = useSearchParams();
   const tabsRef = useRef<HTMLDivElement>(null);
   const { data: competition, isLoading: isCompetitionLoading } =
@@ -243,6 +248,7 @@ export const SingleCompetition = () => {
     season,
     latestDataEpisode,
     isScoringDataReady,
+    now,
     currentEpisode: competition.current_episode,
     finished: competition.finished,
     hasWinner,

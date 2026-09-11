@@ -1,3 +1,5 @@
+import { EPISODE_SCHEDULES } from "../data/episode-schedules";
+import { SEASON_METADATA } from "../data/season-metadata";
 import { Challenge, Elimination, Episode, GameEvent, Season } from "../types";
 
 /**
@@ -8,8 +10,7 @@ import { Challenge, Elimination, Episode, GameEvent, Season } from "../types";
  * by hours because the data sync runs on a daily schedule.
  */
 
-// CBS airs Survivor at 8 PM ET/PT. Wait for the West Coast broadcast so the
-// banner cannot announce an episode before it has aired across the mainland US.
+// Keep the existing broadcast-date convention used by trades and the catalog.
 const SURVIVOR_TIME_ZONE = "America/Los_Angeles";
 const SURVIVOR_AIR_HOUR = 20;
 
@@ -22,9 +23,22 @@ const broadcastDateTimeFormatter = new Intl.DateTimeFormat("en-US", {
   hourCycle: "h23",
 });
 
-const toBroadcastDateTime = (date: Date): { date: string; hour: number } => {
+// A scoring notice contains no results, so it starts with the first broadcast.
+const scoringDateTimeFormatter = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/New_York",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  hourCycle: "h23",
+});
+
+const toBroadcastDateTime = (
+  date: Date,
+  formatter = broadcastDateTimeFormatter,
+): { date: string; hour: number } => {
   const parts = Object.fromEntries(
-    broadcastDateTimeFormatter
+    formatter
       .formatToParts(date)
       .filter((part) => part.type !== "literal")
       .map((part) => [part.type, part.value]),
@@ -47,7 +61,7 @@ export const getBroadcastDate = (now: Date = new Date()): string =>
   toBroadcastDateTime(now).date;
 
 const hasAired = (airDate: string, now: Date): boolean => {
-  const broadcastNow = toBroadcastDateTime(now);
+  const broadcastNow = toBroadcastDateTime(now, scoringDateTimeFormatter);
   return (
     airDate < broadcastNow.date ||
     (airDate === broadcastNow.date && broadcastNow.hour >= SURVIVOR_AIR_HOUR)
@@ -76,27 +90,55 @@ export function getLatestDataEpisode(
   return max;
 }
 
+export type AwaitingEpisode = Pick<Episode, "order" | "air_date">;
+
 /**
  * The lowest-order episode that has aired but has no scoring data yet,
  * or null when the data is caught up with the broadcast schedule.
  *
- * Episodes without an air date (historical seasons) are ignored.
+ * Advance listings fill gaps before source episode records arrive. Active
+ * seasons without a listing fall back to the premiere or next weekly broadcast.
  */
 export function getAwaitingDataEpisode(
   season: Season,
   latestDataEpisode: number,
   now: Date = new Date(),
-): Episode | null {
-  return (
-    [...(season.episodes ?? [])]
-      .sort(byOrder)
-      .find(
-        (ep) =>
-          ep.air_date !== undefined &&
-          hasAired(ep.air_date, now) &&
-          ep.order > latestDataEpisode,
-      ) ?? null
+): AwaitingEpisode | null {
+  const episodes = [...(season.episodes ?? [])].sort(byOrder);
+  const meta = SEASON_METADATA[season.id];
+  const airDates = new Map<number, AwaitingEpisode>(
+    (meta?.complete ? [] : (EPISODE_SCHEDULES[season.id] ?? [])).map((ep) => [
+      ep.order,
+      ep,
+    ]),
   );
+  // Actual source dates take precedence over advance listings for that episode.
+  for (const ep of episodes) {
+    if (ep.air_date) airDates.set(ep.order, ep);
+  }
+  const scheduled = [...airDates.values()]
+    .sort((a, b) => a.order - b.order)
+    .find((ep) => ep.order > latestDataEpisode);
+  if (scheduled?.air_date) {
+    return hasAired(scheduled.air_date, now) ? scheduled : null;
+  }
+
+  // The source may not publish an episode record until its stats arrive.
+  // For an active season, use its premiere or the next weekly broadcast.
+  // An explicit upcoming episode above takes precedence (e.g. a skipped week).
+  if (!meta || meta.complete) return null;
+  const last = episodes
+    .filter((ep) => ep.order <= latestDataEpisode && ep.air_date)
+    .pop();
+  let airDate = latestDataEpisode === 0 ? meta.premiere : undefined;
+  if (last?.air_date && last.order === latestDataEpisode) {
+    const next = new Date(`${last.air_date}T12:00:00Z`);
+    next.setUTCDate(next.getUTCDate() + 7);
+    airDate = next.toISOString().slice(0, 10);
+  }
+  return airDate && hasAired(airDate, now)
+    ? { order: latestDataEpisode + 1, air_date: airDate }
+    : null;
 }
 
 interface CompetitionAwaitingDataInput {
@@ -120,7 +162,7 @@ export function getCompetitionAwaitingDataEpisode({
   finished,
   hasWinner,
   now = new Date(),
-}: CompetitionAwaitingDataInput): Episode | null {
+}: CompetitionAwaitingDataInput): AwaitingEpisode | null {
   const isCaughtUp =
     currentEpisode == null || currentEpisode >= latestDataEpisode;
 

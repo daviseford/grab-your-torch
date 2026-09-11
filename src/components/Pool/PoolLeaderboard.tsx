@@ -5,6 +5,7 @@ import {
   groupPoolStandingsRows,
   type PoolStandingsView,
 } from "../../utils/poolStandingsRead";
+import { SCORING_DELAY_MESSAGE } from "../../utils/scoringStatus";
 import { EmptySlate } from "../Layout";
 import classes from "./PoolLeaderboard.module.css";
 
@@ -61,11 +62,11 @@ const EMPTY_COPY: Record<
 > = {
   "not-scored": {
     title: "Standings start after the first episode",
-    body: "Nothing has been scored yet. Totals appear here once the first episode's data lands.",
+    body: SCORING_DELAY_MESSAGE,
   },
   absent: {
     title: "Standings are not published yet",
-    body: "The latest update has not landed. Every entry is safe: totals appear here as soon as the next update runs.",
+    body: SCORING_DELAY_MESSAGE,
   },
 };
 

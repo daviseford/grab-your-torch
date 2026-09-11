@@ -1,6 +1,7 @@
 import type { Pool, PoolCounters, PoolDisplayMode } from "../types";
 import { timestampToMillis } from "./poolPageState";
 import type { PoolStandingsView } from "./poolStandingsRead";
+import { SCORING_DELAY_MESSAGE } from "./scoringStatus";
 
 /**
  * The homepage pool module, as a state machine and a copy deck (U9).
@@ -313,7 +314,7 @@ export const describePoolModule = (
         standings: {
           kind: "awaiting",
           title: "Standings start after the first episode",
-          body: "Nothing has been scored yet. Totals appear here once the first episode's data lands.",
+          body: SCORING_DELAY_MESSAGE,
         },
         dominant: false,
       };
@@ -327,7 +328,7 @@ export const describePoolModule = (
         standings: {
           kind: "awaiting",
           title: "Standings land with the episode data",
-          body: "Scoring runs once each episode's data arrives. The first totals appear here as soon as it does.",
+          body: SCORING_DELAY_MESSAGE,
         },
         dominant: false,
       };
