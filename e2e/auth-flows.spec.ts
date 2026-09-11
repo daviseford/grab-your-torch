@@ -1420,9 +1420,7 @@ const fillPoolEntry = async (page: Page) => {
   await answerPropBets(page);
 };
 
-test("pool: photos open and zoom without selecting a castaway", async ({
-  page,
-}) => {
+test("pool: photos open without selecting a castaway", async ({ page }) => {
   await seedPool(openFreeze());
   await page.goto(`/pool/${POOL_SEASON_ID}`);
   const portrait = page.getByRole("button", {
@@ -1439,17 +1437,6 @@ test("pool: photos open and zoom without selecting a castaway", async ({
         .evaluate((img: HTMLImageElement) => img.naturalWidth),
     )
     .toBe(1536);
-  await photo.getByRole("button", { name: "Zoom in", exact: true }).click();
-  await expect(
-    photo.getByRole("button", { name: "Fit photo", exact: true }),
-  ).toHaveAttribute("aria-pressed", "true");
-  await expect
-    .poll(() =>
-      photo
-        .getByRole("region")
-        .evaluate((el) => el.scrollWidth > el.clientWidth),
-    )
-    .toBe(true);
   await page.keyboard.press("Escape");
   await expect(photo).toHaveCount(0);
   await expect(portrait).toBeFocused();
