@@ -31,6 +31,18 @@ export const Players = () => {
   );
 
   if (!season) return null;
+  const photoGallery = cast.flatMap((player) =>
+    player.img
+      ? [
+          {
+            id: player.castaway_id,
+            name: player.full_name,
+            img: player.img,
+            meta: castawayMeta(player),
+          },
+        ]
+      : [],
+  );
 
   return (
     <SimpleGrid
@@ -43,6 +55,7 @@ export const Players = () => {
           name={player.full_name}
           img={player.img}
           meta={castawayMeta(player)}
+          photoGallery={photoGallery}
         />
       ))}
     </SimpleGrid>

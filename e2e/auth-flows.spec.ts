@@ -1420,7 +1420,9 @@ const fillPoolEntry = async (page: Page) => {
   await answerPropBets(page);
 };
 
-test("pool: photos open without selecting a castaway", async ({ page }) => {
+test("pool: photo gallery supports keyboard browsing and local picks", async ({
+  page,
+}) => {
   await seedPool(openFreeze());
   await page.goto(`/pool/${POOL_SEASON_ID}`);
   const portrait = page.getByRole("button", {
@@ -1428,7 +1430,7 @@ test("pool: photos open without selecting a castaway", async ({ page }) => {
     exact: true,
   });
   await portrait.click();
-  const photo = page.getByRole("dialog", { name: "Aaliyah Puglia" });
+  const photo = page.getByRole("dialog");
   await expect(photo).toBeVisible();
   await expect
     .poll(() =>
@@ -1437,16 +1439,121 @@ test("pool: photos open without selecting a castaway", async ({ page }) => {
         .evaluate((img: HTMLImageElement) => img.naturalWidth),
     )
     .toBe(1536);
+  await expect(photo.getByText("24 · Chef")).toBeVisible();
+  await page.keyboard.press("ArrowRight");
+  await expect(photo).toHaveAccessibleName("Alexis Levine");
+  await expect(photo.getByText(/Criminal Defense Attorney/)).toBeVisible();
+  await page.keyboard.press("ArrowLeft");
+  await expect(photo).toHaveAccessibleName("Aaliyah Puglia");
+  await photo.getByRole("button", { name: "Previous castaway" }).click();
+  await expect(photo).toHaveAccessibleName("Thien An Nguyen");
+  await photo.getByRole("button", { name: "Pick Thien An Nguyen" }).click();
+  await expect(
+    photo.getByRole("button", { name: "Remove Thien An Nguyen" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await photo.getByRole("button", { name: "Remove Thien An Nguyen" }).click();
+  await expect(photo.getByRole("status")).toHaveText("0 of 7 picks chosen.");
+  await photo.getByRole("button", { name: "Next castaway" }).click();
+  for (let index = 0; index < PICKS_PER_ENTRY; index++) {
+    await photo.getByRole("button", { name: /^Pick / }).click();
+    await photo.getByRole("button", { name: "Next castaway" }).click();
+  }
+  await expect(photo.getByRole("status")).toContainText(
+    "replaces Aaliyah Puglia",
+  );
+  await photo.getByRole("button", { name: /^Pick / }).click();
+  await expect(photo.getByRole("status")).toHaveText("7 of 7 picks chosen.");
   await page.keyboard.press("Escape");
   await expect(photo).toHaveCount(0);
   await expect(portrait).toBeFocused();
   await expect(
-    page.getByText(`0 of ${PICKS_PER_ENTRY} picks chosen`),
+    page.getByText(`${PICKS_PER_ENTRY} of ${PICKS_PER_ENTRY} picks chosen`),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Pick Aaliyah Puglia", exact: true }),
   ).toBeVisible();
   await expect(poolHandleField(page)).toHaveCount(0);
   expect(
     (await adminDb.collection(`pools/${POOL_ID}/entries`).get()).size,
   ).toBe(0);
+});
+
+test("draft: photo gallery follows turn order and shows the picked owner", async ({
+  page,
+}) => {
+  await seedSeason();
+  await adminDb.doc(`seasons/${SEASON_ID}`).update({
+    players: SEASON_PLAYERS.map((player, index) => ({
+      ...player,
+      img: SEASON_51_PLAYERS[index].img,
+      age: 30,
+      profession: "Teacher",
+      hometown: "Denver, Colorado",
+    })),
+  });
+  const host = await createUser(
+    uniqueEmail("gallery-host"),
+    PASSWORD,
+    "Gallery Host",
+  );
+  const member = await createUser(
+    uniqueEmail("gallery-member"),
+    PASSWORD,
+    "Gallery Member",
+  );
+  const draftId = "draft_photo_gallery";
+  await seedDraft(draftId, [host, member], { started: true });
+  const seededTurns = await fetch(rtdbUrl(`drafts/${draftId}/turns`), {
+    method: "PUT",
+    headers: RTDB_HEADERS,
+    body: JSON.stringify({
+      "1": host.uid,
+      "2": member.uid,
+      "3": member.uid,
+      "4": host.uid,
+    }),
+  });
+  expect(seededTurns.ok).toBe(true);
+  await page.goto(`/seasons/${SEASON_ID}/draft/${draftId}`);
+  await main(page)
+    .getByRole("button", { name: "Sign in", exact: true })
+    .click();
+  await signInThrough(page, { email: host.email, password: PASSWORD });
+  await page
+    .getByRole("button", {
+      name: "View full photo of Test Player 1",
+      exact: true,
+    })
+    .click();
+  const photo = page.getByRole("dialog");
+  await expect(photo.getByText("30 · Teacher")).toBeVisible();
+  await photo
+    .getByRole("button", { name: "Draft Test Player 1", exact: true })
+    .click();
+  await expect(photo.getByText("Drafted by", { exact: true })).toBeVisible();
+  await expect(photo.getByText("Gallery Host", { exact: true })).toBeVisible();
+  await page.keyboard.press("ArrowRight");
+  await expect(photo).toHaveAccessibleName("Test Player 2");
+  await expect(
+    photo.getByRole("button", { name: "Draft Test Player 2", exact: true }),
+  ).toBeDisabled();
+  await expect(photo.getByRole("status")).toHaveText(
+    "You can draft when it is your turn.",
+  );
+  const saved = await fetch(rtdbUrl(`drafts/${draftId}/draft_picks`), {
+    headers: RTDB_HEADERS,
+  });
+  const savedPicks = Object.values(await saved.json()).filter(
+    Boolean,
+  ) as Array<{
+    castaway_id: string;
+    user_uid: string;
+  }>;
+  expect(savedPicks).toHaveLength(1);
+  expect(savedPicks[0]).toMatchObject({
+    castaway_id: SEASON_PLAYERS[0].castaway_id,
+    user_uid: host.uid,
+  });
 });
 
 test("pool: independent players share picks and a newer device save clears an old rejection", async ({

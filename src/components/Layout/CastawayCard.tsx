@@ -1,7 +1,7 @@
 import { IconZoomIn } from "@tabler/icons-react";
 import { useRef, useState, type ReactNode } from "react";
 import classes from "./CastawayCard.module.css";
-import { CastawayPhotoModal } from "./CastawayPhotoModal";
+import { CastawayPhotoModal, type CastawayPhoto } from "./CastawayPhotoModal";
 
 type CastawayCardProps = {
   name: string;
@@ -24,6 +24,7 @@ type CastawayCardProps = {
   /** Renders the portrait smaller for dense grids. */
   compact?: boolean;
   className?: string;
+  photoGallery?: readonly CastawayPhoto[];
 };
 
 const initials = (name: string) =>
@@ -51,6 +52,7 @@ export const CastawayCard = ({
   actions,
   compact = false,
   className,
+  photoGallery,
 }: CastawayCardProps) => {
   const [photoOpened, setPhotoOpened] = useState(false);
   const portraitButton = useRef<HTMLButtonElement>(null);
@@ -103,6 +105,8 @@ export const CastawayCard = ({
           name={name}
           img={img}
           imgAlt={imgAlt}
+          gallery={photoGallery}
+          meta={meta}
           onClose={() => {
             setPhotoOpened(false);
             requestAnimationFrame(() => portraitButton.current?.focus());
