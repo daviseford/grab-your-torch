@@ -1,38 +1,7 @@
-.toolbar {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px 12px;
-  margin-bottom: 12px;
-}
-
-.hint {
-  font-size: var(--mantine-font-size-sm);
-  color: var(--mantine-color-dimmed);
-}
-
-.viewport {
-  height: min(75dvh, 900px);
-  max-height: calc(100dvh - 180px);
-  overflow: auto;
-  overscroll-behavior: contain;
-  background: var(--gyt-plate);
-}
-
-.viewport:focus-visible {
-  outline: 2px solid var(--mantine-color-league-6);
-  outline-offset: 2px;
-}
-
 .photo {
   display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-.zoomed {
-  width: 200%;
+  width: auto;
   height: auto;
-  max-width: none;
+  max-width: calc(100vw - 48px);
+  max-height: calc(100dvh - 100px);
 }
