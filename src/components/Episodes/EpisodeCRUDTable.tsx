@@ -6,8 +6,10 @@ import { doc, updateDoc } from "firebase/firestore";
 import { useState } from "react";
 import { db } from "../../firebase";
 import { useSeason } from "../../hooks/useSeason";
+import { useSeasonRevision } from "../../hooks/useSeasonRevision";
 import { useUser } from "../../hooks/useUser";
 import { Episode } from "../../types";
+import { upsertEpisode } from "../../utils/seasonRevision";
 import { Board, EmptySlate } from "../Layout";
 import {
   BoardEmpty,
@@ -19,6 +21,7 @@ import adminParts from "../SeasonAdmin/SeasonAdminParts.module.css";
 export const EpisodeCRUDTable = () => {
   const { data: season } = useSeason();
   const { slimUser } = useUser();
+  const { stampFor } = useSeasonRevision();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<Episode | null>(null);
 
@@ -38,7 +41,12 @@ export const EpisodeCRUDTable = () => {
         try {
           const ref = doc(db, "seasons", season.id);
           const updated = season.episodes.filter((e) => e.id !== episode.id);
-          await updateDoc(ref, { episodes: updated });
+          // The revision stamp rides in the same write as the episode change
+          // it describes, so a cache can never be left looking fresh.
+          await updateDoc(ref, {
+            episodes: updated,
+            ...stampFor({ episodes: updated }),
+          });
           notifications.show({
             title: "Episode deleted",
             message: `Episode ${episode.order} removed`,
@@ -72,10 +80,11 @@ export const EpisodeCRUDTable = () => {
 
     try {
       const ref = doc(db, "seasons", season.id);
-      const updated = season.episodes.map((e) =>
-        e.id === editValues.id ? editValues : e,
-      );
-      await updateDoc(ref, { episodes: updated });
+      const updated = upsertEpisode(season.episodes, editValues) as Episode[];
+      await updateDoc(ref, {
+        episodes: updated,
+        ...stampFor({ episodes: updated }),
+      });
 
       notifications.show({
         title: "Episode updated",

@@ -1,0 +1,22 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: 32rem;
+}
+
+.root > :first-child {
+  width: 100%;
+}
+
+.help {
+  margin: 0;
+  font-size: var(--mantine-font-size-xs);
+  line-height: 1.5;
+  color: var(--mantine-color-dimmed);
+}
+
+.suggest {
+  align-self: flex-start;
+}

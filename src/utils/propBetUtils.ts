@@ -108,22 +108,50 @@ export const getPropBetScoresByUser = (
 
   const activeKeys = getActivePropBetKeys(competition.prop_bets);
 
+  // Materialized once for the whole competition rather than once per
+  // participant: the scorer takes arrays so a large field of entrants does
+  // not re-walk the same records.
+  const _events = Object.values(events);
+  const _eliminations = Object.values(eliminations);
+  const _challenges = Object.values(challenges);
+
   return competition.participant_uids.reduce<PropBetScoresByUser>((a, b) => {
-    const scores = getPropBetScoresForUser(
-      b,
-      events,
-      eliminations,
-      challenges,
+    const scores = getPropBetScoresForUser({
+      uid: b,
+      displayName: getCompetitionDisplayName(competition, b),
+      answers: competition.prop_bets?.find((x) => x.user_uid === b)?.values,
+      events: _events,
+      eliminations: _eliminations,
+      challenges: _challenges,
       postMergeEpisodeNumbers,
       hasFinaleOccurred,
       activeKeys,
-      competition,
-    );
+    });
     if (scores) {
       a[b] = scores;
     }
     return a;
   }, {});
+};
+
+/**
+ * The name a competition shows for a participant. Competition standings are
+ * only visible to that competition's participants, so the historical email
+ * fallback stays here. It must never reach the pool scorer, whose output is
+ * world-readable (KTD12).
+ */
+const getCompetitionDisplayName = (
+  competition: Competition,
+  uid: SlimUser["uid"],
+): string => {
+  const participant = competition.participants.find((x) => x.uid === uid);
+
+  return (
+    competition.team_names?.[uid] ||
+    participant?.displayName ||
+    participant?.email ||
+    uid
+  );
 };
 
 /**
@@ -136,7 +164,7 @@ const isEliminatedFromGame = (
   castawayId: string,
   elims: Elimination[],
   events: GameEvent[],
-  challenges: Record<Challenge["id"], Challenge>,
+  challenges: Challenge[],
 ): boolean => {
   const gameEndingElims = elims.filter(
     (x) =>
@@ -155,7 +183,7 @@ const isEliminatedFromGame = (
   );
   if (hasLaterEvent) return false;
 
-  const hasLaterChallengeWin = Object.values(challenges).some(
+  const hasLaterChallengeWin = challenges.some(
     (x) =>
       x.episode_num > lastElimEpisode &&
       x.winning_castaways?.includes(castawayId as CastawayId),
@@ -209,7 +237,7 @@ const isCurrentlyEliminated = (
   castawayId: string,
   elims: Elimination[],
   events: GameEvent[],
-  challenges: Record<Challenge["id"], Challenge>,
+  challenges: Challenge[],
 ): boolean => {
   const playerElims = elims.filter((x) => x.castaway_id === castawayId);
   if (playerElims.length === 0) return false;
@@ -221,7 +249,7 @@ const isCurrentlyEliminated = (
   );
   if (hasLaterEvent) return false;
 
-  const hasLaterChallengeWin = Object.values(challenges).some(
+  const hasLaterChallengeWin = challenges.some(
     (x) =>
       x.episode_num > lastElimEpisode &&
       x.winning_castaways?.includes(castawayId as CastawayId),
@@ -317,24 +345,44 @@ const firstEventOfAction = (
   return match ? eventResolution(reason, match) : undefined;
 };
 
-export const getPropBetScoresForUser = (
-  uid: SlimUser["uid"],
-  events: Record<GameEvent["id"], GameEvent>,
-  eliminations: Record<Elimination["id"], Elimination>,
-  challenges: Record<Challenge["id"], Challenge>,
-  postMergeEpisodeNumbers: Set<Episode["order"]>,
-  hasFinaleOccurred: boolean,
-  activeKeys: PropBetQuestionKey[],
-  competition: Competition,
-): PropBetScores => {
-  const myPropBets = (competition?.prop_bets || []).find(
-    (x) => x.user_uid === uid,
-  )?.values;
+/**
+ * Everything the scorer needs, stated explicitly. There is no `Competition`
+ * here on purpose: a public pool has entrants, not participants, and the
+ * scorer must work for both (KTD12).
+ *
+ * The records arrive as arrays so a caller scoring a large field materializes
+ * them once instead of once per entrant.
+ */
+export type PropBetScoringInput = {
+  uid: SlimUser["uid"];
+  /**
+   * The name to show alongside the score. Supplied by the caller and never
+   * derived here: deriving it is how an email address ends up in a
+   * world-readable standings document. Falls back to `uid` when blank.
+   */
+  displayName: string;
+  /** The entrant's answers, keyed by question. Absent when they never played. */
+  answers: Partial<Record<PropBetQuestionKey, string>> | undefined;
+  events: GameEvent[];
+  eliminations: Elimination[];
+  challenges: Challenge[];
+  postMergeEpisodeNumbers: Set<Episode["order"]>;
+  hasFinaleOccurred: boolean;
+  activeKeys: PropBetQuestionKey[];
+};
 
-  const _user = competition.participants.find((x) => x.uid === uid);
-
-  const userName =
-    competition.team_names?.[uid] || _user?.displayName || _user?.email || uid;
+export const getPropBetScoresForUser = ({
+  uid,
+  displayName,
+  answers: myPropBets,
+  events: _events,
+  eliminations: _elims,
+  challenges,
+  postMergeEpisodeNumbers,
+  hasFinaleOccurred,
+  activeKeys,
+}: PropBetScoringInput): PropBetScores => {
+  const userName = displayName || uid;
   const scores = buildEmptyScores(uid, userName, myPropBets);
 
   // bail if no data
@@ -354,9 +402,6 @@ export const getPropBetScoresForUser = (
       scores.total += PropBetsQuestions[key].point_value;
     }
   };
-
-  const _events = Object.values(events);
-  const _elims = Object.values(eliminations);
 
   // --- propbet_first_vote ---
   const firstEpisodeElim = _elims.find((x) => x.order === 1);
@@ -471,7 +516,7 @@ export const getPropBetScoresForUser = (
   );
 
   // --- propbet_immunities ---
-  const immunities = Object.values(challenges).filter(
+  const immunities = challenges.filter(
     (x) =>
       x.variant === "immunity" && postMergeEpisodeNumbers.has(x.episode_num),
   );
@@ -495,7 +540,7 @@ export const getPropBetScoresForUser = (
   );
 
   // --- propbet_rewards ---
-  const rewards = Object.values(challenges).filter(
+  const rewards = challenges.filter(
     (x) => x.variant === "reward" && postMergeEpisodeNumbers.has(x.episode_num),
   );
   const allRewardWinners = rewards.flatMap((x) => x.winning_castaways);

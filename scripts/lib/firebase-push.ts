@@ -80,6 +80,9 @@ export async function pushSeasonToFirestore(
         players,
         episodes,
         castawayLookup: castawayLookup || {},
+        challenges,
+        eliminations,
+        events,
       }),
     },
     {
@@ -104,6 +107,8 @@ export async function pushSeasonToFirestore(
     },
   ];
 
+  const seasonDoc = documents[0].data;
+
   if (dryRun) {
     console.log(`\n[DRY RUN] Would upload the following to Firestore:\n`);
     for (const doc of documents) {
@@ -111,6 +116,9 @@ export async function pushSeasonToFirestore(
       console.log(`  ${doc.collection}/${doc.docId}:`);
       console.log(`    ${preview}\n`);
     }
+    console.log(`  seasons/${seasonKey} revisions:`);
+    console.log(`    data_revision:    ${seasonDoc.data_revision}`);
+    console.log(`    scoring_revision: ${seasonDoc.scoring_revision}\n`);
     return;
   }
 
@@ -128,6 +136,9 @@ export async function pushSeasonToFirestore(
       const docPath = `${doc.collection}/${doc.docId}`;
       console.log(`  [OK] ${docPath}`);
     }
+    console.log(
+      `  [OK] revisions: data ${seasonDoc.data_revision}, scoring ${seasonDoc.scoring_revision}`,
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     throw new Error(

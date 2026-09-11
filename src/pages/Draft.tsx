@@ -4,7 +4,6 @@ import {
   Center,
   CopyButton,
   Image,
-  Select,
   Stack,
   Switch,
   Text,
@@ -30,12 +29,8 @@ import {
   StatusBadge,
   useBugContext,
 } from "../components/Layout";
+import { PropBetsForm } from "../components/PropBets";
 import { PostDraftPropBetTable } from "../components/PropBetTables/PostDraftPropBetTable";
-import {
-  PropBetQuestionKey,
-  PropBetQuestionKeys,
-  PropBetsQuestions,
-} from "../data/propbets";
 import { db, rt_db } from "../firebase";
 import {
   decideJoinContinuation,
@@ -52,7 +47,6 @@ import {
   Player,
   PropBetsEntry,
   PropBetsFormData,
-  Season,
   SlimUser,
 } from "../types";
 import { trackEvent } from "../utils/analytics";
@@ -898,7 +892,11 @@ export const DraftComponent = () => {
           <DraftSteps active={activeStep} />
 
           <Board title="Prop bet questions" titleAs="h2">
-            <PropBets season={season} onSubmit={addPropBetsToDraft} />
+            <PropBetsForm
+              cast={season.players}
+              castawayLookup={season.castawayLookup}
+              onSubmit={addPropBetsToDraft}
+            />
           </Board>
         </>
       ) : (
@@ -1030,95 +1028,6 @@ const NameYourCompetition = ({ onSubmit }: Props) => {
           Create Competition
         </Button>
       </Stack>
-    </form>
-  );
-};
-
-type PropBetsProps = {
-  season: Season;
-  onSubmit: (values: PropBetsFormData) => void;
-};
-
-const PropBets = ({ season, onSubmit }: PropBetsProps) => {
-  const initialValues = useMemo(
-    () =>
-      PropBetQuestionKeys.reduce<PropBetsFormData>((accum, key) => {
-        accum[key] = "";
-        return accum;
-      }, {}),
-    [],
-  );
-
-  const validate = useMemo(
-    () =>
-      PropBetQuestionKeys.reduce<
-        Partial<Record<PropBetQuestionKey, ReturnType<typeof isNotEmpty>>>
-      >((accum, key) => {
-        accum[key] = isNotEmpty("Enter an answer");
-        return accum;
-      }, {}),
-    [],
-  );
-
-  const form = useForm<PropBetsFormData>({
-    initialValues,
-    validate,
-  });
-
-  const playerOptions = useMemo(
-    () =>
-      sortCastAlphabetically(season.players, season.castawayLookup).map(
-        (player) => ({ value: player.castaway_id, label: player.full_name }),
-      ),
-    [season],
-  );
-
-  const handleSubmit = async (
-    e: React.FormEvent<HTMLFormElement> | undefined,
-  ) => {
-    e?.preventDefault();
-
-    const _validate = form.validate();
-
-    if (_validate.hasErrors) return;
-
-    onSubmit(form.values);
-  };
-
-  const answered = PropBetQuestionKeys.filter((key) =>
-    Boolean(form.values[key]),
-  ).length;
-
-  return (
-    <form onSubmit={handleSubmit}>
-      <div className={classes.formGrid}>
-        {PropBetQuestionKeys.map((key) => {
-          const question = PropBetsQuestions[key];
-          return (
-            <Select
-              key={key}
-              required
-              label={question.description}
-              description={question.point_value + " points"}
-              placeholder="Pick one"
-              data={
-                question.answer_type === "boolean"
-                  ? ["Yes", "No"]
-                  : playerOptions
-              }
-              {...form.getInputProps(key)}
-            />
-          );
-        })}
-      </div>
-      <div className={classes.formActions}>
-        <Button type="submit" size="md">
-          Submit Prop Bets
-        </Button>
-        <span className={classes.formCount}>
-          {answered} of {PropBetQuestionKeys.length} answered
-        </span>
-      </div>
     </form>
   );
 };

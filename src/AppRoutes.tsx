@@ -54,6 +54,9 @@ const ScoringReference = lazy(() =>
     default: m.ScoringReference,
   })),
 );
+const Pool = lazy(() =>
+  import("./pages/Pool").then((m) => ({ default: m.Pool })),
+);
 const ResetPassword = lazy(() =>
   import("./pages/ResetPassword").then((m) => ({ default: m.ResetPassword })),
 );
@@ -224,6 +227,9 @@ export const AppRoutes = () => {
                         element={<SingleSeason />}
                       />
                       <Route path="/seasons" element={<Seasons />} />
+
+                      {/* Public season pool */}
+                      <Route path="/pool/:seasonId" element={<Pool />} />
 
                       {/* Competitions */}
                       <Route

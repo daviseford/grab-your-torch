@@ -9,14 +9,16 @@ import {
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { IconCheck, IconX } from "@tabler/icons-react";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, writeBatch } from "firebase/firestore";
 import { useState } from "react";
 import { db } from "../../firebase";
 import { useChallenges } from "../../hooks/useChallenges";
 import { useEliminations } from "../../hooks/useEliminations";
 import { useSeason } from "../../hooks/useSeason";
+import { useSeasonRevision } from "../../hooks/useSeasonRevision";
 import { useUser } from "../../hooks/useUser";
 import { CastawayId, Challenge, ChallengeWinActions } from "../../types";
+import { removeById, upsertById } from "../../utils/seasonRevision";
 import { Board, EmptySlate } from "../Layout";
 import {
   BoardEmpty,
@@ -30,6 +32,7 @@ export const ChallengeCRUDTable = () => {
   const { data: challenges } = useChallenges(season?.id);
   const { data: eliminations } = useEliminations(season?.id);
   const { slimUser } = useUser();
+  const { stampFor } = useSeasonRevision();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<Challenge | null>(null);
 
@@ -53,10 +56,17 @@ export const ChallengeCRUDTable = () => {
       labels: { confirm: "Delete challenge", cancel: "Keep it" },
       confirmProps: { color: "red" },
       onConfirm: async () => {
-        const ref = doc(db, `challenges/${season?.id}`);
-        const newChallenges = { ...challenges };
-        delete newChallenges[e.id];
-        await setDoc(ref, newChallenges);
+        const newChallenges = removeById(challenges, e.id);
+        // The revision stamp rides in the same batch as the write it
+        // describes, so a deletion can never leave a cache looking fresh.
+        const batch = writeBatch(db);
+        batch.set(doc(db, `challenges/${season?.id}`), newChallenges);
+        batch.set(
+          doc(db, "seasons", season!.id),
+          stampFor({ challenges: newChallenges }),
+          { merge: true },
+        );
+        await batch.commit();
       },
     });
   };
@@ -75,8 +85,18 @@ export const ChallengeCRUDTable = () => {
     if (!season || !editValues) return;
 
     try {
-      const ref = doc(db, `challenges/${season.id}`);
-      await setDoc(ref, { [editValues.id]: editValues }, { merge: true });
+      const batch = writeBatch(db);
+      batch.set(
+        doc(db, `challenges/${season.id}`),
+        { [editValues.id]: editValues },
+        { merge: true },
+      );
+      batch.set(
+        doc(db, "seasons", season.id),
+        stampFor({ challenges: upsertById(challenges, editValues) }),
+        { merge: true },
+      );
+      await batch.commit();
 
       notifications.show({
         title: "Challenge updated",

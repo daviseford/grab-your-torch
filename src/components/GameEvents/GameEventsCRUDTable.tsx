@@ -2,15 +2,17 @@ import { NumberInput, Select, Stack, Table, Text } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { IconCheck, IconX } from "@tabler/icons-react";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, writeBatch } from "firebase/firestore";
 import { useState } from "react";
 import { BASE_PLAYER_SCORING } from "../../data/scoring";
 import { db } from "../../firebase";
 import { useEliminations } from "../../hooks/useEliminations";
 import { useEvents } from "../../hooks/useEvents";
 import { useSeason } from "../../hooks/useSeason";
+import { useSeasonRevision } from "../../hooks/useSeasonRevision";
 import { useUser } from "../../hooks/useUser";
 import { CastawayId, GameEvent, GameEventActions } from "../../types";
+import { removeById, upsertById } from "../../utils/seasonRevision";
 import { Board, EmptySlate } from "../Layout";
 import {
   BoardEmpty,
@@ -24,6 +26,7 @@ export const GameEventsCRUDTable = () => {
   const { data: events } = useEvents(season?.id);
   const { data: eliminations } = useEliminations(season?.id);
   const { slimUser } = useUser();
+  const { stampFor } = useSeasonRevision();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<GameEvent | null>(null);
 
@@ -49,10 +52,17 @@ export const GameEventsCRUDTable = () => {
       labels: { confirm: "Delete event", cancel: "Keep it" },
       confirmProps: { color: "red" },
       onConfirm: async () => {
-        const ref = doc(db, `events/${season?.id}`);
-        const newEvents = { ...events };
-        delete newEvents[e.id];
-        await setDoc(ref, newEvents);
+        const newEvents = removeById(events, e.id);
+        // The revision stamp rides in the same batch as the write it
+        // describes, so a deletion can never leave a cache looking fresh.
+        const batch = writeBatch(db);
+        batch.set(doc(db, `events/${season?.id}`), newEvents);
+        batch.set(
+          doc(db, "seasons", season!.id),
+          stampFor({ events: newEvents }),
+          { merge: true },
+        );
+        await batch.commit();
       },
     });
   };
@@ -79,8 +89,18 @@ export const GameEventsCRUDTable = () => {
     };
 
     try {
-      const ref = doc(db, `events/${season.id}`);
-      await setDoc(ref, { [values.id]: values }, { merge: true });
+      const batch = writeBatch(db);
+      batch.set(
+        doc(db, `events/${season.id}`),
+        { [values.id]: values },
+        { merge: true },
+      );
+      batch.set(
+        doc(db, "seasons", season.id),
+        stampFor({ events: upsertById(events, values) }),
+        { merge: true },
+      );
+      await batch.commit();
 
       notifications.show({
         title: "Event updated",

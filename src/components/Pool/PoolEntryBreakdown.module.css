@@ -1,0 +1,177 @@
+/* Matches PoolLeaderboard.module.css: same rules, same label treatment, same
+   tabular numerals. The pool's own presentation, deliberately not the
+   competition scoring tables (U10). */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-sm);
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.label {
+  margin: 0;
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: var(--mantine-font-size-sm);
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+}
+
+.total {
+  margin: 0;
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: var(--mantine-font-size-lg);
+  font-variant-numeric: tabular-nums;
+}
+
+.totalUnit {
+  font-family: var(--mantine-font-family);
+  font-weight: 400;
+  font-size: var(--mantine-font-size-xs);
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+
+/* A season runs to a dozen or more episodes, so this is the one thing here
+   allowed to scroll sideways. Nothing else may push the page wide at 375px. */
+.tableWrap {
+  position: relative;
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--mantine-font-size-sm);
+}
+
+.caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.table th {
+  text-align: left;
+  padding: 6px 10px 6px 0;
+  border-bottom: 1px solid var(--gyt-rule-strong);
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: var(--mantine-font-size-xs);
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+
+.table td {
+  padding: 7px 10px 7px 0;
+  border-bottom: 1px solid var(--gyt-rule);
+  vertical-align: baseline;
+}
+
+.table tbody tr:last-child td,
+.table tbody tr:last-child th {
+  border-bottom: 0;
+}
+
+.table tfoot th,
+.table tfoot td {
+  border-top: 1px solid var(--gyt-rule-strong);
+  border-bottom: 0;
+}
+
+.pickCol {
+  min-width: 9rem;
+}
+
+.table .pick {
+  display: table-cell;
+  border-bottom: 1px solid var(--gyt-rule);
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: var(--mantine-font-size-sm);
+  color: inherit;
+  overflow-wrap: anywhere;
+}
+
+.name {
+  display: block;
+}
+
+.out {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--mantine-font-family);
+  font-weight: 400;
+  font-size: var(--mantine-font-size-xs);
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--mantine-color-dimmed);
+}
+
+.table .episodeCol {
+  width: 2.5rem;
+  min-width: 2.5rem;
+  text-align: right;
+  padding-right: 0;
+  padding-left: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.table .points {
+  text-align: right;
+  padding-right: 0;
+  padding-left: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.zero {
+  color: var(--mantine-color-dimmed);
+}
+
+.table .totalCol,
+.table .pickTotal {
+  width: 4rem;
+  text-align: right;
+  padding-right: 0;
+  padding-left: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.note {
+  margin: 0;
+  font-size: var(--mantine-font-size-xs);
+  line-height: 1.45;
+  color: var(--mantine-color-dimmed);
+  border-left: 2px solid var(--gyt-rule-strong);
+  padding-left: 10px;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

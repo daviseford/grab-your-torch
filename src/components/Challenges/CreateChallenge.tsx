@@ -10,7 +10,7 @@ import {
 import { hasLength, useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
 import { IconCheck, IconX } from "@tabler/icons-react";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, writeBatch } from "firebase/firestore";
 import { last, orderBy } from "lodash-es";
 import { useEffect } from "react";
 import { v4 } from "uuid";
@@ -18,9 +18,11 @@ import { db } from "../../firebase";
 import { useChallenges } from "../../hooks/useChallenges";
 import { useEliminations } from "../../hooks/useEliminations";
 import { useSeason } from "../../hooks/useSeason";
+import { useSeasonRevision } from "../../hooks/useSeasonRevision";
 import { useTeamAssignments } from "../../hooks/useTeamAssignments";
 import { useTeams } from "../../hooks/useTeams";
 import { Challenge, ChallengeWinActions, Team } from "../../types";
+import { upsertById } from "../../utils/seasonRevision";
 import { getPlayersOnTeam } from "../../utils/teamUtils";
 import { EmptySlate } from "../Layout";
 import {
@@ -38,6 +40,7 @@ export const CreateChallenge = () => {
   const { data: challenges } = useChallenges(season?.id);
   const { data: teams } = useTeams(season?.id);
   const { data: teamAssignments } = useTeamAssignments(season?.id);
+  const { stampFor } = useSeasonRevision();
 
   const form = useForm<Challenge>({
     initialValues: {
@@ -117,8 +120,20 @@ export const CreateChallenge = () => {
     if (_validate.hasErrors) return;
 
     try {
-      const ref = doc(db, `challenges/${season?.id}`);
-      await setDoc(ref, { [values.id]: values }, { merge: true });
+      // The revision stamp rides in the same batch as the write it describes,
+      // so an admin correction can never leave a derived cache looking fresh.
+      const batch = writeBatch(db);
+      batch.set(
+        doc(db, `challenges/${season?.id}`),
+        { [values.id]: values },
+        { merge: true },
+      );
+      batch.set(
+        doc(db, "seasons", season!.id),
+        stampFor({ challenges: upsertById(challenges, values) }),
+        { merge: true },
+      );
+      await batch.commit();
 
       notifications.show({
         title: "Challenge created successfully",

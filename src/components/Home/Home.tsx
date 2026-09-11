@@ -14,6 +14,7 @@ import { BrandEmblem } from "../Brand";
 import { Board, RevealStrip } from "../Layout";
 import classes from "./Home.module.css";
 import { HomeDraftExample } from "./HomeDraftExample";
+import { HomePool } from "./HomePool";
 import { HomeResumeDrafts } from "./HomeResumeDrafts";
 import { HomeTradeExample } from "./HomeTradeExample";
 
@@ -54,7 +55,15 @@ const EXAMPLE_BETS = [
 /**
  * The example standings are fictional: made-up participants and points,
  * no castaways, no season, no episode. The homepage never shows a real
- * competition's results.
+ * COMPETITION's results, and that is the whole of the claim now.
+ *
+ * The season pool module in the hero does show real results once the season
+ * starts, deliberately (KD6). Two things keep that narrow rather than making
+ * the rule above a dead letter: a pool has no per-viewer episode boundary to
+ * violate because its entrants are watching live by definition (KD7), and
+ * what it may show is bounded to handles, totals and positions as of the
+ * newest aired episode, with no castaway name and no elimination state
+ * (R17, R25). A competition's standings stay off every public surface.
  */
 
 /** Fictional per-episode points for the reveal-strip example (13 episodes). */
@@ -130,7 +139,16 @@ export const Home = () => {
               </Button>
             </div>
           </div>
-          <BrandEmblem height={240} className={classes.emblem} />
+          {/*
+            The season pool, composed into the first viewport beside the
+            product identity and the start path rather than stacked above them
+            (KD6, R20). It renders the emblem in its own place when there is no
+            pool, or when the display_mode lever has hidden it, so the hero is
+            exactly what it was before this module existed.
+          */}
+          <HomePool
+            fallback={<BrandEmblem height={240} className={classes.emblem} />}
+          />
         </div>
       </section>
 
@@ -226,14 +244,15 @@ export const Home = () => {
           <div className={classes.inner}>
             <div className={classes.head}>
               <h2 id="home-watch" className={classes.h2}>
-                Watch at your own pace
+                Every competition moves at its own pace
               </h2>
               <p className={classes.lead}>
                 Every competition has its own current episode, set by its
                 creator, so groups on different seasons and paces never see each
-                other's results. Scores, standings, and predictions only reflect
-                what your group has actually watched. When you're ready for the
-                next episode, advance the counter and watch the points shift.
+                other's results. Inside a competition, scores, standings, and
+                predictions only reflect what your group has actually watched.
+                When you're ready for the next episode, advance the counter and
+                watch the points shift.
               </p>
             </div>
             <figure className={`${classes.example} ${classes.exampleStrip}`}>

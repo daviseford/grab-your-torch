@@ -153,5 +153,157 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
     }
+
+    // Public season pools.
+    //
+    // Public read is granted by four explicit NON-RECURSIVE matches: the pool
+    // config, its meta documents, a standings summary, and a standings overflow
+    // page. There is deliberately no `{document=**}` wildcard anywhere under
+    // /pools. Rules are additive, so a recursive grant here could not be
+    // narrowed by the entries match below -- every entry would become
+    // world-readable the moment it was written (KTD6).
+    //
+    // Entries are readable only by their owner, before AND after the freeze:
+    // publishing them post-freeze would expose Firebase uids to signed-out
+    // readers, which no collection in this project does. The public leaderboard
+    // carries handles, not uids.
+    //
+    // Nothing under /pools is client-writable except an entrant's own entry.
+    // The config in particular is admin-SDK-only: `.env` holds real admin
+    // credentials, so a browser session carrying the admin claim must not be
+    // able to move the deadline or throw the kill switch (KTD3).
+    match /pools/{poolId} {
+      function poolExists() {
+        return exists(/databases/$(database)/documents/pools/$(poolId));
+      }
+
+      function poolData() {
+        return get(/databases/$(database)/documents/pools/$(poolId)).data;
+      }
+
+      allow read: if true;
+      allow write: if false;
+
+      // Job-written counters (entrant count). Public, never client-written.
+      match /meta/{docId} {
+        allow read: if true;
+        allow write: if false;
+      }
+
+      // Published leaderboard, one document per episode.
+      match /standings/{episodeId} {
+        allow read: if true;
+        allow write: if false;
+
+        // Overflow rows. Its own statement: the parent match is not recursive.
+        match /pages/{pageId} {
+          allow read: if true;
+          allow write: if false;
+        }
+      }
+
+      // One entry per user, keyed by uid. The document id IS the identity, so
+      // there is no inner `uid` field and the shape allowlist forbids one (R6).
+      match /entries/{uid} {
+        function isOwner() {
+          return request.auth != null && request.auth.uid == uid;
+        }
+
+        // 2 to 24 characters from an explicit allowlist, with no leading or
+        // trailing space (R5). An allowlist rather than a length cap because
+        // handles land on a crawlable public leaderboard: this is what keeps a
+        // URL, markup, a control character, a zero-width joiner or a
+        // bidi-override out of that page.
+        function handleIsValid(handle) {
+          return handle is string
+            && handle.size() >= 2
+            && handle.size() <= 24
+            && handle.matches("^[A-Za-z0-9_-][A-Za-z0-9 _-]{0,22}[A-Za-z0-9_-]$");
+        }
+
+        // Shape allowlist, not just field checks. Without hasOnly an entrant
+        // could write a `rank` or `total` field a future reader might trust, or
+        // an arbitrary payload up to 1 MiB.
+        function entryIsValid(pool) {
+          return request.resource.data.keys().hasOnly([
+              "id", "pool_id", "season_id", "handle",
+              "picks", "prop_bets", "created_at", "updated_at"
+            ])
+            && request.resource.data.keys().hasAll([
+              "id", "pool_id", "season_id", "handle",
+              "picks", "prop_bets", "created_at", "updated_at"
+            ])
+            && request.resource.data.id == "pool_entry_" + uid
+            && request.resource.data.pool_id == poolId
+            && request.resource.data.season_id == pool.season_id
+            && handleIsValid(request.resource.data.handle)
+            // Picks are matched as whole {castaway_id, full_name} pairs, never
+            // by id alone: the remap audit treats the stored name as ground
+            // truth, so a deliberately disagreeing pair must not be storable
+            // (R23). Roster ids are unique, so pair-matching plus the set-size
+            // check is what rules out duplicates.
+            && request.resource.data.picks is list
+            && request.resource.data.picks.size() == pool.picks_per_entry
+            && request.resource.data.picks.toSet().size() == request.resource.data.picks.size()
+            && pool.roster.hasAll(request.resource.data.picks)
+            // Rules cannot read the TypeScript prop bet question list, so the
+            // pool config mirrors the keys and is the authority (KTD3).
+            && request.resource.data.prop_bets is map
+            && request.resource.data.prop_bets.keys().hasOnly(pool.prop_bet_keys)
+            && request.resource.data.prop_bets.values().hasOnly(pool.prop_bet_answers)
+            // Pinned to request.time (KTD4): a client-authored timestamp is
+            // worthless and browser clocks are not trustworthy. The client must
+            // send serverTimestamp().
+            && request.resource.data.updated_at == request.time;
+        }
+
+        // `status` is the kill switch: it closes the pool with no deploy and no
+        // green CI run, so every write condition consumes it (R12).
+        function poolIsOpen(pool) {
+          return pool.status == "open";
+        }
+
+        function beforeFreeze(pool) {
+          return pool.freeze_at is timestamp && request.time < pool.freeze_at;
+        }
+
+        allow read: if isOwner();
+
+        // Create, update and delete are separate statements on purpose: a
+        // clause referencing `resource.data` evaluates against null on create,
+        // and `request.resource` is null on delete.
+        allow create: if isOwner()
+          && poolExists()
+          && poolIsOpen(poolData())
+          && beforeFreeze(poolData())
+          && entryIsValid(poolData())
+          && request.resource.data.created_at == request.time;
+
+        // Full edit, only while the pool is open and unfrozen.
+        allow update: if isOwner()
+          && poolExists()
+          && poolIsOpen(poolData())
+          && beforeFreeze(poolData())
+          && entryIsValid(poolData())
+          && request.resource.data.created_at == resource.data.created_at;
+
+        // The handle stays editable after the freeze; nothing else does. The
+        // affectedKeys allowlist is what makes a pick change riding along on a
+        // rename fail (R5, R9, AE6).
+        allow update: if isOwner()
+          && poolExists()
+          && poolIsOpen(poolData())
+          && request.resource.data.diff(resource.data)
+            .affectedKeys().hasOnly(["handle", "updated_at"])
+          && handleIsValid(request.resource.data.handle)
+          && request.resource.data.updated_at == request.time;
+
+        // Withdrawal closes with the freeze (R9).
+        allow delete: if isOwner()
+          && poolExists()
+          && poolIsOpen(poolData())
+          && beforeFreeze(poolData());
+      }
+    }
   }
 }

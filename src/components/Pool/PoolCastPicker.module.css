@@ -1,0 +1,70 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-sm);
+}
+
+/* Four across, then three, then the compact two-column treatment at phone
+   width, where square portraits keep the first row's control on the first
+   screen. Carried over from the draft cast grid, which is the only thing
+   this picker borrows from it. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  @media (max-width: $mantine-breakpoint-md) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+}
+
+.grid li {
+  display: flex;
+  min-width: 0;
+}
+
+.grid li > * {
+  flex: 1;
+}
+
+/* The counter sits above the grid and stays visible while the grid scrolls
+   past it, so the pick count is readable at 375px without scrolling back to
+   the top of a 21-card list. Offset by the app shell header, which is fixed. */
+.counter {
+  position: sticky;
+  top: var(--app-shell-header-offset, 0px);
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 8px 0;
+  background: var(--mantine-color-body);
+  border-bottom: 1px solid var(--gyt-rule);
+}
+
+.count {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: var(--mantine-font-size-sm);
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+}
+
+.countNote {
+  min-width: 0;
+  font-size: var(--mantine-font-size-sm);
+  color: var(--mantine-color-dimmed);
+}
+
+.complete {
+  color: var(--mantine-color-blue-6);
+}
