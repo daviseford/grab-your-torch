@@ -412,7 +412,14 @@ export const SingleCompetition = () => {
                 <SectionHead
                   id="rosters-h"
                   title="Rosters"
-                  note="Castaways by participant. Accepted trades land at the next episode reveal"
+                  note={
+                    competition.finished
+                      ? "Castaways by participant"
+                      : competition.current_episode === null ||
+                          competition.current_episode === 0
+                        ? "Castaways by participant. Accepted trades take effect immediately"
+                        : "Castaways by participant. Accepted trades land at the next episode reveal"
+                  }
                 />
                 <PlayerGroupGrid />
               </section>
