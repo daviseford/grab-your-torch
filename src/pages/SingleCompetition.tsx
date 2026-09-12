@@ -370,11 +370,7 @@ export const SingleCompetition = () => {
       <ParticipantScoreboard />
 
       <Box ref={tabsRef} className={classes.tabsAnchor}>
-        <Tabs
-          value={activeTab}
-          onChange={handleTabChange}
-          className={classes.tabs}
-        >
+        <Tabs value={activeTab} onChange={handleTabChange} color="signal.5">
           <Tabs.List
             aria-label="Competition sections"
             className={classes.tabsList}
