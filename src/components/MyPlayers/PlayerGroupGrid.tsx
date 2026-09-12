@@ -19,6 +19,7 @@ import { useCompetitionMeta } from "../../hooks/useCompetitionMeta";
 import { useEvents } from "../../hooks/useEvents";
 import { useUser } from "../../hooks/useUser";
 import { CastawayId, Competition, Player, SlimUser } from "../../types";
+import { rosterGenderBreakdown } from "../../utils/castawayBio";
 import { getParticipantName } from "../../utils/misc";
 import { TEAM_NAME_MAX_LENGTH, updateTeamName } from "../../utils/teamNames";
 import {
@@ -28,6 +29,7 @@ import {
   UpcomingMove,
 } from "../../utils/tradeUtils";
 import { StatusBadge } from "../Layout";
+import { CastawayBioButton } from "../Layout/CastawayBioButton";
 import classes from "./PlayerGroupGrid.module.css";
 
 const initials = (name: string) =>
@@ -148,7 +150,10 @@ const RosterCastaway = ({
         <div className={classes.castawayName} title={player.full_name}>
           {player.full_name}
         </div>
-        <div className={classes.castawayMeta}>{meta}</div>
+        <div className={classes.castawayMeta}>
+          {meta}
+          <CastawayBioButton player={player} />
+        </div>
       </div>
     </div>
   );
@@ -268,6 +273,11 @@ const TeamCard = ({
                 : " · trade pending"
               : ""}
           </span>
+          {numOnRoster > 0 && (
+            <span className={classes.groupSub}>
+              {rosterGenderBreakdown(userSurvivors)}
+            </span>
+          )}
         </div>
         <div className={classes.groupAside}>
           {canEditTeamName && (

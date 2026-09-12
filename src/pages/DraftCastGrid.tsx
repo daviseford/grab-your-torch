@@ -1,5 +1,6 @@
 import { Badge, Button } from "@mantine/core";
 import { CastawayCard, StatusBadge } from "../components/Layout";
+import { CastawayBioButton } from "../components/Layout/CastawayBioButton";
 import type { DraftPick, Player } from "../types";
 import classes from "./Draft.module.css";
 
@@ -113,7 +114,10 @@ export const DraftCastGrid = ({
                 ) : undefined
               }
               actions={
-                <div className={classes.castActions}>{draftAction(player)}</div>
+                <div className={classes.castActions}>
+                  <CastawayBioButton player={player} />
+                  {draftAction(player)}
+                </div>
               }
             />
           </li>
