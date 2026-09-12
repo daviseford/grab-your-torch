@@ -15,9 +15,9 @@ export const CastawayBioButton = ({ player }: { player: Player }) => {
     ["Gender", bio.gender],
     ["Hometown", bio.hometown],
     ["Residence at filming", bio.residence],
-    ["Birthplace", bio.birthplace ?? "Not published in our sources"],
-    ["Height", bio.height ?? "Not published in our sources"],
-    ["Weight", bio.weight ?? "Not published in our sources"],
+    ["Birthplace", bio.birthplace],
+    ["Height", bio.height],
+    ["Weight", bio.weight],
   ];
 
   return (
