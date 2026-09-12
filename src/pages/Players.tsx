@@ -1,22 +1,7 @@
-import { SimpleGrid } from "@mantine/core";
-import { useMemo, type ReactNode } from "react";
-import { CastawayCard } from "../components/Layout";
+import { useMemo } from "react";
+import { CastGallery } from "../components/Layout";
 import { useSeason } from "../hooks/useSeason";
-import { Player } from "../types";
 import { sortCastAlphabetically } from "../utils/castOrder";
-
-/** Age and hometown on one line, profession on the next, where present. */
-const castawayMeta = (player: Player): ReactNode => {
-  const line = [player.age, player.hometown].filter(Boolean).join(" · ");
-  if (!line && !player.profession) return undefined;
-  return (
-    <>
-      {line && <span>{line}</span>}
-      {line && player.profession && <br />}
-      {player.profession && <span>{player.profession}</span>}
-    </>
-  );
-};
 
 export const Players = () => {
   const { data: season } = useSeason();
@@ -31,33 +16,6 @@ export const Players = () => {
   );
 
   if (!season) return null;
-  const photoGallery = cast.flatMap((player) =>
-    player.img
-      ? [
-          {
-            id: player.castaway_id,
-            name: player.full_name,
-            img: player.img,
-            meta: castawayMeta(player),
-          },
-        ]
-      : [],
-  );
 
-  return (
-    <SimpleGrid
-      cols={{ base: 2, sm: 3, md: 6 }}
-      spacing={{ base: "sm", sm: "md" }}
-    >
-      {cast.map((player) => (
-        <CastawayCard
-          key={player.castaway_id}
-          name={player.full_name}
-          img={player.img}
-          meta={castawayMeta(player)}
-          photoGallery={photoGallery}
-        />
-      ))}
-    </SimpleGrid>
-  );
+  return <CastGallery cast={cast} />;
 };

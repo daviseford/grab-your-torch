@@ -1,0 +1,26 @@
+/* The cast at a bounded slate size, matching the pool picker: a wide desktop
+   adds columns rather than enlarging portraits past their source resolution.
+   Equal rows keep names and bios aligned across the whole cast. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  grid-auto-rows: 1fr;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+}
+
+.grid li {
+  display: flex;
+  min-width: 0;
+}
+
+.grid li > * {
+  flex: 1;
+}

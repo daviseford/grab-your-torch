@@ -1,6 +1,7 @@
 import { useReducedMotion } from "@mantine/hooks";
 import { useEffect, useRef } from "react";
 import type { DraftPick, Player, SlimUser } from "../types";
+import { snakePickNumber } from "../utils/draftRealtime";
 import classes from "./Draft.module.css";
 import { firstNameOf, initialOf, participantName } from "./DraftNames";
 
@@ -29,8 +30,9 @@ type DraftBoardProps = {
 /**
  * The draft board: rounds by participants, filling live from realtime
  * state. Your column carries the League Blue bar, the pick just made is
- * marked in Ember, and the cell on the clock pulses Signal Cyan. Pick order
- * is round-robin, so pick n lands in column (n - 1) mod participants.
+ * marked in Ember, and the cell on the clock pulses Signal Cyan. The draft
+ * snakes, so odd rounds fill left to right and even rounds fill right to
+ * left.
  */
 export const DraftBoard = ({
   columns,
@@ -140,7 +142,11 @@ export const DraftBoard = ({
                 R{round}
               </div>
               {columns.map((user, columnIndex) => {
-                const order = roundIndex * columns.length + columnIndex + 1;
+                const order = snakePickNumber(
+                  roundIndex,
+                  columnIndex,
+                  columns.length,
+                );
                 if (order > totalPicks) {
                   return (
                     <div

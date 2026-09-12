@@ -1,14 +1,11 @@
 import {
   Alert,
   Button,
-  Center,
   CopyButton,
-  Image,
   Stack,
   Switch,
   Text,
   TextInput,
-  Title,
 } from "@mantine/core";
 import { isNotEmpty, useForm } from "@mantine/form";
 import { modals } from "@mantine/modals";
@@ -25,6 +22,7 @@ import { DraftOrderReveal } from "../components/DraftOrderReveal";
 import { DraftTable } from "../components/DraftTable";
 import {
   Board,
+  CastGallery,
   Notice,
   StatusBadge,
   useBugContext,
@@ -44,7 +42,6 @@ import {
   CastawayId,
   Competition,
   Draft,
-  Player,
   PropBetsEntry,
   PropBetsFormData,
   SlimUser,
@@ -55,6 +52,7 @@ import {
   buildPickOrderUidMap,
   buildTurnsMap,
   planDraftPicks,
+  snakePickIndex,
 } from "../utils/draftRealtime";
 import { recordRecentDraft, removeRecentDraft } from "../utils/recentDrafts";
 import classes from "./Draft.module.css";
@@ -461,42 +459,6 @@ export const DraftComponent = () => {
     !draft.finished &&
     draft.current_picker?.uid === slimUser?.uid;
 
-  const openPlayerDetails = (p: Player) => {
-    modals.open({
-      withCloseButton: false,
-      children: (
-        <Stack>
-          <Center>
-            <Title order={3}>{p.full_name}</Title>
-          </Center>
-          <Center>
-            <Image
-              src={p.img}
-              alt={p.full_name}
-              radius="md"
-              fit="cover"
-              maw={320}
-              style={{
-                objectPosition: "center top",
-                aspectRatio: "1 / 1",
-              }}
-            />
-          </Center>
-          {p.description && (
-            <Text ta="center" c="dimmed">
-              {p.description.split(" | ").map((x, i) => (
-                <span key={i}>
-                  {x}
-                  <br />
-                </span>
-              ))}
-            </Text>
-          )}
-        </Stack>
-      ),
-    });
-  };
-
   // Season data lists the cast in boot order; the grid must not spoil it.
   const cast = useMemo(
     () =>
@@ -535,9 +497,9 @@ export const DraftComponent = () => {
 
   const activeStep = phase === "drafting" ? 0 : phase === "prop-bets" ? 1 : 2;
 
-  // Board geometry. Pick order is round-robin over the shuffled order, so
-  // columns are the pick order once the draft starts and the join order
-  // before. The lobby previews a bounded number of rounds.
+  // Board geometry. The draft snakes over the shuffled order, so columns are
+  // the pick order once the draft starts and the join order before, and even
+  // rounds run back up them. The lobby previews a bounded number of rounds.
   const participants = draft?.participants ?? [];
   const boardColumns = draft?.pick_order?.length
     ? draft.pick_order
@@ -566,7 +528,7 @@ export const DraftComponent = () => {
     : 0;
   const nextPicker =
     draft && draft.current_pick_number < totalPicks
-      ? boardColumns[draft.current_pick_number % columnCount]
+      ? boardColumns[snakePickIndex(draft.current_pick_number + 1, columnCount)]
       : undefined;
   const currentPickerName = draft?.current_picker
     ? participantName(draft.current_picker)
@@ -583,12 +545,13 @@ export const DraftComponent = () => {
         label="Invite link"
         value={window.location.href}
         readOnly
-        size="sm"
+        size="md"
         onFocus={(event) => event.currentTarget.select()}
       />
       <CopyButton value={window.location.href}>
         {({ copied, copy }) => (
           <Button
+            size="md"
             color={copied ? "green" : undefined}
             onClick={copy}
             leftSection={copied ? <IconCheck size={16} /> : undefined}
@@ -690,7 +653,7 @@ export const DraftComponent = () => {
               }
               foot={
                 draft
-                  ? "Columns fill as friends join. Pick order is randomly shuffled when the draft starts. No peeking!"
+                  ? "Columns fill as friends join. Pick order is randomly shuffled when the draft starts, then snakes: it reverses every round. No peeking!"
                   : undefined
               }
             >
@@ -735,7 +698,7 @@ export const DraftComponent = () => {
                   )}
                 </>
               }
-              foot={`Columns fill as friends join. Pick order is randomly shuffled when the draft starts. No peeking!${
+              foot={`Columns fill as friends join. Pick order is randomly shuffled when the draft starts, then snakes: it reverses every round. No peeking!${
                 draft && roundCount > lobbyRounds && participants.length >= 2
                   ? ` Showing ${lobbyRounds} of ${roundCount} rounds.`
                   : ""
@@ -823,6 +786,7 @@ export const DraftComponent = () => {
                 </div>
               )
             }
+            foot="Snake draft: the pick order reverses every round, so whoever picks last in one round picks first in the next."
           >
             <DraftBoard
               columns={boardColumns}
@@ -860,7 +824,6 @@ export const DraftComponent = () => {
             )}
             freshOrder={freshOrder}
             onDraft={draftPlayer}
-            onDetails={openPlayerDetails}
             seasonName={season.name}
           />
 
@@ -890,6 +853,12 @@ export const DraftComponent = () => {
           />
 
           <DraftSteps active={activeStep} />
+
+          {/* The questions name castaways, so the cast has to be on the page
+           * to answer them. Read-only: portraits open the photo viewer. */}
+          <Board title="The cast" titleAs="h2">
+            <CastGallery cast={cast} />
+          </Board>
 
           <Board title="Prop bet questions" titleAs="h2">
             <PropBetsForm
@@ -959,21 +928,10 @@ export const DraftComponent = () => {
               title="Prop Bets"
               subtitle={`${draft?.prop_bets?.length || 0} of ${draft?.participants?.length} submitted`}
               titleAs="h2"
-              dense
-              flush
-              scroll
             >
               <PostDraftPropBetTable />
             </Board>
           )}
-
-          <DraftTable
-            draft_picks={draft!.draft_picks}
-            participants={draft!.participants}
-            players={season.players}
-            totalPicks={totalPicks}
-            currentUid={slimUser?.uid}
-          />
 
           <DraftScoringReference />
         </>

@@ -90,6 +90,10 @@ const HOW_IT_WORKS = [
     text: "Pick order is randomly shuffled when the draft starts. No peeking!",
   },
   {
+    title: "Snake Draft",
+    text: "The order reverses every round, so picking last in one round means picking first in the next.",
+  },
+  {
     title: "Draft Players",
     text: "Take turns picking Survivor contestants for your team.",
   },

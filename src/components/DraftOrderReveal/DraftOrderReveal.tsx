@@ -164,7 +164,11 @@ export const DraftOrderReveal = ({
       <Title order={1} id="draft-reveal-title" className={classes.title}>
         Shuffling draft order...
       </Title>
-      <p className={classes.sub}>Who picks first? Let's find out!</p>
+      <p className={classes.sub}>
+        {allLocked
+          ? "Snake draft: the order reverses every round."
+          : "Who picks first? Let's find out!"}
+      </p>
 
       <ol className={classes.slots} aria-live="polite">
         {pickOrder.map((user, index) => {
