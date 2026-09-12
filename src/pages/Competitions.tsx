@@ -239,6 +239,9 @@ export const Competitions = () => {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [seasonFilter, setSeasonFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("all");
+  // Only an admin sees competitions they are not in, so only an admin has
+  // anything to narrow back down to their own.
+  const [scopeFilter, setScopeFilter] = useState("all");
 
   const handleSort = (field: SortField) => {
     if (field === sortField) {
@@ -266,9 +269,14 @@ export const Competitions = () => {
       if (seasonFilter && c.season_num !== Number(seasonFilter)) return false;
       if (statusFilter === "complete" && !c.finished) return false;
       if (statusFilter === "in_progress" && c.finished) return false;
+      if (
+        scopeFilter === "mine" &&
+        !(slimUser && c.participant_uids?.includes(slimUser.uid))
+      )
+        return false;
       return true;
     });
-  }, [_comps, seasonFilter, statusFilter]);
+  }, [_comps, seasonFilter, statusFilter, scopeFilter, slimUser]);
 
   const sorted = useMemo(() => {
     const compareFn = (a: Competition, b: Competition) => {
@@ -302,10 +310,12 @@ export const Competitions = () => {
       .map((p) => comp.team_names?.[p.uid] ?? p.displayName ?? p.email)
       .join(", ");
 
-  const hasFilters = !!seasonFilter || statusFilter !== "all";
+  const hasFilters =
+    !!seasonFilter || statusFilter !== "all" || scopeFilter !== "all";
   const clearFilters = () => {
     setSeasonFilter(null);
     setStatusFilter("all");
+    setScopeFilter("all");
   };
 
   useBugContext("Competitions");
@@ -444,6 +454,23 @@ export const Competitions = () => {
               size="sm"
               className={classes.seasonSelect}
             />
+            {slimUser.isAdmin && (
+              <SegmentedControl
+                size="sm"
+                aria-label="Filter by who is playing"
+                value={scopeFilter}
+                onChange={setScopeFilter}
+                classNames={{
+                  root: classes.segmented,
+                  indicator: classes.segmentedIndicator,
+                  label: classes.segmentedLabel,
+                }}
+                data={[
+                  { label: "All competitions", value: "all" },
+                  { label: "My competitions", value: "mine" },
+                ]}
+              />
+            )}
             <SegmentedControl
               size="sm"
               aria-label="Filter by status"
