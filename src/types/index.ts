@@ -94,6 +94,7 @@ export type Player<
   age?: number;
   profession?: string;
   hometown?: string;
+  gender?: string;
   previousSeasons?: number[];
   bio?: string;
   nickname?: string;

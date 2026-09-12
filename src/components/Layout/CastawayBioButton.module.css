@@ -1,0 +1,21 @@
+.facts {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+}
+
+.fact {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: 12px;
+  font-size: var(--mantine-font-size-sm);
+  overflow-wrap: anywhere;
+
+  dt {
+    color: var(--mantine-color-dimmed);
+  }
+
+  dd {
+    margin: 0;
+  }
+}

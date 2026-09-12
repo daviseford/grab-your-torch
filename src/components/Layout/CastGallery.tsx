@@ -1,5 +1,6 @@
 import { useMemo, type ReactNode } from "react";
 import type { Player } from "../../types";
+import { CastawayBioButton } from "./CastawayBioButton";
 import { CastawayCard } from "./CastawayCard";
 import classes from "./CastGallery.module.css";
 
@@ -52,6 +53,7 @@ export const CastGallery = ({ cast }: CastGalleryProps) => {
             name={player.full_name}
             img={player.img}
             meta={castawayMeta(player)}
+            actions={<CastawayBioButton player={player} />}
             compact
             photoGallery={photoGallery}
           />
