@@ -3,7 +3,6 @@ import { useMediaQuery } from "@mantine/hooks";
 import { CastawayCard, StatusBadge } from "../components/Layout";
 import type { DraftPick, Player } from "../types";
 import classes from "./Draft.module.css";
-import { firstNameOf } from "./DraftNames";
 
 type DraftCastGridProps = {
   players: Player[];
@@ -14,7 +13,6 @@ type DraftCastGridProps = {
   /** The pick just made carries the Ember mark. */
   freshOrder?: number;
   onDraft: (player: Player) => void;
-  onDetails: (player: Player) => void;
   seasonName: string;
 };
 
@@ -44,7 +42,6 @@ export const DraftCastGrid = ({
   canDraft,
   freshOrder,
   onDraft,
-  onDetails,
   seasonName,
 }: DraftCastGridProps) => {
   const pickByCastaway = new Map(picks.map((pick) => [pick.castaway_id, pick]));
@@ -94,16 +91,6 @@ export const DraftCastGrid = ({
         const pick = pickByCastaway.get(player.castaway_id);
         const isMine = pick?.user_uid === viewerUid;
         const isFresh = pick !== undefined && pick.order === freshOrder;
-        const details = player.description ? (
-          <Button
-            size="compact-xs"
-            variant="subtle"
-            color="gray"
-            onClick={() => onDetails(player)}
-          >
-            About {firstNameOf(player.full_name)}
-          </Button>
-        ) : null;
         return (
           <li key={player.castaway_id}>
             <CastawayCard
@@ -130,10 +117,7 @@ export const DraftCastGrid = ({
                 ) : undefined
               }
               actions={
-                <div className={classes.castActions}>
-                  {draftAction(player)}
-                  {details}
-                </div>
+                <div className={classes.castActions}>{draftAction(player)}</div>
               }
             />
           </li>

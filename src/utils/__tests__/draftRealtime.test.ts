@@ -6,6 +6,8 @@ import {
   buildTurnsMap,
   normalizeDraft,
   planDraftPicks,
+  snakePickIndex,
+  snakePickNumber,
 } from "../draftRealtime";
 
 const userA = {
@@ -19,6 +21,13 @@ const userB = {
   uid: "user_b",
   email: "b@example.com",
   displayName: "B",
+  isAdmin: false,
+} satisfies SlimUser;
+
+const userC = {
+  uid: "user_c",
+  email: "c@example.com",
+  displayName: "C",
   isAdmin: false,
 } satisfies SlimUser;
 
@@ -59,13 +68,24 @@ describe("planDraftPicks", () => {
 });
 
 describe("draftRealtime", () => {
-  it("builds deterministic turn assignments", () => {
+  it("builds deterministic turn assignments that snake", () => {
     expect(buildTurnsMap([userA, userB], 5)).toEqual({
       "1": "user_a",
       "2": "user_b",
-      "3": "user_a",
-      "4": "user_b",
+      "3": "user_b",
+      "4": "user_a",
       "5": "user_a",
+    });
+  });
+
+  it("snakes three participants across rounds", () => {
+    expect(buildTurnsMap([userA, userB, userC], 6)).toEqual({
+      "1": "user_a",
+      "2": "user_b",
+      "3": "user_c",
+      "4": "user_c",
+      "5": "user_b",
+      "6": "user_a",
     });
   });
 
@@ -125,5 +145,25 @@ describe("draftRealtime", () => {
     expect(draft?.current_picker?.uid).toBe(userB.uid);
     expect(draft?.draft_picks).toHaveLength(1);
     expect(draft?.prop_bets).toHaveLength(1);
+  });
+});
+
+describe("snake ordering", () => {
+  it("runs odd rounds down the order and even rounds back up it", () => {
+    const columns = [1, 2, 3, 4, 5, 6].map((pick) => snakePickIndex(pick, 3));
+    expect(columns).toEqual([0, 1, 2, 2, 1, 0]);
+  });
+
+  it("keeps a solo participant on every pick", () => {
+    expect(snakePickIndex(1, 1)).toBe(0);
+    expect(snakePickIndex(2, 1)).toBe(0);
+  });
+
+  it("inverts cleanly, so board cells and turns agree", () => {
+    for (let pick = 1; pick <= 12; pick++) {
+      const roundIndex = Math.floor((pick - 1) / 4);
+      const columnIndex = snakePickIndex(pick, 4);
+      expect(snakePickNumber(roundIndex, columnIndex, 4)).toBe(pick);
+    }
   });
 });

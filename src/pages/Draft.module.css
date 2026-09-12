@@ -193,10 +193,15 @@
 
 /* ---------- Draft board ---------- */
 
+/* Horizontal panning stays in the board, but a vertical wheel over it has to
+ * reach the page: `overscroll-behavior: contain` on both axes blocked chaining
+ * even in the axis the board cannot scroll, so the board swallowed every
+ * scroll aimed at the cast grid below it. */
 .boardScroll {
   position: relative;
-  overflow: auto;
-  overscroll-behavior: contain;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
   scrollbar-width: thin;
 }
 
@@ -206,6 +211,7 @@
 @media (max-width: $mantine-breakpoint-xs) {
   .boardWindowed {
     max-height: min(30vh, 240px);
+    overflow-y: auto;
   }
 }
 
@@ -586,9 +592,12 @@
   }
 }
 
+/* Four across on a laptop, and more on a wide desktop rather than four
+ * blown-up portraits: the cast photos are roughly 400 px wide, so a track
+ * near 300 px keeps them crisp at every width. */
 .castGrid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(288px, 1fr));
   gap: 12px;
   margin: 0;
   padding: 0;
@@ -802,11 +811,15 @@
 
 .howSteps {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: var(--mantine-spacing-md);
   margin: 0;
   padding: 0;
   list-style: none;
+
+  @media (max-width: $mantine-breakpoint-md) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 
   @media (max-width: $mantine-breakpoint-sm) {
     grid-template-columns: repeat(2, minmax(0, 1fr));

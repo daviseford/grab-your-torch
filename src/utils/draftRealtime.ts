@@ -97,6 +97,37 @@ export function planDraftPicks(
   return { totalPicks, picksEach, undrafted: castCount - totalPicks };
 }
 
+/**
+ * Column (0-based, in the shuffled pick order) that owns a 1-based pick
+ * number. The draft snakes: odd rounds run down the order, even rounds run
+ * back up it, so whoever picks last in one round picks first in the next.
+ */
+export function snakePickIndex(
+  pickNumber: number,
+  participantCount: number,
+): number {
+  if (participantCount <= 0) return 0;
+  const roundIndex = Math.floor((pickNumber - 1) / participantCount);
+  const slot = (pickNumber - 1) % participantCount;
+  return roundIndex % 2 === 0 ? slot : participantCount - 1 - slot;
+}
+
+/**
+ * The 1-based pick number sitting in a board cell: the inverse of
+ * {@link snakePickIndex}, for rendering rounds as rows and the pick order as
+ * columns.
+ */
+export function snakePickNumber(
+  roundIndex: number,
+  columnIndex: number,
+  participantCount: number,
+): number {
+  if (participantCount <= 0) return 0;
+  const slot =
+    roundIndex % 2 === 0 ? columnIndex : participantCount - 1 - columnIndex;
+  return roundIndex * participantCount + slot + 1;
+}
+
 export function buildTurnsMap(
   participants: SlimUser[],
   totalPlayers: number,
@@ -106,7 +137,7 @@ export function buildTurnsMap(
   return Object.fromEntries(
     Array.from({ length: totalPlayers }, (_, index) => [
       String(index + 1),
-      participants[index % participants.length].uid,
+      participants[snakePickIndex(index + 1, participants.length)].uid,
     ]),
   );
 }
@@ -140,6 +171,10 @@ export function normalizeDraft(raw?: RealtimeDraft | null): Draft | undefined {
   const started = raw.state?.started ?? raw.started ?? false;
   const finished = raw.state?.finished ?? raw.finished ?? false;
 
+  // Every draft started since the lobby writes a `turns` map, which is also
+  // what the RTDB rules check. The modulo fallback only covers drafts saved
+  // before that map existed, and those ran straight round-robin, so it stays
+  // round-robin rather than snaking their order mid-draft.
   const turnUid =
     raw.turns?.[String(currentPickNumber)] ??
     (started && !finished && pickOrder.length > 0 && currentPickNumber > 0
