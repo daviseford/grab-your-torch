@@ -54,13 +54,21 @@
   margin: 0;
   padding: 0;
   list-style: none;
+
+  /* Stacked, an answer sits directly above its pickers, so the groups need
+     more air between them than the pair has inside it. */
+  @media (max-width: $mantine-breakpoint-xs) {
+    gap: 12px;
+  }
 }
 
 /* Answer and the people who chose it on one row, so agreement reads down the
    left edge. The two stack under 36em, where two columns would wrap both. */
+/* A fixed first track rather than a fraction: split 1fr/1.4fr, a wide desktop
+   pushes the pickers half a screen away from the answer they belong to. */
 .answer {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  grid-template-columns: minmax(0, 20rem) minmax(0, 1fr);
   align-items: baseline;
   gap: 2px var(--mantine-spacing-sm);
   padding: 4px 0;
