@@ -22,6 +22,7 @@ import { DraftOrderReveal } from "../components/DraftOrderReveal";
 import { DraftTable } from "../components/DraftTable";
 import {
   Board,
+  CastGallery,
   Notice,
   StatusBadge,
   useBugContext,
@@ -853,6 +854,12 @@ export const DraftComponent = () => {
 
           <DraftSteps active={activeStep} />
 
+          {/* The questions name castaways, so the cast has to be on the page
+           * to answer them. Read-only: portraits open the photo viewer. */}
+          <Board title="The cast" titleAs="h2">
+            <CastGallery cast={cast} />
+          </Board>
+
           <Board title="Prop bet questions" titleAs="h2">
             <PropBetsForm
               cast={season.players}
@@ -921,21 +928,10 @@ export const DraftComponent = () => {
               title="Prop Bets"
               subtitle={`${draft?.prop_bets?.length || 0} of ${draft?.participants?.length} submitted`}
               titleAs="h2"
-              dense
-              flush
-              scroll
             >
               <PostDraftPropBetTable />
             </Board>
           )}
-
-          <DraftTable
-            draft_picks={draft!.draft_picks}
-            participants={draft!.participants}
-            players={season.players}
-            totalPicks={totalPicks}
-            currentUid={slimUser?.uid}
-          />
 
           <DraftScoringReference />
         </>

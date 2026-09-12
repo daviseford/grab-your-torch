@@ -8,6 +8,7 @@ import {
 } from "../../data/propbets";
 import type { CastawayLookup, PropBetsFormData } from "../../types";
 import classes from "./PropBetsForm.module.css";
+import { PropBetHelp } from "./propBetHelp";
 import {
   buildPropBetOptions,
   countAnsweredPropBets,
@@ -96,12 +97,17 @@ export const PropBetsForm = ({
       <div className={classes.formGrid}>
         {PropBetQuestionKeys.map((key) => {
           const question = PropBetsQuestions[key];
+          const help = PropBetHelp[key];
           return (
             <Select
               key={key}
               required
               label={question.description}
-              description={question.point_value + " points"}
+              description={
+                help
+                  ? `${question.point_value} points · ${help}`
+                  : `${question.point_value} points`
+              }
               placeholder="Pick one"
               data={
                 question.answer_type === "boolean"

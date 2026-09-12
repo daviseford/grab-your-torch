@@ -1,0 +1,111 @@
+/* One block per question, answers grouped by who picked what. The matrix this
+   replaced ran one column per question, so it never fit and truncated the
+   question labels; grouped down the page, it reads at 375px unscrolled. */
+.questions {
+  display: grid;
+  gap: var(--mantine-spacing-md);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.question {
+  display: grid;
+  gap: 6px;
+  padding-top: var(--mantine-spacing-sm);
+  border-top: 1px solid var(--gyt-rule);
+}
+
+.question:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.questionHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--mantine-spacing-sm);
+}
+
+.questionTitle {
+  margin: 0;
+  min-width: 0;
+  font-family: var(--mantine-headings-font-family);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+}
+
+.points {
+  flex-shrink: 0;
+  font-family: var(--mantine-headings-font-family);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+
+.answers {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Answer and the people who chose it on one row, so agreement reads down the
+   left edge. The two stack under 36em, where two columns would wrap both. */
+.answer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  align-items: baseline;
+  gap: 2px var(--mantine-spacing-sm);
+  padding: 4px 0;
+  font-size: var(--mantine-font-size-sm);
+
+  @media (max-width: $mantine-breakpoint-xs) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.answerName {
+  min-width: 0;
+  font-weight: 600;
+}
+
+/* Signal Cyan means yours: the dot marks the answer you picked. */
+.mine {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 7px;
+  border-radius: 50%;
+  vertical-align: middle;
+  background: var(--gyt-signal);
+}
+
+.entrants {
+  min-width: 0;
+  color: var(--mantine-color-dimmed);
+}
+
+.entrantMe {
+  color: var(--mantine-color-text);
+}
+
+.you {
+  color: var(--mantine-color-dimmed);
+}
+
+.answerBlank .answerName {
+  font-weight: 400;
+  font-style: italic;
+  color: var(--mantine-color-dimmed);
+}
+
+.answerBlank .mine {
+  background: var(--gyt-rule-strong);
+}

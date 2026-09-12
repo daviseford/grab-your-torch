@@ -1,5 +1,4 @@
 import { Badge, Button } from "@mantine/core";
-import { useMediaQuery } from "@mantine/hooks";
 import { CastawayCard, StatusBadge } from "../components/Layout";
 import type { DraftPick, Player } from "../types";
 import classes from "./Draft.module.css";
@@ -45,9 +44,6 @@ export const DraftCastGrid = ({
   seasonName,
 }: DraftCastGridProps) => {
   const pickByCastaway = new Map(picks.map((pick) => [pick.castaway_id, pick]));
-  // Two columns at 375 px: square portraits keep the first row's Draft slate
-  // inside the first screen under the board spine.
-  const compact = useMediaQuery("(max-width: 36em)") ?? false;
   const draftAction = (player: Player, inModal = false) => {
     const pick = pickByCastaway.get(player.castaway_id);
     return pick ? (
@@ -98,7 +94,7 @@ export const DraftCastGrid = ({
               img={player.img}
               meta={castMeta(player)}
               picked={isMine}
-              compact={compact}
+              compact
               photoGallery={photoGallery}
               className={[pick && classes.taken, isFresh && classes.fresh]
                 .filter(Boolean)
