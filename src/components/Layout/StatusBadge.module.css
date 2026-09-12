@@ -1,4 +1,5 @@
-.root {
+/* Outrank Mantine's single-class defaults regardless of stylesheet order. */
+.root.root {
   --badge-bg: transparent;
   --badge-color: var(--mantine-color-text);
   --badge-bd: 1px solid transparent;
@@ -7,9 +8,9 @@
   letter-spacing: var(--gyt-label-tracking);
 }
 
-.live {
-  --badge-bg: var(--mantine-color-signal-5);
-  --badge-color: var(--mantine-color-navy-9);
+.root.live {
+  --badge-bg: var(--mantine-color-signal-8);
+  --badge-color: var(--mantine-color-signal-0);
 }
 
 .dot {
@@ -17,40 +18,53 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--mantine-color-navy-9);
+  background: currentColor;
 }
 
-.watch-along {
+.root.watch-along {
   --badge-bg: var(--mantine-color-gold-4);
   --badge-color: var(--mantine-color-navy-9);
 }
 
-.in-progress {
-  --badge-color: var(--mantine-color-text);
-  --badge-bd: 1px solid var(--gyt-rule-strong);
+.root.in-progress {
+  --badge-bg: light-dark(
+    var(--mantine-color-league-0),
+    var(--mantine-color-league-9)
+  );
+  --badge-color: light-dark(
+    var(--mantine-color-league-8),
+    var(--mantine-color-league-2)
+  );
+  --badge-bd: 1px solid currentColor;
 }
 
-.complete {
-  --badge-color: var(--mantine-color-dimmed);
-  --badge-bd: 1px solid var(--gyt-rule-strong);
+.root.complete {
+  --complete-ink: color-mix(
+    in oklch,
+    var(--mantine-color-green-9) 80%,
+    var(--mantine-color-navy-9)
+  );
+  --badge-bg: light-dark(var(--mantine-color-green-0), var(--complete-ink));
+  --badge-color: light-dark(var(--complete-ink), var(--mantine-color-green-0));
+  --badge-bd: 1px solid currentColor;
 }
 
-.pending {
+.root.pending {
   --badge-color: var(--mantine-color-dimmed);
   --badge-bd: 1px dashed var(--gyt-rule-strong);
 }
 
-.season {
+.root.season {
   --badge-bg: var(--mantine-color-navy-9);
   --badge-color: var(--mantine-color-dark-0);
 }
 
-[data-mantine-color-scheme="dark"] .season {
+[data-mantine-color-scheme="dark"] .root.season {
   --badge-bg: var(--mantine-color-league-6);
   --badge-color: var(--mantine-color-white);
 }
 
-.admin {
+.root.admin {
   --badge-bg: var(--mantine-color-ember-6);
   --badge-color: var(--mantine-color-navy-9);
 }

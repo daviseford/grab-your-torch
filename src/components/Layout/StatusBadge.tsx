@@ -30,9 +30,9 @@ const LABELS: Record<StatusKind, string> = {
 };
 
 /**
- * Status slates in the package's vocabulary. Live is the cyan signal (with
- * a dot), watch-along is the gold tape band, complete and pending are
- * outlined, season is a navy plate, admin is the flame.
+ * Status slates in the package's vocabulary. Live is teal with a matching
+ * light label and dot, watch-along is gold, in-progress is blue, and complete
+ * is green. Pending is outlined, season is a navy plate, admin is the flame.
  */
 export const StatusBadge = ({
   kind,

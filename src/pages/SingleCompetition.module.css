@@ -79,10 +79,6 @@
 }
 
 /* The rundown: caps tabs on a hairline, the current one underlined in cyan. */
-.tabs {
-  --tabs-color: var(--mantine-color-signal-5);
-}
-
 .tabsList {
   flex-wrap: nowrap;
   overflow-x: auto;
