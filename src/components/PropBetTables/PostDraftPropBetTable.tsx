@@ -95,9 +95,7 @@ export const PostDraftPropBetTable = () => {
           <li key={key} className={classes.question}>
             <div className={classes.questionHead}>
               <h3 className={classes.questionTitle}>{question.description}</h3>
-              <span className={classes.points}>
-                {question.point_value} pts
-              </span>
+              <span className={classes.points}>{question.point_value} pts</span>
             </div>
             <ul className={classes.answers}>
               {groups.map((group) => {
