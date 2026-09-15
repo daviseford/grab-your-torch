@@ -13,6 +13,20 @@
   --photo-max-height: max(280px, calc(100dvh - 260px));
 }
 
+/* Leave room for the profile block so it starts above the fold. */
+.withBio {
+  --photo-max-height: max(280px, calc(100dvh - 560px));
+  margin-inline: auto;
+}
+
+/* On phones the short photo would pin the profile to a ~190px column and
+   break labels mid-word, so the body takes the full width instead. */
+.bodyWithBio {
+  @media (max-width: 48em) {
+    min-width: calc(100vw - 48px);
+  }
+}
+
 .photo {
   position: absolute;
   inset: 0;
@@ -58,6 +72,12 @@
 
 .action button {
   min-height: 44px;
+}
+
+.profile {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--mantine-color-default-border);
 }
 
 .status {

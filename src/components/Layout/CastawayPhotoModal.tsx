@@ -16,6 +16,8 @@ export type CastawayPhoto = {
   img: string;
   meta?: ReactNode;
   action?: ReactNode;
+  /** Longer profile shown under the controls, so the action stays by the photo. */
+  bio?: ReactNode;
   status?: string;
 };
 
@@ -70,6 +72,7 @@ export const CastawayPhotoModal = ({
       yOffset={12}
       centered
       closeButtonProps={{ "aria-label": "Close photo" }}
+      classNames={{ body: current?.bio ? classes.bodyWithBio : undefined }}
       onKeyDown={(event) => {
         if (!canNavigate || event.altKey || event.ctrlKey || event.metaKey)
           return;
@@ -84,6 +87,7 @@ export const CastawayPhotoModal = ({
           classes.photoFrame,
           (currentMeta || canNavigate || current?.action) &&
             classes.withDetails,
+          current?.bio && classes.withBio,
         ]
           .filter(Boolean)
           .join(" ")}
@@ -130,6 +134,7 @@ export const CastawayPhotoModal = ({
             {current.status}
           </p>
         )}
+        {current?.bio && <div className={classes.profile}>{current.bio}</div>}
       </div>
     </Modal>
   );

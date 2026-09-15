@@ -2,7 +2,7 @@ import { SEASON_51_PLAYERS } from "../../data/season_51";
 import type { CastawayId, Player, Season } from "../../types";
 
 /**
- * Decoration for the entry picker: portraits and cast bios.
+ * Decoration for the entry picker: portraits, meta lines, and preseason bios.
  *
  * The pool configuration document is the authority for WHO is in the pool and
  * for the exact name string an entry submits (KTD3, R23). It carries only
@@ -30,6 +30,8 @@ const CAST_BY_SEASON: Partial<Record<Season["id"], readonly Player[]>> = {
 };
 
 export type PoolCastDetail = {
+  /** The local season row, for the preseason profile in the photo modal. */
+  player: Player;
   img?: string;
   age?: number;
   profession?: string;
@@ -49,6 +51,7 @@ export const buildPoolCastDetails = (
   if (!players) return details;
   for (const player of players) {
     details.set(player.castaway_id, {
+      player,
       img: player.img,
       age: player.age,
       profession: player.profession,

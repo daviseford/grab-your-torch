@@ -1,5 +1,6 @@
 export { Board } from "./Board";
 export { useBugContext } from "./bugContext";
+export { CastawayBioFacts } from "./CastawayBioFacts";
 export { CastawayCard } from "./CastawayCard";
 export { CastGallery } from "./CastGallery";
 export { EmptySlate } from "./EmptySlate";
