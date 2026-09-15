@@ -1,7 +1,7 @@
 import { Button } from "@mantine/core";
 import type { CastawayId, PoolPick } from "../../types";
 import { isPoolPickSelected, nextPoolSwapTarget } from "../../utils/poolPicks";
-import { CastawayCard } from "../Layout";
+import { CastawayBioFacts, CastawayCard } from "../Layout";
 import classes from "./PoolCastPicker.module.css";
 import type { PoolCastDetail } from "./poolCastDetails";
 
@@ -96,6 +96,7 @@ export const PoolCastPicker = ({
         img: detail.img,
         meta: castMeta(detail),
         action: pickButton(castaway, true),
+        bio: <CastawayBioFacts player={detail.player} />,
         status: `${picks.length} of ${limit} picks chosen.${!picked && swapTarget ? ` Picking ${castaway.full_name} replaces ${swapTarget.full_name}.` : ""}`,
       },
     ];
