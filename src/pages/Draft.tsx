@@ -20,6 +20,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { v4 } from "uuid";
 import { saveAuthIntent, type AuthIntent } from "../components/Auth/authIntent";
+import { CastawayAdpNote, type CastSort } from "../components/CastawayAdp";
 import { DraftOrderReveal } from "../components/DraftOrderReveal";
 import { DraftTable } from "../components/DraftTable";
 import {
@@ -36,6 +37,7 @@ import {
   decideJoinContinuation,
   useAuthContinuation,
 } from "../hooks/useAuthContinuation";
+import { useCastawayAdp } from "../hooks/useCastawayAdp";
 import { useCompetition } from "../hooks/useCompetition";
 import { useDraft } from "../hooks/useDraft";
 import { useSeason } from "../hooks/useSeason";
@@ -49,6 +51,13 @@ import {
   SlimUser,
 } from "../types";
 import { trackEvent } from "../utils/analytics";
+import {
+  allDraftsOffered,
+  allDraftsOptInFor,
+  allDraftsOptInKey,
+  sortByAdp,
+  type AllDraftsOptIn,
+} from "../utils/castawayAdp";
 import { sortCastAlphabetically } from "../utils/castOrder";
 import {
   isRepeatTurn,
@@ -476,6 +485,45 @@ export const DraftComponent = () => {
     [season],
   );
 
+  // Pre-premiere ADP is the default: those drafts were saved before anything
+  // aired. All-drafts ADP can reflect results, so it is not even fetched
+  // until the viewer confirms the spoiler warning, and that choice belongs to
+  // one season and one account: any change of either, even back to a season
+  // confirmed earlier, or signing out and in, clears it and asks again.
+  // Summaries are readable only when signed in; an invitee who has not signed
+  // in yet subscribes to nothing rather than to a denied read.
+  const adpSeasonId = slimUser ? season?.id : undefined;
+  const castSize = cast.length;
+  const preAdp = useCastawayAdp(adpSeasonId, "pre_premiere", castSize);
+  const adpOptInKey = allDraftsOptInKey(season?.id, slimUser?.uid);
+  const [storedOptIn, setAllDraftsOptIn] = useState<AllDraftsOptIn>({
+    key: adpOptInKey,
+    on: false,
+  });
+  // Cleared during render, not in an effect, so the render that sees a new
+  // key never subscribes to all-drafts numbers under it.
+  const allDraftsOptIn = allDraftsOptInFor(storedOptIn, adpOptInKey);
+  if (allDraftsOptIn !== storedOptIn) setAllDraftsOptIn(allDraftsOptIn);
+  const showAllDrafts = adpOptInKey !== null && allDraftsOptIn.on;
+  const allAdp = useCastawayAdp(
+    adpSeasonId,
+    showAllDrafts ? "all_drafts" : null,
+    castSize,
+  );
+  const adpCohort = showAllDrafts ? "all_drafts" : "pre_premiere";
+  const adp = showAllDrafts ? allAdp : preAdp;
+  const offerAllDrafts =
+    adpOptInKey !== null && allDraftsOffered(preAdp, new Date());
+  const [castSort, setCastSort] = useState<CastSort>("name");
+  const adpSummary = adp.kind === "ready" ? adp.summary : undefined;
+  const draftCast = useMemo(
+    () =>
+      castSort === "adp" && adpSummary
+        ? sortByAdp(cast, adpSummary.castaways)
+        : cast,
+    [cast, castSort, adpSummary],
+  );
+
   const draftLive = !!draft?.started && !draft?.finished;
   useBugContext(
     season ? (
@@ -897,8 +945,25 @@ export const DraftComponent = () => {
             </span>
           </div>
 
+          <CastawayAdpNote
+            state={adp}
+            cohort={adpCohort}
+            sort={castSort}
+            onSortChange={setCastSort}
+            allDrafts={
+              offerAllDrafts || showAllDrafts
+                ? {
+                    active: showAllDrafts,
+                    onChange: (active) =>
+                      setAllDraftsOptIn({ key: adpOptInKey, on: active }),
+                  }
+                : undefined
+            }
+          />
+
           <DraftCastGrid
-            players={cast}
+            players={draftCast}
+            adp={adpSummary}
             picks={draft!.draft_picks}
             viewerUid={slimUser?.uid}
             canDraft={Boolean(

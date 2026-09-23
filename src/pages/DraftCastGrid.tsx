@@ -1,7 +1,9 @@
 import { Badge, Button } from "@mantine/core";
+import { CastawayAdpTag } from "../components/CastawayAdp";
 import { CastawayCard, StatusBadge } from "../components/Layout";
 import { CastawayBioButton } from "../components/Layout/CastawayBioButton";
 import type { DraftPick, Player } from "../types";
+import type { CastawayAdpSummary } from "../utils/castawayAdp";
 import classes from "./Draft.module.css";
 
 type DraftCastGridProps = {
@@ -14,6 +16,8 @@ type DraftCastGridProps = {
   freshOrder?: number;
   onDraft: (player: Player) => void;
   seasonName: string;
+  /** Published average draft positions; each slate shows one when present. */
+  adp?: CastawayAdpSummary;
 };
 
 const castMeta = (player: Player) => {
@@ -43,6 +47,7 @@ export const DraftCastGrid = ({
   freshOrder,
   onDraft,
   seasonName,
+  adp,
 }: DraftCastGridProps) => {
   const pickByCastaway = new Map(picks.map((pick) => [pick.castaway_id, pick]));
   const draftAction = (player: Player, inModal = false) => {
@@ -115,6 +120,13 @@ export const DraftCastGrid = ({
               }
               actions={
                 <div className={classes.castActions}>
+                  {adp && (
+                    <CastawayAdpTag
+                      name={player.full_name}
+                      castawayId={player.castaway_id}
+                      summary={adp}
+                    />
+                  )}
                   <CastawayBioButton player={player} />
                   {draftAction(player)}
                 </div>

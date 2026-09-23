@@ -1,0 +1,144 @@
+/* Average draft position: a caps label and a tabular numeral on each cast
+ * slate, and one explanatory line above the cast grid. */
+
+/* Wraps rather than truncates: on a narrow slate the sample size drops to
+ * its own line, since a clipped denominator would misstate the data. */
+.tag {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 6px;
+  min-width: 0;
+  padding: 2px 0;
+  cursor: help;
+  white-space: nowrap;
+}
+
+/* All-drafts numbers carry the warning hue on their label, so they are never
+ * mistaken for the spoiler-safe default. */
+.tag[data-cohort="all_drafts"] .label {
+  color: var(--mantine-color-orange-light-color);
+}
+
+.label {
+  flex-shrink: 0;
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: 0.6875rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+
+.value {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: var(--mantine-font-size-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--mantine-color-text);
+}
+
+.sample {
+  font-size: var(--mantine-font-size-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--mantine-color-dimmed);
+}
+
+.note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
+  margin: 0;
+}
+
+.noteText {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 16rem;
+  margin: 0;
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+}
+
+.explain {
+  max-width: 20rem;
+  font-size: var(--mantine-font-size-sm);
+}
+
+.explain p {
+  margin: 0 0 var(--mantine-spacing-xs);
+}
+
+.explain p:last-child {
+  margin-bottom: 0;
+}
+
+.sort {
+  flex-shrink: 0;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-xs);
+}
+
+.optIn {
+  align-self: flex-start;
+}
+
+/* The spoiler warning shown before all-drafts numbers, and the bar that keeps
+ * naming the cohort while they are on screen: a warning-tinted hairline in
+ * the same quiet type as the note. */
+.warning,
+.cohortBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
+  padding: 6px 10px;
+  border: 1px solid var(--mantine-color-orange-outline);
+  border-radius: 4px;
+  background: var(--mantine-color-orange-light);
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-text);
+}
+
+/* The standing reminder is quieter than the confirmation: the outline and
+ * icon stay, the fill goes. */
+.cohortBar {
+  background: transparent;
+}
+
+.cohortBar > svg,
+.warningText > svg {
+  flex-shrink: 0;
+  color: var(--mantine-color-orange-light-color);
+}
+
+.cohortBar > span {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.warningText {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  flex: 1 1 16rem;
+  min-width: 0;
+  margin: 0;
+}
+
+.warningText > svg {
+  margin-top: 2px;
+}
+
+.warningActions {
+  display: flex;
+  gap: 4px;
+}

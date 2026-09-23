@@ -41,6 +41,19 @@ The single record binding one castaway to the participant who drafted them — t
 
 A pick never changes. A castaway being voted out does not reassign or clear their pick; it only stops them accruing points. A **Trade** does not rewrite it either: the pick keeps saying who drafted the castaway, while current ownership is derived by replaying accepted trades on top of it. "Drafted by" and "on this roster" are therefore different claims once a trade has happened, and naming a participant beside a castaway asserts one of them.
 
+### Average draft position
+
+How early a castaway tends to go: the mean of their one-based overall pick number (not round, not roster slot) across a cohort of drafts for one season. A returning castaway gets a separate figure for each season.
+
+Two cohorts, each published separately, app-wide rather than the viewer's groups:
+
+- **Pre-premiere** (the default): drafts saved as a competition before the premiere aired and not written since. The boundary is when the competition was saved (Firestore's own create time), not when the draft finished, and the record's last write (Firestore's own update time) must also precede it. A record written after the premiere for any reason (an episode revealed, a team renamed) is left out: for records saved before the picks were locked by rules, its creator could have replaced the picks and the source draft together, and nothing the job can read tells that apart from the original. So the cohort fails closed, and it can shrink as groups advance through the season.
+- **All drafts**: every qualifying draft, including ones made after episodes aired, so it can reflect results. The draft page shows it only after the viewer confirms a spoiler warning, for one season and one account at a time, and labels it wherever it appears.
+
+A draft qualifies only with at least two distinct participants, complete and consistent picks, a finished Realtime Database draft that matches it (same people, picks, slots, and turns), and participants who are real accounts older than the save. Sample and test fixtures are excluded, and the same group drafting twice, or one creator repeating a board, counts once. Castaways a draft left undrafted (an uneven split) simply do not count toward that castaway's average. It reads the frozen **Draft picks**, so **Trades** never move it.
+
+A castaway's average is published only once at least 10 qualifying drafts by at least 5 different creators picked them; below that the slate says there are too few picks. No per-draft earliest or latest pick and no participant, group, or competition identifier is published. These thresholds reduce what can be inferred about one group's board; they are not a guarantee against every inference. For example, two successive publications one new draft apart differ by exactly that draft's picks. An admin job computes the summaries, because they span groups the viewer cannot see.
+
 ### Trade
 
 An exchange of castaways between two participants of one competition, proposed by one and accepted by the other, which moves ownership without touching the draft.

@@ -42,26 +42,43 @@ if (
   );
 }
 
+// Emulator ports default to firebase.json; a local run whose defaults are
+// taken by another process can move them with these variables.
+const emulatorPort = (value: string | undefined, fallback: number) =>
+  Number(value) || fallback;
+
 // Initialize Firebase Authentication and get a reference to the service
 // Use localStorage persistence so Playwright storageState can capture auth tokens
 export const auth = getAuth(app);
 setPersistence(auth, browserLocalPersistence);
 if (isE2EAuthMode) {
-  connectAuthEmulator(auth, "http://127.0.0.1:9099", {
-    disableWarnings: true,
-  });
+  connectAuthEmulator(
+    auth,
+    `http://127.0.0.1:${emulatorPort(import.meta.env.VITE_EMULATOR_AUTH_PORT, 9099)}`,
+    {
+      disableWarnings: true,
+    },
+  );
 }
 
 // Initialize Cloud Firestore and get a reference to the service
 export const db = getFirestore(app);
 if (isE2EAuthMode) {
-  connectFirestoreEmulator(db, "127.0.0.1", 8080);
+  connectFirestoreEmulator(
+    db,
+    "127.0.0.1",
+    emulatorPort(import.meta.env.VITE_EMULATOR_FIRESTORE_PORT, 8080),
+  );
 }
 
 // Initialize Cloud Realtime Database and get a reference to the service
 export const rt_db = getDatabase(app);
 if (isE2EAuthMode) {
-  connectDatabaseEmulator(rt_db, "127.0.0.1", 9000);
+  connectDatabaseEmulator(
+    rt_db,
+    "127.0.0.1",
+    emulatorPort(import.meta.env.VITE_EMULATOR_DATABASE_PORT, 9000),
+  );
 }
 
 // Initialize Google Analytics (GA4) in production builds only.

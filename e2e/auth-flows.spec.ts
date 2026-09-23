@@ -26,9 +26,11 @@ import { SEASON_51_PLAYERS } from "../src/data/season_51";
 // ---------------------------------------------------------------------------
 
 const PROJECT = "demo-auth-flows";
-const AUTH_EMU = "http://127.0.0.1:9099";
-const FIRESTORE_EMU = "http://127.0.0.1:8080";
-const RTDB_EMU = "http://127.0.0.1:9000";
+// Hosts come from emulators:exec, so a local config may move the ports; the
+// defaults are firebase.json's.
+const AUTH_EMU = `http://${process.env.FIREBASE_AUTH_EMULATOR_HOST ?? "127.0.0.1:9099"}`;
+const FIRESTORE_EMU = `http://${process.env.FIRESTORE_EMULATOR_HOST ?? "127.0.0.1:8080"}`;
+const RTDB_EMU = `http://${process.env.FIREBASE_DATABASE_EMULATOR_HOST ?? "127.0.0.1:9000"}`;
 const RTDB_NS = "demo-auth-flows-default-rtdb";
 
 // This spec must never run outside `firebase emulators:exec`. emulators:exec

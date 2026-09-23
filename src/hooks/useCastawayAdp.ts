@@ -1,0 +1,31 @@
+import { useMemo } from "react";
+import type { Season } from "../types";
+import {
+  type AdpCohort,
+  CASTAWAY_ADP_COLLECTION,
+  castawayAdpDocId,
+  type CastawayAdpState,
+  castawayAdpStateFor,
+} from "../utils/castawayAdp";
+import { useSharedSnapshot } from "./useSharedSnapshot";
+
+/**
+ * One cohort's published average-draft-position summary for a season. A
+ * missing, unreadable, or malformed document reads as "unavailable", never
+ * as zeros. Pass a null cohort to subscribe to nothing: the all-drafts
+ * summary is not even fetched until the viewer opts in. `castSize` bounds
+ * the averages the reader accepts.
+ */
+export const useCastawayAdp = (
+  seasonId: Season["id"] | undefined,
+  cohort: AdpCohort | null,
+  castSize: number,
+): CastawayAdpState => {
+  const docId =
+    seasonId && cohort ? castawayAdpDocId(seasonId, cohort) : undefined;
+  const { data, loaded } = useSharedSnapshot(CASTAWAY_ADP_COLLECTION, docId);
+  return useMemo(
+    () => castawayAdpStateFor(seasonId, cohort, castSize, loaded, data),
+    [castSize, cohort, data, loaded, seasonId],
+  );
+};
