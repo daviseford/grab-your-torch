@@ -32,6 +32,7 @@
  */
 
 import * as fs from "fs";
+import { pathToFileURL } from "node:url";
 import { EPISODE_SCHEDULES } from "../src/data/episode-schedules";
 import { SEASON_METADATA } from "../src/data/season-metadata";
 import { SEASONS } from "../src/data/seasons";
@@ -272,7 +273,7 @@ export const describePlan = (result: SeasonAdpPlan): string[] => {
   const { summary, excluded, withheld } = result.plan;
   const window =
     summary.premiere_cutoff !== null
-      ? ` saved before ${summary.premiere_cutoff} (${summary.sealed_count} unchanged since)`
+      ? ` saved before ${summary.premiere_cutoff} and not written since`
       : "";
   return [
     `${label}: ${summary.draft_count} qualifying draft(s)${window}.`,
@@ -458,12 +459,19 @@ async function main(): Promise<void> {
   for (const line of lines) console.log(line);
 }
 
-const isDirectRun =
-  process.argv[1] &&
-  import.meta.url ===
-    new URL(`file:///${process.argv[1].replace(/\\/g, "/")}`).href;
+/**
+ * Whether the module at `moduleUrl` is the script node was started with.
+ * `pathToFileURL` builds the same URL node gives `import.meta.url` on every
+ * platform: a hand-built `file:///` + path is right on Windows but gains a
+ * fourth slash for a POSIX path, which made the scheduled Linux job exit 0
+ * without ever running.
+ */
+export const isDirectRun = (
+  moduleUrl: string,
+  entryPath: string | undefined,
+): boolean => !!entryPath && moduleUrl === pathToFileURL(entryPath).href;
 
-if (isDirectRun) {
+if (isDirectRun(import.meta.url, process.argv[1])) {
   main()
     .then(() => process.exit(0))
     .catch((err) => {

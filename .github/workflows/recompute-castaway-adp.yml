@@ -67,18 +67,27 @@ jobs:
       # Output is counts only (no ids, names, or castaway figures), so the
       # log is safe to keep. --project pins the write to production; the
       # script refuses if the service account belongs to another project.
+      # A run that prints no per-season summary did not run the job at all
+      # (the script's entry check once silently skipped it on Linux), so the
+      # step fails rather than going green having read and written nothing.
       - name: Recompute castaway ADP
+        shell: bash
         env:
           VITE_FIREBASE_DATABASE_URL: ${{ vars.VITE_FIREBASE_DATABASE_URL }}
           SEASONS: ${{ inputs.seasons || '46 47 48 49 50 51' }}
           WRITE: ${{ github.event_name == 'schedule' || inputs.write }}
         run: |
+          set -o pipefail
           ARGS=""
           if [ "$WRITE" = "true" ]; then
             ARGS="--write --project survivor-fantasy-51c4b"
           fi
-          yarn recompute-castaway-adp $SEASONS $ARGS
+          yarn recompute-castaway-adp $SEASONS $ARGS | tee adp-recompute.log
+          if ! grep -q "qualifying draft(s)" adp-recompute.log; then
+            echo "::error::The ADP job printed no season summary, so it did not run."
+            exit 1
+          fi
 
       - name: Cleanup
         if: always()
-        run: rm -f firebase-private-key.json
+        run: rm -f firebase-private-key.json adp-recompute.log

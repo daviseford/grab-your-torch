@@ -1,3 +1,10 @@
+import { execFile } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import { SEASONS } from "../../src/data/seasons";
 import type { CastawayId, Episode, Player, Season } from "../../src/types";
@@ -11,6 +18,8 @@ import {
   type CompetitionReader,
   describePlan,
   type DraftReader,
+  type Fixture,
+  isDirectRun,
   loadAccounts,
   loadCompetitions,
   parseArgs,
@@ -356,4 +365,124 @@ describe("publishPlans", () => {
     );
     expect(writes).toEqual([]);
   });
+});
+
+describe("running the script", () => {
+  const SCRIPT = fileURLToPath(
+    new URL("../recompute-castaway-adp.ts", import.meta.url),
+  );
+  const REPO = path.resolve(path.dirname(SCRIPT), "..");
+  const TSX_CLI = createRequire(import.meta.url).resolve("tsx/cli");
+  const run = promisify(execFile);
+
+  /** The script's stdout and exit code, run the way the workflow runs it. */
+  const cli = async (args: string[]) => {
+    try {
+      const { stdout, stderr } = await run(
+        process.execPath,
+        [TSX_CLI, SCRIPT, ...args],
+        { cwd: REPO, timeout: 90_000 },
+      );
+      return { code: 0, stdout, stderr };
+    } catch (error) {
+      const failed = error as {
+        code?: number;
+        stdout?: string;
+        stderr?: string;
+      };
+      return {
+        code: failed.code ?? -1,
+        stdout: failed.stdout ?? "",
+        stderr: failed.stderr ?? "",
+      };
+    }
+  };
+
+  it("recognises its own entry path on this platform, and nothing else", () => {
+    // On the Linux runner these are POSIX paths, the case the old guard got
+    // wrong; on Windows they are drive paths.
+    expect(isDirectRun(pathToFileURL(SCRIPT).href, SCRIPT)).toBe(true);
+    expect(
+      isDirectRun(
+        pathToFileURL(SCRIPT).href,
+        path.join(REPO, "scripts", "recompute-pool-standings.ts"),
+      ),
+    ).toBe(false);
+    expect(isDirectRun(pathToFileURL(SCRIPT).href, undefined)).toBe(false);
+  });
+
+  it("runs main() when started directly, printing counts from a fixture", async () => {
+    const s51 = SEASONS.season_51;
+    // Eight castaways: an even board two people can split.
+    const cast = s51.players.slice(0, 8).map((player) => player.castaway_id);
+    const creators = 5;
+    const drafts = Array.from({ length: 10 }, (_, i) =>
+      promoted(i % 2 ? cast : [...cast].reverse(), {
+        uids: [`uid_creator_${i % creators}`, `uid_partner_${i}`],
+      }),
+    );
+    // A legacy record written after the premiere: all-drafts only.
+    drafts.push(
+      promoted(cast, {
+        uids: ["uid_late_a", "uid_late_b"],
+        updatedAt: new Date("2026-10-15T00:00:00Z"),
+      }),
+    );
+    const fixture: Fixture = {
+      competitions: drafts.map((draft) => ({
+        id: draft.id,
+        created_at: draft.createdAt?.toISOString() ?? null,
+        updated_at: draft.updatedAt?.toISOString() ?? null,
+        data: draft.data,
+        source_draft: draft.sourceDraft,
+      })),
+      accounts: Object.fromEntries(
+        [...accountsFor(drafts)].map(([uid, at]) => [uid, at.toISOString()]),
+      ),
+    };
+    const dir = mkdtempSync(path.join(tmpdir(), "adp-cli-"));
+    const file = path.join(dir, "fixture.json");
+    writeFileSync(file, JSON.stringify(fixture));
+    try {
+      const { code, stdout } = await cli(["51", "--fixture", file]);
+      expect(code).toBe(0);
+      expect(stdout).toContain(`Reading competitions from the fixture`);
+      expect(stdout).toMatch(
+        /season_51 pre_premiere: 10 qualifying draft\(s\) saved before \S+ and not written since\./,
+      );
+      expect(stdout).toContain("edited_after_premiere 1");
+      expect(stdout).toContain("season_51 all_drafts: 11 qualifying draft(s).");
+      expect(stdout).toMatch(/Castaways published: [1-9]\d*;/);
+      expect(stdout).toContain("Dry run: nothing written.");
+      // Counts only: no uid, competition, draft, or castaway id.
+      expect(stdout).not.toMatch(/uid_|competition_|draft_\d|US\d{4}/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 120_000);
+
+  it("refuses to run without a season, and refuses --fixture with --write", async () => {
+    const none = await cli([]);
+    expect(none.code).toBe(1);
+    expect(none.stderr).toContain("Refusing to run: no season given");
+    const both = await cli(["51", "--fixture", "x.json", "--write"]);
+    expect(both.code).toBe(1);
+    expect(both.stderr).toContain("--fixture and --write cannot be combined");
+  }, 120_000);
+
+  it("does nothing when imported rather than run", async () => {
+    const { stdout, stderr } = await run(
+      process.execPath,
+      [
+        "--import",
+        pathToFileURL(createRequire(import.meta.url).resolve("tsx/esm")).href,
+        "--input-type=module",
+        "-e",
+        `await import(${JSON.stringify(pathToFileURL(SCRIPT).href)}); console.log("imported");`,
+      ],
+      { cwd: REPO, timeout: 90_000 },
+    );
+    expect(stdout.trim()).toBe("imported");
+    expect(stderr).not.toContain("Refusing");
+  }, 120_000);
 });
