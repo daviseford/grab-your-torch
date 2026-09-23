@@ -277,6 +277,8 @@ export const parseCastawayAdpSummary = (
     typeof doc.draft_count !== "number" ||
     typeof doc.min_drafts !== "number" ||
     typeof doc.computed_at !== "string" ||
+    typeof doc.premiere_cutoff !== "string" ||
+    Number.isNaN(Date.parse(doc.premiere_cutoff)) ||
     !doc.castaways ||
     typeof doc.castaways !== "object"
   ) {
@@ -288,12 +290,19 @@ export const parseCastawayAdpSummary = (
 export type CastawayAdpState =
   | { kind: "loading" }
   | { kind: "unavailable" }
-  | { kind: "too_few"; draftCount: number; minDrafts: number }
+  | {
+      kind: "too_few";
+      draftCount: number;
+      minDrafts: number;
+      /** True once the premiere has aired, so no more drafts can qualify. */
+      closed: boolean;
+    }
   | { kind: "ready"; summary: CastawayAdpSummary };
 
 export const castawayAdpState = (
   loaded: boolean,
   summary: CastawayAdpSummary | null,
+  now: Date = new Date(),
 ): CastawayAdpState => {
   if (!loaded) return { kind: "loading" };
   if (!summary) return { kind: "unavailable" };
@@ -305,6 +314,7 @@ export const castawayAdpState = (
       kind: "too_few",
       draftCount: summary.draft_count,
       minDrafts: summary.min_drafts,
+      closed: now.getTime() >= Date.parse(summary.premiere_cutoff),
     };
   }
   return { kind: "ready", summary };

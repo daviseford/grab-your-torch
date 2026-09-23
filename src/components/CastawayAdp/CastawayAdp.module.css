@@ -1,0 +1,82 @@
+/* Average draft position: a caps label and a tabular numeral on each cast
+ * slate, and one explanatory line above the cast grid. */
+
+.tag {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  padding: 2px 0;
+  border-radius: 2px;
+  cursor: help;
+  white-space: nowrap;
+}
+
+.tag:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 2px;
+}
+
+.label {
+  flex-shrink: 0;
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: 0.625rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+
+.value {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: var(--mantine-font-size-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--mantine-color-text);
+}
+
+.sample {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: var(--mantine-font-size-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--mantine-color-dimmed);
+}
+
+.note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
+  margin: 0;
+}
+
+.noteText {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 16rem;
+  margin: 0;
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+}
+
+.explain {
+  max-width: 20rem;
+  font-size: var(--mantine-font-size-sm);
+}
+
+.explain p {
+  margin: 0 0 var(--mantine-spacing-xs);
+}
+
+.explain p:last-child {
+  margin-bottom: 0;
+}
+
+.sort {
+  flex-shrink: 0;
+}

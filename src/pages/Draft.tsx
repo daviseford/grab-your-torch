@@ -20,6 +20,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { v4 } from "uuid";
 import { saveAuthIntent, type AuthIntent } from "../components/Auth/authIntent";
+import { CastawayAdpNote, type CastSort } from "../components/CastawayAdp";
 import { DraftOrderReveal } from "../components/DraftOrderReveal";
 import { DraftTable } from "../components/DraftTable";
 import {
@@ -36,6 +37,7 @@ import {
   decideJoinContinuation,
   useAuthContinuation,
 } from "../hooks/useAuthContinuation";
+import { useCastawayAdp } from "../hooks/useCastawayAdp";
 import { useCompetition } from "../hooks/useCompetition";
 import { useDraft } from "../hooks/useDraft";
 import { useSeason } from "../hooks/useSeason";
@@ -49,6 +51,7 @@ import {
   SlimUser,
 } from "../types";
 import { trackEvent } from "../utils/analytics";
+import { sortByAdp } from "../utils/castawayAdp";
 import { sortCastAlphabetically } from "../utils/castOrder";
 import {
   isRepeatTurn,
@@ -476,6 +479,19 @@ export const DraftComponent = () => {
     [season],
   );
 
+  // ADP comes only from drafts finished before the premiere, so sorting by it
+  // reveals nothing about results.
+  const adp = useCastawayAdp(season?.id);
+  const [castSort, setCastSort] = useState<CastSort>("name");
+  const adpSummary = adp.kind === "ready" ? adp.summary : undefined;
+  const draftCast = useMemo(
+    () =>
+      castSort === "adp" && adpSummary
+        ? sortByAdp(cast, adpSummary.castaways)
+        : cast,
+    [cast, castSort, adpSummary],
+  );
+
   const draftLive = !!draft?.started && !draft?.finished;
   useBugContext(
     season ? (
@@ -897,8 +913,15 @@ export const DraftComponent = () => {
             </span>
           </div>
 
+          <CastawayAdpNote
+            state={adp}
+            sort={castSort}
+            onSortChange={setCastSort}
+          />
+
           <DraftCastGrid
-            players={cast}
+            players={draftCast}
+            adp={adpSummary}
             picks={draft!.draft_picks}
             viewerUid={slimUser?.uid}
             canDraft={Boolean(

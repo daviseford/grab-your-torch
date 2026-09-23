@@ -41,6 +41,12 @@ The single record binding one castaway to the participant who drafted them — t
 
 A pick never changes. A castaway being voted out does not reassign or clear their pick; it only stops them accruing points. A **Trade** does not rewrite it either: the pick keeps saying who drafted the castaway, while current ownership is derived by replaying accepted trades on top of it. "Drafted by" and "on this roster" are therefore different claims once a trade has happened, and naming a participant beside a castaway asserts one of them.
 
+### Average draft position
+
+How early a castaway tends to go: the mean of their one-based overall pick number (not round, not roster slot) across a cohort of drafts for one season. A returning castaway gets a separate figure for each season.
+
+The cohort is app-wide, not the viewer's groups: every promoted draft for the season that finished before the premiere aired, excluding sample and test fixtures and any draft whose picks are incomplete or damaged. The premiere cutoff keeps hindsight out, so the figure can never encode results. It reads the frozen **Draft picks**, so **Trades** never move it, and a draft that did not pick a castaway leaves their average alone. Because it spans groups the viewer cannot see, an admin job publishes it as numbers only, and no figure appears until a minimum number of drafts qualify.
+
 ### Trade
 
 An exchange of castaways between two participants of one competition, proposed by one and accepted by the other, which moves ownership without touching the draft.

@@ -192,7 +192,8 @@ export const parseArgs = (argv: readonly string[]): Args => {
     else if (arg === "--fixture") {
       i += 1;
       parsed.fixture = argv[i] ?? null;
-    } else if (/^\d+$/.test(arg)) parsed.seasonIds.push(`season_${arg}`);
+    } else if (/^\d+$/.test(arg))
+      parsed.seasonIds.push(`season_${Number(arg)}`);
     else if (/^season_\d+$/.test(arg))
       parsed.seasonIds.push(arg as Season["id"]);
     else throw new Error(`Unrecognized argument "${arg}"`);

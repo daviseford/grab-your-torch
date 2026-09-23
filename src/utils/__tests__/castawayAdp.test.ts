@@ -266,15 +266,24 @@ describe("reading a summary", () => {
   it("treats a missing or foreign document as no data", () => {
     expect(parseCastawayAdpSummary(undefined)).toBeNull();
     expect(parseCastawayAdpSummary({ castaways: {} })).toBeNull();
+    expect(
+      parseCastawayAdpSummary({ ...summary, premiere_cutoff: "soon" }),
+    ).toBeNull();
     expect(parseCastawayAdpSummary(summary)).toEqual(summary);
   });
 
   it("maps load state to what the draft page can honestly show", () => {
     expect(castawayAdpState(false, null)).toEqual({ kind: "loading" });
     expect(castawayAdpState(true, null)).toEqual({ kind: "unavailable" });
+    const thin = { ...summary, draft_count: 1, min_drafts: 3 };
     expect(
-      castawayAdpState(true, { ...summary, draft_count: 1, min_drafts: 3 }),
-    ).toEqual({ kind: "too_few", draftCount: 1, minDrafts: 3 });
+      castawayAdpState(true, thin, new Date("2026-09-20T00:00:00Z")),
+    ).toEqual({ kind: "too_few", draftCount: 1, minDrafts: 3, closed: false });
+    // After the premiere no more drafts can qualify, so the copy must not
+    // promise numbers that will never come.
+    expect(
+      castawayAdpState(true, thin, new Date("2026-09-24T00:00:00Z")),
+    ).toMatchObject({ kind: "too_few", closed: true });
     expect(castawayAdpState(true, summary)).toEqual({
       kind: "ready",
       summary,
