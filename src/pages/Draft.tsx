@@ -986,6 +986,7 @@ export const DraftComponent = () => {
         <>
           {/* ===== STEP 2: SUMMARY ===== */}
           <DraftSpine
+            studio
             eyebrow={`Draft complete · ${draft?.prop_bets?.length || 0} of ${draft?.participants?.length} prop bets in`}
             title="Draft Results"
             description={

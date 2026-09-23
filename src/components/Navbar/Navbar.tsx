@@ -25,6 +25,7 @@ const data: NavItem[] = [
   { link: "/", label: "Home" },
   { link: "/seasons", label: "Seasons" },
   { link: "/competitions", label: "Competitions" },
+  { link: "/stats", label: "My Stats" },
   { link: "/scoring", label: "Scoring" },
   { link: "/admin", label: "Admin", adminOnly: true },
 ];
