@@ -6,12 +6,12 @@
     "drafts": {
       "$draftId": {
         ".read": "auth != null",
-        ".write": "auth.token.admin == true || (!data.exists() && auth != null && newData.child('id').val() == $draftId && newData.child('creator_uid').val() == auth.uid && newData.child('participants').child(auth.uid).exists())",
+        ".write": "auth.token.admin == true || (!data.exists() && auth != null && newData.child('id').val() == $draftId && newData.child('creator_uid').val() == auth.uid && newData.child('participants').child(auth.uid).exists() && !newData.child('draft_picks').exists() && !newData.child('prop_bets').exists() && newData.child('state').child('started').val() != true && newData.child('state').child('finished').val() != true && newData.child('state').child('current_pick_number').val() == 0)",
 
         "participants": {
           "$uid": {
             ".write": "auth.token.admin == true || (auth != null && auth.uid == $uid && root.child('drafts').child($draftId).child('state').child('started').val() != true)",
-            ".validate": "newData.hasChild('uid') && newData.child('uid').val() == $uid"
+            ".validate": "newData.hasChild('uid') && newData.child('uid').val() == $uid && (data.exists() || auth.uid == $uid || auth.token.admin == true)"
           }
         },
 

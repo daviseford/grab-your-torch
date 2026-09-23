@@ -9,64 +9,99 @@ import type { CastawayId, Season } from "../types";
  * `DraftPick.order` stores, because a pick is written at the draft's
  * `current_pick_number`, which starts at 1 when the draft starts.
  *
- * The cohort is every promoted draft for a season (one `competitions` doc
- * each) that was finished before the premiere broadcast. The rest of this
- * module is pure so the admin job and the tests share one definition; the
- * published summary is read by the draft page and nothing else.
+ * Two cohorts are published per season, each as its own document:
+ *
+ * - `pre_premiere` (the default everywhere): drafts saved as a competition
+ *   before the premiere aired. Picks made then cannot reflect the show.
+ * - `all_drafts`: every qualifying draft, including ones made after episodes
+ *   aired. It can encode results, so readers show it only after an explicit
+ *   opt-in with a spoiler warning.
+ *
+ * The rest of this module is pure so the admin job and the tests share one
+ * definition; the published summaries are read by the draft page only.
  */
 
-/** Firestore collection holding one published summary per season. */
+/** Firestore collection holding the published summaries. */
 export const CASTAWAY_ADP_COLLECTION = "castaway_adp";
 
-/**
- * Fewer eligible drafts than this and no per-castaway numbers are published:
- * two drafts make an average that is really one group's picks, and derived
- * stats over tiny samples mislead.
- */
-export const MIN_ADP_DRAFTS = 3;
+export const ADP_COHORTS = ["pre_premiere", "all_drafts"] as const;
+export type AdpCohort = (typeof ADP_COHORTS)[number];
 
-/** Stable name for the cohort, stored on the summary so readers can label it. */
-export const ADP_COHORT = "pre_premiere_completed_drafts" as const;
+/** `castaway_adp/{season_id}_{cohort}`: one document per season and cohort. */
+export const castawayAdpDocId = (seasonId: Season["id"], cohort: AdpCohort) =>
+  `${seasonId}_${cohort}`;
+
+/**
+ * A castaway's average is published only when at least this many qualifying
+ * drafts picked them, made by at least `MIN_ADP_CREATORS` different people.
+ * Below that, one group's picks could be read back out of the average. The
+ * thresholds reduce what can be inferred; they do not make inference
+ * impossible.
+ */
+export const MIN_ADP_DRAFTS = 10;
+export const MIN_ADP_CREATORS = 5;
 
 export type CastawayAdpStat = {
   /** Mean one-based overall pick, unrounded. */
   adp: number;
-  /** Drafts in the cohort that picked this castaway. */
+  /** Qualifying drafts that picked this castaway. */
   picks: number;
-  /** Earliest overall pick this castaway went at. */
-  best: number;
-  /** Latest overall pick this castaway went at. */
-  worst: number;
 };
 
-/** The document at `castaway_adp/{season_id}`. Aggregates only, no people. */
+/**
+ * The document at `castaway_adp/{season_id}_{cohort}`. Aggregates only: no
+ * uid, name, competition, or draft id, and no per-draft extremes.
+ */
 export type CastawayAdpSummary = {
   season_id: Season["id"];
   season_num: number;
-  cohort: typeof ADP_COHORT;
-  /** Eligible drafts. Castaways missing from `castaways` went undrafted in all of them. */
+  cohort: AdpCohort;
+  /** Qualifying drafts. A castaway absent from `castaways` is below the thresholds. */
   draft_count: number;
-  /** Threshold in force when computed; below it `castaways` is empty. */
+  /**
+   * `pre_premiere` only: qualifying drafts whose competition record has not
+   * changed at all since before the premiere. The others were matched
+   * against their original draft record instead. Null for `all_drafts`.
+   */
+  sealed_count: number | null;
   min_drafts: number;
-  /** ISO instant; only drafts promoted strictly before it count. */
-  premiere_cutoff: string;
+  min_creators: number;
+  /** `pre_premiere` only: drafts saved strictly before this instant count. */
+  premiere_cutoff: string | null;
   computed_at: string;
   castaways: Partial<Record<CastawayId, CastawayAdpStat>>;
 };
 
-/** One `competitions` doc as the job reads it. */
+/**
+ * One `competitions` doc as the admin job reads it, joined to the Realtime
+ * Database draft it was promoted from. Both documents are written by
+ * clients, so neither is trusted alone: the Firestore timestamps are set by
+ * the server, and account creation times come from Firebase Auth.
+ */
 export type AdpCompetitionSource = {
   id: string;
-  /** When the doc was first written, i.e. when the draft was promoted. */
+  /** Server time the doc was first written, i.e. when the draft was promoted. */
   createdAt: Date | null;
+  /** Server time of the doc's latest write of any kind. */
+  updatedAt: Date | null;
   data: Record<string, unknown>;
+  /** `drafts/{draft_id}` from the Realtime Database; null when absent. */
+  sourceDraft: Record<string, unknown> | null;
 };
+
+/** Firebase Auth creation time per participant uid, from the Admin SDK. */
+export type AdpAccounts = ReadonlyMap<string, Date>;
 
 export const ADP_EXCLUSION_REASONS = [
   "fixture",
   "unknown_creation_time",
   "after_premiere",
+  "solo",
   "invalid_picks",
+  "no_source_draft",
+  "source_mismatch",
+  "unverified_participants",
+  "duplicate",
 ] as const;
 
 export type AdpExclusionReason = (typeof ADP_EXCLUSION_REASONS)[number];
@@ -75,7 +110,9 @@ export type AdpPlan = {
   summary: CastawayAdpSummary;
   /** Counts only, never ids: the job's log may be public. */
   excluded: Record<AdpExclusionReason, number>;
-  /** False when the cohort is below `MIN_ADP_DRAFTS` and numbers are withheld. */
+  /** Castaways with a draft count but below the thresholds, withheld. */
+  withheld: number;
+  /** True when at least one castaway's average is published. */
   published: boolean;
 };
 
@@ -101,37 +138,80 @@ export const premiereCutoff = (airDate: string): Date => {
 const isFixture = (data: Record<string, unknown>) =>
   data.sample_fixture === true || data.e2e_fixture === true;
 
-type ValidPick = { order: number; castaway_id: CastawayId };
+const isValidDate = (date: Date | null): date is Date =>
+  !!date && !Number.isNaN(date.getTime());
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === "object" && !Array.isArray(value);
 
 /**
- * The draft's picks, if they form one complete snake draft for this season:
- * overall picks 1..N with no gaps or repeats, each a distinct castaway from
- * the season's cast, and N an exact multiple of the participant count.
- * Anything else is an incomplete or damaged draft and is skipped whole
- * rather than partly counted.
+ * The Realtime Database stores lists as objects keyed by index (or as sparse
+ * arrays). Values in key order, holes dropped.
+ */
+const rtdbList = (value: unknown): unknown[] => {
+  if (Array.isArray(value)) return value.filter((item) => item != null);
+  if (!isRecord(value)) return [];
+  return Object.entries(value)
+    .sort(([a], [b]) => Number(a) - Number(b))
+    .map(([, item]) => item)
+    .filter((item) => item != null);
+};
+
+type ValidPick = { order: number; castaway_id: CastawayId; user_uid: string };
+
+/**
+ * The competition's distinct participant uids, or null unless there are at
+ * least two and the list has no repeats. A draft needs two people to start.
+ */
+const competitionParticipants = (
+  data: Record<string, unknown>,
+): string[] | null => {
+  const raw = data.participant_uids;
+  if (!Array.isArray(raw)) return null;
+  if (!raw.every((uid) => typeof uid === "string" && uid.length > 0))
+    return null;
+  const uids = raw as string[];
+  if (new Set(uids).size !== uids.length || uids.length < 2) return null;
+  return uids;
+};
+
+/**
+ * Picks as a complete draft for this season: overall picks 1..N with no gaps
+ * or repeats, each a distinct castaway from the season's cast, made by a
+ * participant, N a multiple of the participant count, and every participant
+ * holding the same number. Anything else is skipped whole, never partly
+ * counted.
  */
 const validPicks = (
-  data: Record<string, unknown>,
+  raw: unknown,
   seasonId: Season["id"],
   cast: ReadonlySet<CastawayId>,
+  participants: readonly string[],
 ): ValidPick[] | null => {
-  const raw = data.draft_picks;
-  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const list = rtdbList(raw);
+  if (list.length === 0 || list.length % participants.length !== 0) return null;
 
-  const participants = Array.isArray(data.participant_uids)
-    ? data.participant_uids.length
-    : 0;
-  if (participants === 0 || raw.length % participants !== 0) return null;
-
+  const members = new Set(participants);
+  const perMember = new Map<string, number>();
   const picks: ValidPick[] = [];
-  for (const pick of raw as Record<string, unknown>[]) {
-    if (!pick || typeof pick !== "object") return null;
-    const { order, castaway_id, season_id } = pick;
+  for (const pick of list) {
+    if (!isRecord(pick)) return null;
+    const { order, castaway_id, season_id, user_uid } = pick;
     if (typeof order !== "number" || !Number.isInteger(order)) return null;
     if (typeof castaway_id !== "string" || !cast.has(castaway_id as CastawayId))
       return null;
     if (season_id !== undefined && season_id !== seasonId) return null;
-    picks.push({ order, castaway_id: castaway_id as CastawayId });
+    if (typeof user_uid !== "string" || !members.has(user_uid)) return null;
+    perMember.set(user_uid, (perMember.get(user_uid) ?? 0) + 1);
+    picks.push({ order, castaway_id: castaway_id as CastawayId, user_uid });
+  }
+
+  const each = list.length / participants.length;
+  if (
+    perMember.size !== participants.length ||
+    [...perMember.values()].some((count) => count !== each)
+  ) {
+    return null;
   }
 
   picks.sort((a, b) => a.order - b.order);
@@ -143,21 +223,91 @@ const validPicks = (
   return picks;
 };
 
+const sameSet = (a: readonly string[], b: readonly string[]) =>
+  a.length === b.length && new Set([...a, ...b]).size === a.length;
+
+/**
+ * Whether the Realtime Database draft is the one this competition was
+ * promoted from, finished, with the same people and the same picks in the
+ * same slots. Once a draft finishes its picks can no longer be written by
+ * any client, so a competition whose picks were edited later stops matching.
+ */
+const matchesSourceDraft = (
+  competition: AdpCompetitionSource,
+  seasonId: Season["id"],
+  participants: readonly string[],
+  picks: readonly ValidPick[],
+  cast: ReadonlySet<CastawayId>,
+): boolean => {
+  const source = competition.sourceDraft;
+  if (!isRecord(source)) return false;
+  const { data } = competition;
+
+  if (source.id !== data.draft_id) return false;
+  if (source.season_id !== seasonId) return false;
+  if (source.creator_uid !== data.creator_uid) return false;
+  if (
+    source.competiton_id !== undefined &&
+    source.competiton_id !== competition.id
+  )
+    return false;
+
+  const state = isRecord(source.state) ? source.state : {};
+  if (state.finished !== true && source.finished !== true) return false;
+
+  const sourceParticipants = rtdbList(source.participants).map((person) =>
+    isRecord(person) ? person.uid : undefined,
+  );
+  if (
+    !sourceParticipants.every((uid): uid is string => typeof uid === "string")
+  )
+    return false;
+  if (!sameSet(sourceParticipants, participants)) return false;
+
+  const sourcePicks = validPicks(
+    source.draft_picks,
+    seasonId,
+    cast,
+    participants,
+  );
+  if (!sourcePicks || sourcePicks.length !== picks.length) return false;
+  if (
+    sourcePicks.some(
+      (pick, index) =>
+        pick.castaway_id !== picks[index].castaway_id ||
+        pick.user_uid !== picks[index].user_uid,
+    )
+  )
+    return false;
+
+  // Drafts started since turn maps existed record whose turn each pick was;
+  // a pick credited to anyone else was not made through the draft.
+  const turns = source.turns;
+  if (isRecord(turns) && Object.keys(turns).length > 0) {
+    if (picks.some((pick) => turns[String(pick.order)] !== pick.user_uid))
+      return false;
+  }
+  return true;
+};
+
 export type AdpPlanInput = {
   seasonId: Season["id"];
   seasonNum: number;
+  cohort: AdpCohort;
   /** Every castaway id in the season's cast. */
   castawayIds: readonly CastawayId[];
-  /** Premiere air date, YYYY-MM-DD. */
-  premiereAirDate: string;
+  /** Premiere air date, YYYY-MM-DD. Required for `pre_premiere`. */
+  premiereAirDate: string | null;
   /** Competitions of any season; other seasons are ignored. */
   competitions: readonly AdpCompetitionSource[];
+  accounts: AdpAccounts;
   computedAt: string;
   minDrafts?: number;
+  minCreators?: number;
 };
 
 /**
- * Build the published summary for one season.
+ * Build one cohort's published summary for one season.
  *
  * Reads only each competition's own `draft_picks`, the copy frozen when the
  * draft was promoted. Trades live in a subcollection and move ownership
@@ -166,77 +316,136 @@ export type AdpPlanInput = {
 export const planCastawayAdp = ({
   seasonId,
   seasonNum,
+  cohort,
   castawayIds,
   premiereAirDate,
   competitions,
+  accounts,
   computedAt,
   minDrafts = MIN_ADP_DRAFTS,
+  minCreators = MIN_ADP_CREATORS,
 }: AdpPlanInput): AdpPlan => {
-  const cutoff = premiereCutoff(premiereAirDate);
+  const cutoff = premiereAirDate ? premiereCutoff(premiereAirDate) : null;
+  if (cohort === "pre_premiere" && !cutoff) {
+    throw new Error("The pre-premiere cohort needs a premiere air date");
+  }
   const cast = new Set(castawayIds);
   const excluded = Object.fromEntries(
     ADP_EXCLUSION_REASONS.map((reason) => [reason, 0]),
   ) as Record<AdpExclusionReason, number>;
 
-  const totals = new Map<
-    CastawayId,
-    { sum: number; picks: number; best: number; worst: number }
-  >();
-  let draftCount = 0;
+  type Candidate = {
+    createdAt: Date;
+    sealed: boolean;
+    creator: string;
+    participants: string[];
+    picks: ValidPick[];
+  };
+  const candidates: Candidate[] = [];
 
   for (const competition of competitions) {
-    if (competition.data.season_id !== seasonId) continue;
+    const { data } = competition;
+    if (data.season_id !== seasonId) continue;
 
-    if (isFixture(competition.data)) {
+    if (isFixture(data)) {
       excluded.fixture += 1;
       continue;
     }
-    if (
-      !competition.createdAt ||
-      Number.isNaN(competition.createdAt.getTime())
-    ) {
+    if (!isValidDate(competition.createdAt)) {
       excluded.unknown_creation_time += 1;
       continue;
     }
-    if (competition.createdAt.getTime() >= cutoff.getTime()) {
+    const createdAt = competition.createdAt;
+    if (cohort === "pre_premiere" && createdAt.getTime() >= cutoff!.getTime()) {
       excluded.after_premiere += 1;
       continue;
     }
-    const picks = validPicks(competition.data, seasonId, cast);
+    const participants = competitionParticipants(data);
+    if (!participants) {
+      excluded.solo += 1;
+      continue;
+    }
+    const picks = validPicks(data.draft_picks, seasonId, cast, participants);
     if (!picks) {
       excluded.invalid_picks += 1;
       continue;
     }
+    if (!competition.sourceDraft) {
+      excluded.no_source_draft += 1;
+      continue;
+    }
+    if (!matchesSourceDraft(competition, seasonId, participants, picks, cast)) {
+      excluded.source_mismatch += 1;
+      continue;
+    }
+    // Every participant must be a real account that existed before the
+    // competition was saved. Both times are set by Firebase, not a client.
+    if (
+      participants.some((uid) => {
+        const created = accounts.get(uid);
+        return !created || created.getTime() > createdAt.getTime();
+      })
+    ) {
+      excluded.unverified_participants += 1;
+      continue;
+    }
+
+    candidates.push({
+      createdAt,
+      sealed:
+        !!cutoff &&
+        isValidDate(competition.updatedAt) &&
+        competition.updatedAt.getTime() < cutoff.getTime(),
+      creator: data.creator_uid as string,
+      participants,
+      picks,
+    });
+  }
+
+  // The same people drafting twice, or one creator repeating a board, count
+  // once: the earliest saved copy stands.
+  candidates.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  const seenGroups = new Set<string>();
+  const seenBoards = new Set<string>();
+  const totals = new Map<
+    CastawayId,
+    { sum: number; picks: number; creators: Set<string> }
+  >();
+  let draftCount = 0;
+  let sealedCount = 0;
+
+  for (const candidate of candidates) {
+    const group = [...candidate.participants].sort().join("\n");
+    const board = `${candidate.creator}\n${candidate.picks.map((pick) => pick.castaway_id).join(",")}`;
+    if (seenGroups.has(group) || seenBoards.has(board)) {
+      excluded.duplicate += 1;
+      continue;
+    }
+    seenGroups.add(group);
+    seenBoards.add(board);
 
     draftCount += 1;
-    for (const { order, castaway_id } of picks) {
-      const total = totals.get(castaway_id);
-      if (total) {
-        total.sum += order;
-        total.picks += 1;
-        total.best = Math.min(total.best, order);
-        total.worst = Math.max(total.worst, order);
-      } else {
-        totals.set(castaway_id, {
-          sum: order,
-          picks: 1,
-          best: order,
-          worst: order,
-        });
-      }
+    if (candidate.sealed) sealedCount += 1;
+    for (const { order, castaway_id } of candidate.picks) {
+      const total = totals.get(castaway_id) ?? {
+        sum: 0,
+        picks: 0,
+        creators: new Set<string>(),
+      };
+      total.sum += order;
+      total.picks += 1;
+      total.creators.add(candidate.creator);
+      totals.set(castaway_id, total);
     }
   }
 
-  const published = draftCount >= minDrafts;
   const castaways: CastawayAdpSummary["castaways"] = {};
-  if (published) {
-    for (const [id, total] of totals) {
-      castaways[id] = {
-        adp: total.sum / total.picks,
-        picks: total.picks,
-        best: total.best,
-        worst: total.worst,
-      };
+  let withheld = 0;
+  for (const [id, total] of totals) {
+    if (total.picks >= minDrafts && total.creators.size >= minCreators) {
+      castaways[id] = { adp: total.sum / total.picks, picks: total.picks };
+    } else {
+      withheld += 1;
     }
   }
 
@@ -244,16 +453,39 @@ export const planCastawayAdp = ({
     summary: {
       season_id: seasonId,
       season_num: seasonNum,
-      cohort: ADP_COHORT,
+      cohort,
       draft_count: draftCount,
+      sealed_count: cohort === "pre_premiere" ? sealedCount : null,
       min_drafts: minDrafts,
-      premiere_cutoff: cutoff.toISOString(),
+      min_creators: minCreators,
+      premiere_cutoff: cohort === "pre_premiere" ? cutoff!.toISOString() : null,
       computed_at: computedAt,
       castaways,
     },
     excluded,
-    published,
+    withheld,
+    published: Object.keys(castaways).length > 0,
   };
+};
+
+/**
+ * A summary's content apart from when it was computed, in a stable key order,
+ * so a rerun over unchanged data can be recognised and skipped.
+ */
+export const adpSummaryFingerprint = (summary: unknown): string => {
+  const stable = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(stable);
+    if (!isRecord(value)) return value;
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, stable(value[key])]),
+    );
+  };
+  if (!isRecord(summary)) return JSON.stringify(summary ?? null);
+  const content = { ...summary };
+  delete content.computed_at;
+  return JSON.stringify(stable(content));
 };
 
 /* ------------------------------------------------------------------ *
@@ -263,28 +495,80 @@ export const planCastawayAdp = ({
 /** One decimal: enough to separate neighbours without implying precision. */
 export const formatAdp = (adp: number): string => adp.toFixed(1);
 
+const isCount = (value: unknown): value is number =>
+  typeof value === "number" && Number.isInteger(value) && value >= 0;
+
+const isInstant = (value: unknown): value is string =>
+  typeof value === "string" && !Number.isNaN(Date.parse(value));
+
 /**
- * A summary read back from Firestore, or null when it is absent or not the
- * shape this code publishes. Readers treat null as "no data", never as zero.
+ * One castaway's stat, or null when it is not a shape this code publishes.
+ * An average of overall picks can be no lower than 1 and no higher than the
+ * largest possible pick, and a castaway can be picked at most once a draft.
+ */
+const parseStat = (
+  raw: unknown,
+  draftCount: number,
+): CastawayAdpStat | null => {
+  if (!isRecord(raw)) return null;
+  const { adp, picks } = raw;
+  if (typeof adp !== "number" || !Number.isFinite(adp) || adp < 1) return null;
+  if (!isCount(picks) || picks < 1 || picks > draftCount) return null;
+  return { adp, picks };
+};
+
+/**
+ * A summary read back from Firestore, or null when it is absent, of another
+ * cohort, or not the shape this code publishes. Readers treat null as "no
+ * data", never as zero. Individually malformed castaway entries are dropped
+ * rather than failing the whole summary.
  */
 export const parseCastawayAdpSummary = (
   raw: unknown,
+  cohort: AdpCohort,
 ): CastawayAdpSummary | null => {
-  if (!raw || typeof raw !== "object") return null;
-  const doc = raw as Partial<CastawayAdpSummary>;
-  if (
-    doc.cohort !== ADP_COHORT ||
-    typeof doc.draft_count !== "number" ||
-    typeof doc.min_drafts !== "number" ||
-    typeof doc.computed_at !== "string" ||
-    typeof doc.premiere_cutoff !== "string" ||
-    Number.isNaN(Date.parse(doc.premiere_cutoff)) ||
-    !doc.castaways ||
-    typeof doc.castaways !== "object"
-  ) {
+  if (!isRecord(raw)) return null;
+  const {
+    season_id,
+    season_num,
+    draft_count,
+    sealed_count,
+    min_drafts,
+    min_creators,
+    premiere_cutoff,
+    computed_at,
+    castaways,
+  } = raw;
+  if (raw.cohort !== cohort) return null;
+  if (typeof season_id !== "string" || !/^season_\d+$/.test(season_id))
     return null;
+  if (!isCount(season_num) || !isCount(draft_count)) return null;
+  if (!isCount(min_drafts) || !isCount(min_creators)) return null;
+  if (!isInstant(computed_at) || !isRecord(castaways)) return null;
+  if (cohort === "pre_premiere") {
+    if (!isInstant(premiere_cutoff)) return null;
+    if (!isCount(sealed_count) || sealed_count > draft_count) return null;
   }
-  return doc as CastawayAdpSummary;
+
+  const parsed: CastawayAdpSummary["castaways"] = {};
+  for (const [id, value] of Object.entries(castaways)) {
+    const stat = parseStat(value, draft_count);
+    if (stat) parsed[id as CastawayId] = stat;
+  }
+
+  return {
+    season_id: season_id as Season["id"],
+    season_num,
+    cohort,
+    draft_count,
+    sealed_count: cohort === "pre_premiere" ? (sealed_count as number) : null,
+    min_drafts,
+    min_creators,
+    premiere_cutoff:
+      cohort === "pre_premiere" ? (premiere_cutoff as string) : null,
+    computed_at,
+    castaways: parsed,
+  };
 };
 
 export type CastawayAdpState =
@@ -292,9 +576,8 @@ export type CastawayAdpState =
   | { kind: "unavailable" }
   | {
       kind: "too_few";
-      draftCount: number;
-      minDrafts: number;
-      /** True once the premiere has aired, so no more drafts can qualify. */
+      summary: CastawayAdpSummary;
+      /** Pre-premiere only: the premiere has aired, so no more drafts can qualify. */
       closed: boolean;
     }
   | { kind: "ready"; summary: CastawayAdpSummary };
@@ -306,24 +589,49 @@ export const castawayAdpState = (
 ): CastawayAdpState => {
   if (!loaded) return { kind: "loading" };
   if (!summary) return { kind: "unavailable" };
-  if (
-    summary.draft_count < summary.min_drafts ||
-    Object.keys(summary.castaways).length === 0
-  ) {
+  if (Object.keys(summary.castaways).length === 0) {
     return {
       kind: "too_few",
-      draftCount: summary.draft_count,
-      minDrafts: summary.min_drafts,
-      closed: now.getTime() >= Date.parse(summary.premiere_cutoff),
+      summary,
+      closed:
+        summary.premiere_cutoff !== null &&
+        now.getTime() >= Date.parse(summary.premiere_cutoff),
     };
   }
   return { kind: "ready", summary };
 };
 
 /**
- * Order castaways earliest ADP first. Castaways nobody in the cohort drafted
+ * What an all-drafts opt-in is bound to: one season for one account. The
+ * draft page keeps the key the viewer confirmed and shows all-drafts numbers
+ * only while it still matches, so a different season or a different
+ * signed-in account starts back at the pre-premiere default.
+ */
+export const allDraftsOptInKey = (
+  seasonId: Season["id"] | undefined,
+  uid: string | undefined,
+): string | null => (seasonId && uid ? `${seasonId}:${uid}` : null);
+
+/**
+ * Whether to offer the all-drafts opt-in beside the pre-premiere state.
+ * Before the premiere every draft is a pre-premiere draft, so it would add
+ * nothing; once the premiere has aired, or when no pre-premiere summary
+ * exists to say when it airs, the viewer may choose it.
+ */
+export const allDraftsOffered = (
+  preState: CastawayAdpState,
+  now: Date,
+): boolean => {
+  if (preState.kind === "loading") return false;
+  if (preState.kind === "unavailable") return true;
+  const cutoff = preState.summary.premiere_cutoff;
+  return cutoff === null || now.getTime() >= Date.parse(cutoff);
+};
+
+/**
+ * Order castaways earliest ADP first. Castaways without a published average
  * come last, then ties fall back to the caller's existing order (the cast
- * grid's alphabetical order), so the sort is stable and spoiler-neutral.
+ * grid's alphabetical order), so the sort is stable.
  */
 export const sortByAdp = <T extends { castaway_id: CastawayId }>(
   players: readonly T[],

@@ -3,15 +3,19 @@ import type { CastawayId } from "../../types";
 import {
   type AdpCompetitionSource,
   type AdpPlanInput,
-  ADP_COHORT,
+  adpSummaryFingerprint,
+  allDraftsOffered,
+  allDraftsOptInKey,
   castawayAdpState,
   formatAdp,
+  MIN_ADP_CREATORS,
+  MIN_ADP_DRAFTS,
   parseCastawayAdpSummary,
   planCastawayAdp,
   premiereCutoff,
   sortByAdp,
 } from "../castawayAdp";
-import { snakePickIndex } from "../draftRealtime";
+import { accountsFor, BEFORE_PREMIERE, promoted } from "./castawayAdpFixtures";
 
 const SEASON = "season_51" as const;
 const CAST = Array.from(
@@ -20,49 +24,10 @@ const CAST = Array.from(
 );
 const [A, B, C, D, E, F] = CAST;
 const PREMIERE = "2026-09-23";
-const BEFORE = new Date("2026-09-20T18:00:00Z");
+const CUTOFF = premiereCutoff(PREMIERE);
+const AFTER = new Date("2026-10-01T00:00:00Z");
 
-let nextId = 0;
-
-/**
- * A promoted draft: castaways listed in the order they were picked, each
- * written at its one-based overall pick number exactly as the draft page
- * writes it, with the drafter chosen by the real snake-order helper.
- */
-const draft = (
-  pickedInOrder: CastawayId[],
-  {
-    participants = 2,
-    createdAt = BEFORE,
-    seasonId = SEASON,
-    extra = {},
-  }: {
-    participants?: number;
-    createdAt?: Date | null;
-    seasonId?: string;
-    extra?: Record<string, unknown>;
-  } = {},
-): AdpCompetitionSource => {
-  const uids = Array.from({ length: participants }, (_, i) => `uid_${i}`);
-  return {
-    id: `competition_${nextId++}`,
-    createdAt,
-    data: {
-      season_id: seasonId,
-      participant_uids: uids,
-      draft_picks: pickedInOrder.map((castaway_id, index) => ({
-        season_id: seasonId,
-        order: index + 1,
-        user_uid: uids[snakePickIndex(index + 1, participants)],
-        user_name: "someone",
-        castaway_id,
-        player_name: castaway_id,
-      })),
-      ...extra,
-    },
-  };
-};
-
+/** Plans with thresholds of one so the math tests can use tiny cohorts. */
 const plan = (
   competitions: AdpCompetitionSource[],
   overrides: Partial<AdpPlanInput> = {},
@@ -70,19 +35,41 @@ const plan = (
   planCastawayAdp({
     seasonId: SEASON,
     seasonNum: 51,
+    cohort: "pre_premiere",
     castawayIds: CAST,
     premiereAirDate: PREMIERE,
     competitions,
+    accounts: accountsFor(competitions),
     computedAt: "2026-09-21T00:00:00.000Z",
     minDrafts: 1,
+    minCreators: 1,
     ...overrides,
   });
 
-describe("planCastawayAdp", () => {
+type PickRecord = {
+  order: number;
+  castaway_id: string;
+  season_id: string;
+  user_uid: string;
+};
+
+/** Apply the same damage to the competition's picks and its source draft's. */
+const damageBoth = (
+  source: AdpCompetitionSource,
+  damage: (picks: PickRecord[]) => PickRecord[] | void,
+): AdpCompetitionSource => {
+  const picks = source.data.draft_picks as PickRecord[];
+  const damaged = damage(picks) ?? picks;
+  source.data.draft_picks = damaged;
+  source.sourceDraft!.draft_picks = damaged.map((pick) => ({ ...pick }));
+  return source;
+};
+
+describe("planCastawayAdp: the average", () => {
   it("uses the one-based overall pick, not the round or roster slot", () => {
     // Three drafters, two rounds of a snake: pick 4 is round two's first
     // pick and goes to the drafter who picked third in round one.
-    const result = plan([draft([A, B, C, D, E, F], { participants: 3 })]);
+    const result = plan([promoted([A, B, C, D, E, F], { participants: 3 })]);
 
     expect(result.summary.castaways[A]?.adp).toBe(1);
     expect(result.summary.castaways[C]?.adp).toBe(3);
@@ -91,43 +78,37 @@ describe("planCastawayAdp", () => {
   });
 
   it("orders picks by pick number, not by the order they are stored in", () => {
-    const shuffled = draft([A, B, C, D]);
+    const shuffled = promoted([A, B, C, D]);
     (shuffled.data.draft_picks as unknown[]).reverse();
 
     expect(plan([shuffled]).summary.castaways[A]?.adp).toBe(1);
     expect(plan([shuffled]).summary.castaways[D]?.adp).toBe(4);
   });
 
-  it("averages across drafts and reports sample size and range", () => {
+  it("averages across drafts with the sample size and no per-draft extremes", () => {
     const result = plan([
-      draft([A, B, C, D]),
-      draft([B, A, D, C]),
-      draft([C, B, A, D]),
+      promoted([A, B, C, D]),
+      promoted([B, A, D, C]),
+      promoted([C, B, A, D]),
     ]);
 
     expect(result.summary.draft_count).toBe(3);
-    expect(result.summary.castaways[A]).toEqual({
-      adp: 2,
-      picks: 3,
-      best: 1,
-      worst: 3,
-    });
+    expect(result.summary.castaways[A]).toEqual({ adp: 2, picks: 3 });
     expect(result.summary.castaways[D]?.adp).toBeCloseTo(11 / 3);
   });
 
   it("averages only drafts that picked the castaway and omits the never-drafted", () => {
     // Five castaways, two drafters: the fifth goes undrafted each time.
-    const result = plan([draft([A, B, C, D]), draft([E, A, B, C])]);
+    const result = plan([promoted([A, B, C, D]), promoted([E, A, B, C])]);
 
-    expect(result.summary.castaways[A]).toMatchObject({ adp: 1.5, picks: 2 });
-    expect(result.summary.castaways[D]).toMatchObject({ adp: 4, picks: 1 });
+    expect(result.summary.castaways[A]).toEqual({ adp: 1.5, picks: 2 });
+    expect(result.summary.castaways[D]).toEqual({ adp: 4, picks: 1 });
     expect(result.summary.castaways[F]).toBeUndefined();
   });
 
   it("keeps a returning castaway's seasons apart", () => {
-    // One survivoR id across two seasons; each season is its own summary.
-    const s51 = draft([A, B, C, D]);
-    const s50 = draft([D, C, B, A], { seasonId: "season_50" });
+    const s51 = promoted([A, B, C, D]);
+    const s50 = promoted([D, C, B, A], { seasonId: "season_50" });
 
     expect(plan([s51, s50]).summary.castaways[A]?.adp).toBe(1);
     expect(plan([s51, s50]).summary.draft_count).toBe(1);
@@ -137,80 +118,13 @@ describe("planCastawayAdp", () => {
     ).toBe(4);
   });
 
-  it("excludes sample and e2e fixtures", () => {
-    const result = plan([
-      draft([A, B, C, D]),
-      draft([D, C, B, A], { extra: { sample_fixture: true } }),
-      draft([D, C, B, A], { extra: { e2e_fixture: true } }),
-    ]);
-
-    expect(result.summary.draft_count).toBe(1);
-    expect(result.excluded.fixture).toBe(2);
-    expect(result.summary.castaways[A]?.adp).toBe(1);
-  });
-
-  it("excludes drafts promoted at or after the premiere broadcast", () => {
-    const cutoff = premiereCutoff(PREMIERE);
-    const result = plan([
-      draft([A, B, C, D]),
-      draft([D, C, B, A], { createdAt: cutoff }),
-      draft([D, C, B, A], { createdAt: new Date("2026-12-01T00:00:00Z") }),
-      draft([D, C, B, A], { createdAt: null }),
-    ]);
-
-    expect(result.summary.draft_count).toBe(1);
-    expect(result.excluded.after_premiere).toBe(2);
-    expect(result.excluded.unknown_creation_time).toBe(1);
-    expect(result.summary.castaways[A]?.adp).toBe(1);
-  });
-
-  it("skips partial or damaged drafts whole", () => {
-    const zeroBased = draft([A, B, C, D]);
-    (zeroBased.data.draft_picks as { order: number }[]).forEach((pick) => {
-      pick.order -= 1;
-    });
-    const gap = draft([A, B, C, D]);
-    (gap.data.draft_picks as unknown[]).splice(1, 1);
-    const repeated = draft([A, B, A, D]);
-    const offCast = draft([A, B, C, "US0001" as CastawayId]);
-    const uneven = draft([A, B, C], { participants: 2 });
-    const wrongSeason = draft([A, B, C, D]);
-    (wrongSeason.data.draft_picks as { season_id: string }[])[0].season_id =
-      "season_50";
-
-    const result = plan([
-      draft([A, B, C, D]),
-      zeroBased,
-      gap,
-      repeated,
-      offCast,
-      uneven,
-      wrongSeason,
-      {
-        id: "competition_empty",
-        createdAt: BEFORE,
-        data: { season_id: SEASON },
-      },
-    ]);
-
-    expect(result.summary.draft_count).toBe(1);
-    expect(result.excluded.invalid_picks).toBe(7);
-  });
-
   it("ignores trades: ADP follows who was picked when, not current rosters", () => {
-    const original = draft([A, B, C, D]);
-    const traded = draft([A, B, C, D], {
+    const original = promoted([A, B, C, D]);
+    const traded = promoted([A, B, C, D], {
       extra: {
         // Not how trades are stored (they live in a subcollection the job
         // never reads), but proves no trade-shaped field reaches the math.
-        trades: [
-          {
-            status: "accepted",
-            offered_castaway_ids: [A],
-            requested_castaway_ids: [D],
-            effective_episode: 2,
-          },
-        ],
+        trades: [{ status: "accepted", offered_castaway_ids: [A] }],
       },
     });
 
@@ -218,23 +132,303 @@ describe("planCastawayAdp", () => {
       plan([original]).summary.castaways,
     );
   });
+});
 
-  it("withholds numbers below the minimum cohort size", () => {
-    const result = plan([draft([A, B, C, D]), draft([A, B, C, D])], {
-      minDrafts: 3,
+describe("planCastawayAdp: cohorts", () => {
+  const sources = () => [
+    promoted([A, B, C, D]),
+    promoted([D, C, B, A], { createdAt: CUTOFF }),
+    promoted([D, C, B, A], { createdAt: AFTER }),
+    promoted([D, C, B, A], { createdAt: null }),
+  ];
+
+  it("pre-premiere counts only drafts saved strictly before the cutoff", () => {
+    const result = plan(sources());
+
+    expect(result.summary).toMatchObject({
+      cohort: "pre_premiere",
+      draft_count: 1,
+      premiere_cutoff: "2026-09-24T00:00:00.000Z",
+    });
+    expect(result.excluded.after_premiere).toBe(2);
+    expect(result.excluded.unknown_creation_time).toBe(1);
+    expect(result.summary.castaways[A]?.adp).toBe(1);
+  });
+
+  it("the boundary is the save time, not when the draft finished", () => {
+    // Finished at 7:50 PM ET but saved as a competition after 8 PM: out.
+    const lateSave = promoted([A, B, C, D], {
+      createdAt: new Date("2026-09-24T00:05:00Z"),
+    });
+    const justBefore = promoted([B, A, C, D], {
+      createdAt: new Date("2026-09-23T23:59:59Z"),
+    });
+    const result = plan([lateSave, justBefore]);
+    expect(result.summary.draft_count).toBe(1);
+    expect(result.summary.castaways[A]?.adp).toBe(2);
+  });
+
+  it("all-drafts counts every qualifying draft regardless of timing", () => {
+    const result = plan(sources(), { cohort: "all_drafts" });
+
+    expect(result.summary).toMatchObject({
+      cohort: "all_drafts",
+      draft_count: 3,
+      premiere_cutoff: null,
+      sealed_count: null,
+    });
+    expect(result.excluded.unknown_creation_time).toBe(1);
+    expect(result.summary.castaways[A]?.adp).toBeCloseTo((1 + 4 + 4) / 3);
+  });
+
+  it("all-drafts needs no premiere date; pre-premiere refuses without one", () => {
+    expect(
+      plan(sources(), { cohort: "all_drafts", premiereAirDate: null }).summary
+        .draft_count,
+    ).toBe(3);
+    expect(() => plan(sources(), { premiereAirDate: null })).toThrow();
+  });
+
+  it("counts how many pre-premiere records are unchanged since before the cutoff", () => {
+    const result = plan([
+      promoted([A, B, C, D]),
+      promoted([B, A, C, D], { updatedAt: AFTER }),
+      promoted([C, A, B, D], { updatedAt: null }),
+    ]);
+    expect(result.summary.draft_count).toBe(3);
+    expect(result.summary.sealed_count).toBe(1);
+  });
+});
+
+describe("planCastawayAdp: integrity", () => {
+  it("excludes sample and e2e fixtures", () => {
+    const result = plan([
+      promoted([A, B, C, D]),
+      promoted([D, C, B, A], { extra: { sample_fixture: true } }),
+      promoted([D, C, B, A], { extra: { e2e_fixture: true } }),
+    ]);
+
+    expect(result.summary.draft_count).toBe(1);
+    expect(result.excluded.fixture).toBe(2);
+  });
+
+  it("rejects one-person and repeated-person drafts", () => {
+    const solo = promoted([A, B], { participants: 1 });
+    const repeated = promoted([A, B, C, D], { uids: ["uid_x", "uid_x"] });
+    const result = plan([promoted([A, B, C, D]), solo, repeated]);
+
+    expect(result.summary.draft_count).toBe(1);
+    expect(result.excluded.solo).toBe(2);
+  });
+
+  it("skips partial or damaged drafts whole", () => {
+    const damaged = [
+      damageBoth(promoted([A, B, C, D]), (picks) =>
+        picks.forEach((pick) => (pick.order -= 1)),
+      ),
+      damageBoth(promoted([A, B, C, D]), (picks) => {
+        picks.splice(1, 1);
+      }),
+      promoted([A, B, A, D]),
+      promoted([A, B, C, "US0001" as CastawayId]),
+      promoted([A, B, C]),
+      damageBoth(promoted([A, B, C, D]), (picks) => {
+        picks[0].season_id = "season_50";
+      }),
+      // A pick credited to someone outside the draft.
+      damageBoth(promoted([A, B, C, D]), (picks) => {
+        picks[0].user_uid = "uid_outsider";
+      }),
+      // One drafter holding three picks and the other one.
+      damageBoth(promoted([A, B, C, D]), (picks) => {
+        picks[1].user_uid = picks[0].user_uid;
+      }),
+      {
+        id: "competition_empty",
+        createdAt: BEFORE_PREMIERE,
+        updatedAt: BEFORE_PREMIERE,
+        data: { season_id: SEASON, participant_uids: ["uid_p", "uid_q"] },
+        sourceDraft: null,
+      },
+    ];
+    const result = plan([promoted([A, B, C, D]), ...damaged]);
+
+    expect(result.summary.draft_count).toBe(1);
+    expect(result.excluded.invalid_picks).toBe(damaged.length);
+  });
+
+  it("requires the draft the competition says it came from", () => {
+    const missing = promoted([A, B, C, D]);
+    missing.sourceDraft = null;
+    const result = plan([promoted([A, B, C, D]), missing]);
+
+    expect(result.excluded.no_source_draft).toBe(1);
+    expect(result.summary.draft_count).toBe(1);
+  });
+
+  it("rejects a competition that disagrees with its source draft", () => {
+    const cases: ((source: AdpCompetitionSource) => void)[] = [
+      // Picks rewritten on the competition after the draft finished.
+      (s) => {
+        const picks = s.data.draft_picks as PickRecord[];
+        [picks[0].castaway_id, picks[3].castaway_id] = [
+          picks[3].castaway_id,
+          picks[0].castaway_id,
+        ];
+      },
+      // Source draft never finished.
+      (s) => {
+        s.sourceDraft!.state = { started: true, finished: false };
+      },
+      // Different people.
+      (s) => {
+        s.sourceDraft!.participants = { uid_other: { uid: "uid_other" } };
+      },
+      // A different draft, season, creator, or competition.
+      (s) => {
+        s.sourceDraft!.id = "draft_elsewhere";
+      },
+      (s) => {
+        s.sourceDraft!.season_id = "season_50";
+      },
+      (s) => {
+        s.sourceDraft!.creator_uid = "uid_other";
+      },
+      (s) => {
+        s.sourceDraft!.competiton_id = "competition_elsewhere";
+      },
+      // A pick made out of turn.
+      (s) => {
+        const turns = s.sourceDraft!.turns as Record<string, string>;
+        [turns["1"], turns["2"]] = [turns["2"], turns["1"]];
+      },
+    ];
+    const bad = cases.map((mutate) => {
+      const source = promoted([A, B, C, D]);
+      mutate(source);
+      return source;
+    });
+    const result = plan([promoted([A, B, C, D]), ...bad]);
+
+    expect(result.excluded.source_mismatch).toBe(cases.length);
+    expect(result.summary.draft_count).toBe(1);
+  });
+
+  it("accepts legacy source drafts stored as arrays without a turn map", () => {
+    const legacy = promoted([A, B, C, D]);
+    const source = legacy.sourceDraft!;
+    source.draft_picks = [null, ...(legacy.data.draft_picks as unknown[])];
+    source.participants = Object.values(
+      source.participants as Record<string, unknown>,
+    );
+    delete source.turns;
+    delete source.competiton_id;
+
+    expect(plan([legacy]).summary.draft_count).toBe(1);
+  });
+
+  it("requires every participant to be a real account older than the save", () => {
+    const fake = promoted([A, B, C, D]);
+    const young = promoted([B, A, C, D]);
+    const accounts = new Map(accountsFor([fake, young]));
+    accounts.delete((fake.data.participant_uids as string[])[1]);
+    accounts.set((young.data.participant_uids as string[])[0], AFTER);
+
+    const result = plan([fake, young], { accounts });
+    expect(result.excluded.unverified_participants).toBe(2);
+    expect(result.summary.draft_count).toBe(0);
+  });
+
+  it("counts the same group, or one creator repeating a board, once", () => {
+    const group = ["uid_g1", "uid_g2"];
+    const first = promoted([A, B, C, D], { uids: group });
+    const again = promoted([D, C, B, A], {
+      uids: [...group].reverse(),
+      createdAt: new Date(BEFORE_PREMIERE.getTime() + 1000),
+    });
+    const board = promoted([A, B, C, D], {
+      uids: ["uid_g1", "uid_g3"],
+      createdAt: new Date(BEFORE_PREMIERE.getTime() + 2000),
+    });
+    const result = plan([again, first, board]);
+
+    expect(result.excluded.duplicate).toBe(2);
+    expect(result.summary.draft_count).toBe(1);
+    // The earliest copy stands.
+    expect(result.summary.castaways[A]?.adp).toBe(1);
+  });
+});
+
+describe("planCastawayAdp: thresholds", () => {
+  // Orders of B, C, D; a creator repeating a board would count once.
+  const TAILS = [
+    [B, C, D],
+    [B, D, C],
+    [C, B, D],
+    [C, D, B],
+    [D, B, C],
+    [D, C, B],
+  ];
+  /** `drafts` drafts by `creators` distinct creators, A always first. */
+  const cohort = (drafts: number, creators: number) =>
+    Array.from({ length: drafts }, (_, i) =>
+      promoted([A, ...TAILS[Math.floor(i / creators)]], {
+        uids: [`uid_creator_${i % creators}`, `uid_partner_${i}`],
+      }),
+    );
+  const planDefault = (sources: AdpCompetitionSource[]) =>
+    plan(sources, {
+      minDrafts: MIN_ADP_DRAFTS,
+      minCreators: MIN_ADP_CREATORS,
     });
 
-    expect(result.published).toBe(false);
-    expect(result.summary.draft_count).toBe(2);
-    expect(result.summary.castaways).toEqual({});
+  it("uses Davis's defaults: 10 drafts from 5 creators", () => {
+    expect(MIN_ADP_DRAFTS).toBe(10);
+    expect(MIN_ADP_CREATORS).toBe(5);
+  });
+
+  it("publishes a castaway at exactly 10 drafts from 5 creators", () => {
+    const result = planDefault(cohort(10, 5));
+    expect(result.published).toBe(true);
+    expect(result.summary.castaways[A]).toEqual({ adp: 1, picks: 10 });
+    expect(result.summary).toMatchObject({ min_drafts: 10, min_creators: 5 });
+  });
+
+  it("withholds at 9 drafts, or at 10 drafts from only 4 creators", () => {
+    for (const sources of [cohort(9, 5), cohort(10, 4)]) {
+      const result = planDefault(sources);
+      expect(result.published).toBe(false);
+      expect(result.summary.castaways).toEqual({});
+      expect(result.withheld).toBe(4);
+      expect(result.summary.draft_count).toBe(sources.length);
+    }
+  });
+
+  it("withholds only the castaways below the threshold", () => {
+    const sources = cohort(10, 5);
+    // One more draft picks E; E has 1 pick and stays hidden.
+    sources.push(promoted([E, A, B, C], { uids: ["uid_new", "uid_newer"] }));
+    const result = planDefault(sources);
+    expect(result.summary.castaways[A]?.picks).toBe(11);
+    expect(result.summary.castaways[E]).toBeUndefined();
+    expect(result.summary.castaways[D]?.picks).toBe(10);
+    expect(result.withheld).toBe(1);
+  });
+
+  it("publishes no field that identifies a draft, a group, or a person", () => {
+    const summary = planDefault(cohort(10, 5)).summary;
+    const text = JSON.stringify(summary);
+    expect(text).not.toMatch(/uid_|competition_|draft_\d|someone/);
+    for (const stat of Object.values(summary.castaways)) {
+      expect(Object.keys(stat!).sort()).toEqual(["adp", "picks"]);
+    }
   });
 
   it("publishes an honest empty summary when nothing qualifies", () => {
-    const result = plan([]);
-
-    expect(result.summary).toMatchObject({
-      cohort: ADP_COHORT,
+    expect(plan([]).summary).toMatchObject({
+      cohort: "pre_premiere",
       draft_count: 0,
+      sealed_count: 0,
       castaways: {},
     });
   });
@@ -260,34 +454,129 @@ describe("premiereCutoff", () => {
   });
 });
 
-describe("reading a summary", () => {
-  const summary = plan([draft([A, B, C, D])]).summary;
+describe("adpSummaryFingerprint", () => {
+  it("ignores computed_at and key order, and sees any content change", () => {
+    const summary = plan([promoted([A, B, C, D])]).summary;
+    const later = { ...summary, computed_at: "2027-01-01T00:00:00.000Z" };
+    const reordered = Object.fromEntries(Object.entries(summary).reverse());
 
-  it("treats a missing or foreign document as no data", () => {
-    expect(parseCastawayAdpSummary(undefined)).toBeNull();
-    expect(parseCastawayAdpSummary({ castaways: {} })).toBeNull();
+    expect(adpSummaryFingerprint(later)).toBe(adpSummaryFingerprint(summary));
+    expect(adpSummaryFingerprint(reordered)).toBe(
+      adpSummaryFingerprint(summary),
+    );
+    expect(adpSummaryFingerprint({ ...summary, draft_count: 2 })).not.toBe(
+      adpSummaryFingerprint(summary),
+    );
+  });
+});
+
+describe("reading a summary", () => {
+  const summary = plan([promoted([A, B, C, D])]).summary;
+  const allDrafts = plan([promoted([A, B, C, D])], {
+    cohort: "all_drafts",
+  }).summary;
+
+  it("round-trips what the job publishes, per cohort", () => {
+    expect(parseCastawayAdpSummary(summary, "pre_premiere")).toEqual(summary);
+    expect(parseCastawayAdpSummary(allDrafts, "all_drafts")).toEqual(allDrafts);
+  });
+
+  it("treats a missing, foreign, or other-cohort document as no data", () => {
+    expect(parseCastawayAdpSummary(undefined, "pre_premiere")).toBeNull();
+    expect(parseCastawayAdpSummary([], "pre_premiere")).toBeNull();
     expect(
-      parseCastawayAdpSummary({ ...summary, premiere_cutoff: "soon" }),
+      parseCastawayAdpSummary({ castaways: {} }, "pre_premiere"),
     ).toBeNull();
-    expect(parseCastawayAdpSummary(summary)).toEqual(summary);
+    expect(parseCastawayAdpSummary(summary, "all_drafts")).toBeNull();
+    expect(parseCastawayAdpSummary(allDrafts, "pre_premiere")).toBeNull();
+    for (const broken of [
+      { premiere_cutoff: "soon" },
+      { draft_count: "3" },
+      { draft_count: -1 },
+      { draft_count: 1.5 },
+      { min_drafts: null },
+      { computed_at: 5 },
+      { season_id: "US0001" },
+      { sealed_count: 5 },
+      { castaways: null },
+      { castaways: [] },
+    ]) {
+      expect(
+        parseCastawayAdpSummary({ ...summary, ...broken }, "pre_premiere"),
+      ).toBeNull();
+    }
+  });
+
+  it("drops malformed castaway entries instead of crashing the draft page", () => {
+    const parsed = parseCastawayAdpSummary(
+      {
+        ...summary,
+        draft_count: 3,
+        castaways: {
+          [A]: { adp: 1.5, picks: 2 },
+          [B]: { adp: "3", picks: 2 },
+          [C]: { adp: Number.NaN, picks: 2 },
+          [D]: { adp: 2 },
+          [E]: { adp: 0.5, picks: 1 },
+          [F]: { adp: 2, picks: 4 },
+          US9006: null,
+          US9007: { adp: Infinity, picks: 1 },
+        },
+      },
+      "pre_premiere",
+    );
+    expect(parsed?.castaways).toEqual({ [A]: { adp: 1.5, picks: 2 } });
+    // And the survivors format and sort without throwing.
+    expect(formatAdp(parsed!.castaways[A]!.adp)).toBe("1.5");
   });
 
   it("maps load state to what the draft page can honestly show", () => {
     expect(castawayAdpState(false, null)).toEqual({ kind: "loading" });
     expect(castawayAdpState(true, null)).toEqual({ kind: "unavailable" });
-    const thin = { ...summary, draft_count: 1, min_drafts: 3 };
+    const thin = { ...summary, castaways: {} };
     expect(
       castawayAdpState(true, thin, new Date("2026-09-20T00:00:00Z")),
-    ).toEqual({ kind: "too_few", draftCount: 1, minDrafts: 3, closed: false });
+    ).toEqual({ kind: "too_few", summary: thin, closed: false });
     // After the premiere no more drafts can qualify, so the copy must not
     // promise numbers that will never come.
     expect(
       castawayAdpState(true, thin, new Date("2026-09-24T00:00:00Z")),
     ).toMatchObject({ kind: "too_few", closed: true });
+    // All-drafts never closes.
+    expect(
+      castawayAdpState(
+        true,
+        { ...allDrafts, castaways: {} },
+        new Date("2030-01-01T00:00:00Z"),
+      ),
+    ).toMatchObject({ kind: "too_few", closed: false });
     expect(castawayAdpState(true, summary)).toEqual({
       kind: "ready",
       summary,
     });
+  });
+
+  it("offers the all-drafts opt-in only once the premiere has aired", () => {
+    const before = new Date("2026-09-23T12:00:00Z");
+    const after = new Date("2026-09-24T00:00:00Z");
+    const ready = castawayAdpState(true, summary);
+    expect(allDraftsOffered({ kind: "loading" }, after)).toBe(false);
+    expect(allDraftsOffered(ready, before)).toBe(false);
+    expect(allDraftsOffered(ready, after)).toBe(true);
+    expect(allDraftsOffered({ kind: "unavailable" }, before)).toBe(true);
+  });
+
+  it("binds an all-drafts opt-in to one season and one account", () => {
+    const confirmed = allDraftsOptInKey("season_51", "uid_a");
+    expect(confirmed).not.toBeNull();
+    expect(allDraftsOptInKey("season_51", "uid_a")).toBe(confirmed);
+    // Another season or another account no longer matches, so the page
+    // falls back to pre-premiere numbers.
+    expect(allDraftsOptInKey("season_50", "uid_a")).not.toBe(confirmed);
+    expect(allDraftsOptInKey("season_51", "uid_b")).not.toBe(confirmed);
+    // Signed out, or before the season loads, nothing can match.
+    expect(allDraftsOptInKey("season_51", undefined)).toBeNull();
+    expect(allDraftsOptInKey(undefined, "uid_a")).toBeNull();
   });
 
   it("formats to one decimal", () => {
@@ -295,12 +584,12 @@ describe("reading a summary", () => {
     expect(formatAdp(11 / 3)).toBe("3.7");
   });
 
-  it("sorts earliest ADP first, undrafted last, ties in existing order", () => {
+  it("sorts earliest ADP first, withheld last, ties in existing order", () => {
     const players = [F, E, D, C, B, A].map((castaway_id) => ({ castaway_id }));
     const castaways = {
-      [A]: { adp: 3, picks: 1, best: 3, worst: 3 },
-      [B]: { adp: 1.5, picks: 1, best: 1, worst: 2 },
-      [C]: { adp: 3, picks: 1, best: 3, worst: 3 },
+      [A]: { adp: 3, picks: 1 },
+      [B]: { adp: 1.5, picks: 1 },
+      [C]: { adp: 3, picks: 1 },
     };
 
     expect(sortByAdp(players, castaways).map((p) => p.castaway_id)).toEqual([

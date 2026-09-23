@@ -16,7 +16,7 @@
     "prepush": "yarn format && yarn lint --fix && yarn tsc",
     "ci": "yarn format:check && yarn lint && yarn tsc && yarn tsc:scripts && yarn tsc:rules && yarn test --run && yarn build",
     "test": "vitest",
-    "test:rules": "firebase emulators:exec --only firestore --project demo-survivor-fantasy-rules \"vitest run --config vitest.rules.config.ts\"",
+    "test:rules": "firebase emulators:exec --only firestore,database --project demo-survivor-fantasy-rules \"vitest run --config vitest.rules.config.ts\"",
     "coverage": "vitest run --coverage",
     "deploy:local": "yarn prepush && yarn build && firebase deploy",
     "up": "yarn upgrade-interactive --latest",

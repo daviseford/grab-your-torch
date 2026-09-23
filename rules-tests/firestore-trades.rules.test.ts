@@ -82,8 +82,13 @@ beforeAll(async () => {
     projectId: PROJECT_ID,
     firestore: {
       rules: readFileSync("firestore.rules", "utf8"),
-      host: "127.0.0.1",
-      port: 8080,
+      // The emulator `emulators:exec` started; CI uses the default 8080.
+      host: (process.env.FIRESTORE_EMULATOR_HOST ?? "127.0.0.1:8080").split(
+        ":",
+      )[0],
+      port: Number(
+        (process.env.FIRESTORE_EMULATOR_HOST ?? "127.0.0.1:8080").split(":")[1],
+      ),
     },
   });
 });
