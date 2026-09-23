@@ -9,12 +9,18 @@ import { defineConfig, devices } from "@playwright/test";
  *
  *   yarn e2e:auth-flows
  *
+ * E2E_PORT moves the dev server off 5175 when another checkout holds it; the
+ * VITE_EMULATOR_*_PORT variables (see src/firebase.ts) do the same for the
+ * emulators when a local firebase config moves them.
+ *
  * One worker: tests share the emulator and flush/reseed it between tests
  * (see e2e/auth-flows.spec.ts), so parallel workers would race.
  */
+const PORT = Number(process.env.E2E_PORT) || 5175;
+
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: /(auth-flows|redesign-draft)\.spec\.ts/,
+  testMatch: /(auth-flows|redesign-draft|castaway-adp)\.spec\.ts/,
   fullyParallel: false,
   workers: 1,
   retries: 1,
@@ -24,7 +30,7 @@ export default defineConfig({
   use: {
     // Dedicated port: never reuse a server running another mode, since the
     // emulator wiring only exists in e2e-auth mode.
-    baseURL: "http://localhost:5175",
+    baseURL: `http://localhost:${PORT}`,
     trace: "on-first-retry",
   },
 
@@ -38,8 +44,8 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: "yarn dev --mode e2e-auth --port 5175 --strictPort",
-    url: "http://localhost:5175",
+    command: `yarn dev --mode e2e-auth --port ${PORT} --strictPort`,
+    url: `http://localhost:${PORT}`,
     reuseExistingServer: false,
     timeout: 120_000,
   },

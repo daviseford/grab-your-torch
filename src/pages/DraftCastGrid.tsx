@@ -123,8 +123,8 @@ export const DraftCastGrid = ({
                   {adp && (
                     <CastawayAdpTag
                       name={player.full_name}
-                      stat={adp.castaways[player.castaway_id]}
-                      draftCount={adp.draft_count}
+                      castawayId={player.castaway_id}
+                      summary={adp}
                     />
                   )}
                   <CastawayBioButton player={player} />

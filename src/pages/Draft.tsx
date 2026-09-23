@@ -51,7 +51,11 @@ import {
   SlimUser,
 } from "../types";
 import { trackEvent } from "../utils/analytics";
-import { sortByAdp } from "../utils/castawayAdp";
+import {
+  allDraftsOffered,
+  allDraftsOptInKey,
+  sortByAdp,
+} from "../utils/castawayAdp";
 import { sortCastAlphabetically } from "../utils/castOrder";
 import {
   isRepeatTurn,
@@ -479,9 +483,25 @@ export const DraftComponent = () => {
     [season],
   );
 
-  // ADP comes only from drafts finished before the premiere, so sorting by it
-  // reveals nothing about results.
-  const adp = useCastawayAdp(season?.id);
+  // Pre-premiere ADP is the default: those drafts were saved before anything
+  // aired. All-drafts ADP can reflect results, so it is not even fetched
+  // until the viewer confirms the spoiler warning, and that choice belongs to
+  // one season and one account: switching either starts from the default.
+  // Summaries are readable only when signed in; an invitee who has not signed
+  // in yet subscribes to nothing rather than to a denied read.
+  const adpSeasonId = slimUser ? season?.id : undefined;
+  const preAdp = useCastawayAdp(adpSeasonId, "pre_premiere");
+  const adpOptInKey = allDraftsOptInKey(season?.id, slimUser?.uid);
+  const [allDraftsOptIn, setAllDraftsOptIn] = useState<string | null>(null);
+  const showAllDrafts = adpOptInKey !== null && allDraftsOptIn === adpOptInKey;
+  const allAdp = useCastawayAdp(
+    adpSeasonId,
+    showAllDrafts ? "all_drafts" : null,
+  );
+  const adpCohort = showAllDrafts ? "all_drafts" : "pre_premiere";
+  const adp = showAllDrafts ? allAdp : preAdp;
+  const offerAllDrafts =
+    adpOptInKey !== null && allDraftsOffered(preAdp, new Date());
   const [castSort, setCastSort] = useState<CastSort>("name");
   const adpSummary = adp.kind === "ready" ? adp.summary : undefined;
   const draftCast = useMemo(
@@ -915,8 +935,18 @@ export const DraftComponent = () => {
 
           <CastawayAdpNote
             state={adp}
+            cohort={adpCohort}
             sort={castSort}
             onSortChange={setCastSort}
+            allDrafts={
+              offerAllDrafts || showAllDrafts
+                ? {
+                    active: showAllDrafts,
+                    onChange: (active) =>
+                      setAllDraftsOptIn(active ? adpOptInKey : null),
+                  }
+                : undefined
+            }
           />
 
           <DraftCastGrid

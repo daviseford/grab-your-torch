@@ -51,8 +51,9 @@ jobs:
 
       # firestore.rules is the only server-side control on trades, and the
       # trades e2e only drives the valid UI path -- a rule that became too
-      # permissive would still pass it. The Firestore emulator needs a JVM.
-      - name: Set up Java (Firestore emulator)
+      # permissive would still pass it. The Firestore and Database emulators
+      # need a JVM.
+      - name: Set up Java (Firestore and Database emulators)
         uses: actions/setup-java@v5
         with:
           distribution: temurin

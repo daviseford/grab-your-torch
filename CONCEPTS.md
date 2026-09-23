@@ -45,7 +45,14 @@ A pick never changes. A castaway being voted out does not reassign or clear thei
 
 How early a castaway tends to go: the mean of their one-based overall pick number (not round, not roster slot) across a cohort of drafts for one season. A returning castaway gets a separate figure for each season.
 
-The cohort is app-wide, not the viewer's groups: every promoted draft for the season that finished before the premiere aired, excluding sample and test fixtures and any draft whose picks are incomplete or damaged. The premiere cutoff keeps hindsight out, so the figure can never encode results. It reads the frozen **Draft picks**, so **Trades** never move it, and a draft that did not pick a castaway leaves their average alone. Because it spans groups the viewer cannot see, an admin job publishes it as numbers only, and no figure appears until a minimum number of drafts qualify.
+Two cohorts, each published separately, app-wide rather than the viewer's groups:
+
+- **Pre-premiere** (the default): drafts saved as a competition before the premiere aired. The boundary is when the competition was saved (Firestore's own create time), not when the draft finished. A record edited after the premiere (an episode revealed, a team renamed) counts only if its picks still match the original draft record; the summary says how many of those there are, because that check lowers but cannot rule out a later change to the picks for records saved before the picks were locked by rules.
+- **All drafts**: every qualifying draft, including ones made after episodes aired, so it can reflect results. The draft page shows it only after the viewer confirms a spoiler warning, for one season and one account at a time, and labels it wherever it appears.
+
+A draft qualifies only with at least two distinct participants, complete and consistent picks, a finished Realtime Database draft that matches it (same people, picks, slots, and turns), and participants who are real accounts older than the save. Sample and test fixtures are excluded, and the same group drafting twice, or one creator repeating a board, counts once. Castaways a draft left undrafted (an uneven split) simply do not count toward that castaway's average. It reads the frozen **Draft picks**, so **Trades** never move it.
+
+A castaway's average is published only once at least 10 qualifying drafts by at least 5 different creators picked them; below that the slate says there are too few picks. No per-draft earliest or latest pick and no participant, group, or competition identifier is published. These thresholds reduce what can be inferred about one group's board; they are not a guarantee against every inference. An admin job computes the summaries, because they span groups the viewer cannot see.
 
 ### Trade
 
