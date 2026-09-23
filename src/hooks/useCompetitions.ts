@@ -2,15 +2,21 @@ import { collection, onSnapshot } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { db } from "../firebase";
 import { Competition } from "../types";
+import { listForUser, type UserScopedList } from "../utils/userScopedList";
 import { useUser } from "./useUser";
 
 export const useCompetitions = () => {
   const { slimUser } = useUser();
+  const uid = slimUser?.uid;
+  const isAdmin = !!slimUser?.isAdmin;
 
-  const [data, setData] = useState<Competition[]>([]);
+  const [list, setList] = useState<UserScopedList<Competition>>({
+    uid: undefined,
+    data: [],
+  });
 
   useEffect(() => {
-    if (!slimUser?.isAdmin) return;
+    if (!uid || !isAdmin) return;
 
     const ref = collection(db, "competitions");
 
@@ -18,7 +24,7 @@ export const useCompetitions = () => {
       ref,
       (snapshot) => {
         const _data = snapshot.docs.map((x) => x.data() as Competition);
-        setData(_data);
+        setList({ uid, data: _data });
       },
       (error) => {
         console.error("useCompetitions: onSnapshot error", error);
@@ -26,7 +32,9 @@ export const useCompetitions = () => {
     );
 
     return () => unsub();
-  }, [slimUser?.isAdmin]);
+  }, [uid, isAdmin]);
 
-  return { data };
+  // Only an admin's own snapshot is returned: after a sign-out or a switch to
+  // another account, the last admin snapshot is not shown to anyone else.
+  return { data: listForUser(list, isAdmin ? uid : undefined) };
 };

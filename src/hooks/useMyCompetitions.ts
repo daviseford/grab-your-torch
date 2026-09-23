@@ -2,44 +2,43 @@ import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { useEffect, useState } from "react";
 import { db } from "../firebase";
 import { Competition } from "../types";
+import { listForUser, type UserScopedList } from "../utils/userScopedList";
 import { useUser } from "./useUser";
 
 export const useMyCompetitions = () => {
   const { user } = useUser();
+  const uid = user?.uid;
 
-  const [data, setData] = useState<Competition[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [list, setList] = useState<UserScopedList<Competition>>({
+    uid: undefined,
+    data: [],
+  });
 
   useEffect(() => {
-    if (!user?.uid) {
-      setData([]);
-      setIsLoading(false);
-      return;
-    }
-
-    setIsLoading(true);
+    if (!uid) return;
 
     const ref = collection(db, "competitions");
-    const _query = query(
-      ref,
-      where("participant_uids", "array-contains", user.uid),
-    );
+    const _query = query(ref, where("participant_uids", "array-contains", uid));
 
     const unsub = onSnapshot(
       _query,
       (snapshot) => {
         const _data = snapshot.docs.map((x) => x.data() as Competition);
-        setData(_data);
-        setIsLoading(false);
+        setList({ uid, data: _data });
       },
       (error) => {
         console.error("useMyCompetitions: onSnapshot error", error);
-        setIsLoading(false);
+        setList({ uid, data: [] });
       },
     );
 
     return () => unsub();
-  }, [user?.uid]);
+  }, [uid]);
 
-  return { data, isLoading };
+  // Tagging the list with its uid means a sign-out or account switch never
+  // shows the previous user's competitions while the new snapshot loads.
+  return {
+    data: listForUser(list, uid),
+    isLoading: !!uid && list.uid !== uid,
+  };
 };
