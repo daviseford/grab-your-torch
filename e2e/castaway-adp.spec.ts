@@ -9,8 +9,10 @@
  *
  * - the spoiler-safe pre-premiere cohort is the default and is labeled;
  * - castaways below the 10-draft / 5-creator threshold show no number;
- * - nothing from the all-drafts cohort is on the page until the viewer
- *   confirms the spoiler warning, and a reload starts back at the default;
+ * - nothing from the all-drafts cohort is on the page, or even requested
+ *   from Firestore, until the viewer confirms the spoiler warning; a reload,
+ *   a change of season (and back), or signing out and in starts back at the
+ *   default;
  * - the ADP tags add no tab stops between Draft slates;
  * - malformed summaries degrade to truthful empty states, never a crash;
  * - the admin job, run against the draft the two users just made, finds it
@@ -58,13 +60,17 @@ const AUTH_EMU = `http://${hosts.auth}`;
 const FIRESTORE_EMU = `http://${hosts.firestore}`;
 const RTDB_EMU = `http://${hosts.database}`;
 
-if (admin.apps.length === 0) {
-  admin.initializeApp({
-    projectId: PROJECT,
-    databaseURL: `https://${RTDB_NS}.firebaseio.com`,
-  });
-}
-const adminDb = admin.firestore();
+// A named app of its own: in a full run another spec may already have
+// initialized the default app without a database URL, and reusing that one
+// made `database()` throw on the first attempt.
+const ADMIN_APP = "castaway-adp-e2e";
+const adminApp =
+  admin.apps.find((app) => app?.name === ADMIN_APP) ??
+  admin.initializeApp(
+    { projectId: PROJECT, databaseURL: `https://${RTDB_NS}.firebaseio.com` },
+    ADMIN_APP,
+  );
+const adminDb = adminApp.firestore();
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -94,7 +100,6 @@ const PRE_SUMMARY = {
   season_num: SEASON_ORDER,
   cohort: "pre_premiere",
   draft_count: 14,
-  sealed_count: 12,
   min_drafts: 10,
   min_creators: 5,
   // In the past, so the premiere has aired and the opt-in is offered.
@@ -114,7 +119,6 @@ const ALL_SUMMARY = {
   season_num: SEASON_ORDER,
   cohort: "all_drafts",
   draft_count: 31,
-  sealed_count: null,
   min_drafts: 10,
   min_creators: 5,
   premiere_cutoff: null,
@@ -124,6 +128,16 @@ const ALL_SUMMARY = {
     [id(2)]: { adp: 6.9, picks: 25 },
   },
 };
+
+/** A second season, only ever reached by changing the URL's season. */
+const OTHER_SEASON_ID = "season_2";
+const OTHER_PLAYERS = SEASON_PLAYERS.map((player, i) => ({
+  ...player,
+  season_id: OTHER_SEASON_ID,
+  season_num: 2,
+  castaway_id: `US98${String(i + 1).padStart(2, "0")}` as CastawayId,
+  full_name: `Other Player ${i + 1}`,
+}));
 
 const PASSWORD = "correct-horse-7";
 let userCounter = 0;
@@ -161,16 +175,21 @@ const wipeEmulators = async () => {
   }
 };
 
-const seedSeason = () =>
-  adminDb.doc(`seasons/${SEASON_ID}`).set({
-    id: SEASON_ID,
-    order: SEASON_ORDER,
-    name: SEASON_NAME,
+const seedSeason = (
+  id = SEASON_ID,
+  order = SEASON_ORDER,
+  name = SEASON_NAME,
+  players = SEASON_PLAYERS,
+) =>
+  adminDb.doc(`seasons/${id}`).set({
+    id,
+    order,
+    name,
     img: "",
-    players: SEASON_PLAYERS,
+    players,
     episodes: [],
     castawayLookup: Object.fromEntries(
-      SEASON_PLAYERS.map((p) => [
+      players.map((p) => [
         p.castaway_id,
         { full_name: p.full_name, castaway: p.full_name },
       ]),
@@ -216,6 +235,45 @@ const guardContext = (
     if (prod) productionViolations.push(request.url());
   });
 };
+
+// ---------------------------------------------------------------------------
+// Network: which ADP summaries each page asked Firestore for
+// ---------------------------------------------------------------------------
+
+/**
+ * Every `castaway_adp` document a page's Firestore listen channel asked for,
+ * in order. A listen target names its document path in the request body, so
+ * this shows what was fetched, not just what was rendered.
+ */
+const adpListens = new Map<Page, string[]>();
+const recordAdpListens = (page: Page) => {
+  const seen: string[] = [];
+  adpListens.set(page, seen);
+  page.on("request", (request) => {
+    if (!request.url().includes("/google.firestore.v1.Firestore/Listen"))
+      return;
+    const body = decodeURIComponent(request.postData() ?? "");
+    for (const match of body.matchAll(/castaway_adp\/(season_\d+_[a-z_]+)/g))
+      seen.push(match[1]);
+  });
+};
+/** Listen targets since `from` (an earlier length), optionally one cohort. */
+const listensSince = (page: Page, from = 0, cohort?: string) =>
+  adpListens
+    .get(page)!
+    .slice(from)
+    .filter((docId) => !cohort || docId.endsWith(`_${cohort}`));
+const listenMark = (page: Page) => adpListens.get(page)!.length;
+
+/**
+ * Change the route without a reload, the way an in-app link does, so the
+ * draft page stays mounted and keeps its state.
+ */
+const navigateInApp = (page: Page, pathname: string) =>
+  page.evaluate((to) => {
+    window.history.pushState({}, "", to);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }, pathname);
 
 // ---------------------------------------------------------------------------
 // Page helpers
@@ -318,7 +376,9 @@ test("two users draft with ADP: default cohort, thresholds, opt-in, and the real
   // tens of seconds rather than one. Chromium is immediate.
   const live = { timeout: isMobile ? 150_000 : 30_000 };
   trackErrors(page);
+  recordAdpListens(page);
   await seedSeason();
+  await seedSeason(OTHER_SEASON_ID, 2, "Test Season Two", OTHER_PLAYERS);
   await summaryDoc("pre_premiere").set(PRE_SUMMARY);
   await summaryDoc("all_drafts").set(ALL_SUMMARY);
 
@@ -327,7 +387,8 @@ test("two users draft with ADP: default cohort, thresholds, opt-in, and the real
   await main(page)
     .getByRole("button", { name: "Create account", exact: true })
     .click();
-  await registerThrough(page, { name: "Ada Host", email: uniqueEmail("host") });
+  const hostEmail = uniqueEmail("host");
+  await registerThrough(page, { name: "Ada Host", email: hostEmail });
   await expect(page.getByRole("heading", { name: "Draft Lobby" })).toBeVisible(
     SLOW,
   );
@@ -340,6 +401,7 @@ test("two users draft with ADP: default cohort, thresholds, opt-in, and the real
   guardContext(guestContext);
   const guest = await guestContext.newPage();
   trackErrors(guest);
+  recordAdpListens(guest);
   await guest.goto(draftUrl);
   await main(guest)
     .getByRole("button", { name: "Create account", exact: true })
@@ -378,6 +440,11 @@ test("two users draft with ADP: default cohort, thresholds, opt-in, and the real
   expect(before).not.toContain("1.1");
   expect(before).not.toContain("6.9");
   expect(before).not.toContain("31 drafts");
+  // Nor was it requested: only the default summary was asked for.
+  expect(listensSince(page, 0, "pre_premiere")).toContain(
+    "season_1_pre_premiere",
+  );
+  expect(listensSince(page, 0, "all_drafts")).toEqual([]);
 
   await page
     .getByRole("button", { name: "How average draft position works" })
@@ -388,8 +455,17 @@ test("two users draft with ADP: default cohort, thresholds, opt-in, and the real
     ),
   ).toBeVisible();
   await expect(
-    page.getByText("2 of those records were edited after the premiere"),
+    page.getByText("haven't been changed since", { exact: false }),
   ).toBeVisible();
+  await expect(
+    page.getByText(
+      "That makes one group's board harder to work out from the averages, but it isn't a guarantee.",
+      { exact: false },
+    ),
+  ).toBeVisible();
+  const explainer = await pageText(page);
+  expect(explainer).not.toContain("can't be read back out");
+  expect(explainer).not.toContain("matched against the original draft record");
   await capture(page, "pre-premiere-explainer");
   await page.keyboard.press("Escape");
 
@@ -447,6 +523,9 @@ test("two users draft with ADP: default cohort, thresholds, opt-in, and the real
   await warning.getByRole("button", { name: "Cancel" }).click();
   await expect(warning).toHaveCount(0);
   await expect(slate(page, 2)).toContainText("ADP1.3");
+  // Opening the warning and cancelling fetched nothing either.
+  await page.waitForTimeout(2_000);
+  expect(listensSince(page, 0, "all_drafts")).toEqual([]);
 
   // ---- Confirm: all-drafts numbers, labeled everywhere they appear ----
   await page
@@ -465,14 +544,16 @@ test("two users draft with ADP: default cohort, thresholds, opt-in, and the real
   ).toBeVisible(live);
   await expect(slate(page, 8)).toContainText("All ADP1.1in 30 of 31", live);
   await expect(slate(page, 1)).toContainText("All ADP—too few picks");
+  expect(listensSince(page, 0, "all_drafts")).toContain("season_1_all_drafts");
   await expect(
     page.getByRole("button", { name: /^Draft Test Player/ }).first(),
   ).toHaveAccessibleName("Draft Test Player 8");
   await capture(page, "all-drafts");
 
-  // The guest never opted in and still sees only the default.
+  // The guest never opted in and still sees, and fetched, only the default.
   expect(await pageText(guest)).not.toContain("All ADP");
   await expect(slate(guest, 2)).toContainText("ADP1.3");
+  expect(listensSince(guest, 0, "all_drafts")).toEqual([]);
 
   // Back to the default without a reload.
   await page.getByRole("button", { name: "Back to pre-premiere only" }).click();
@@ -485,10 +566,86 @@ test("two users draft with ADP: default cohort, thresholds, opt-in, and the real
     .click();
   await page.getByRole("button", { name: "Show all-drafts ADP" }).click();
   await expect(slate(page, 8)).toContainText("All ADP1.1", live);
+  let mark = listenMark(page);
   await page.reload();
   await expect(turnHeading(page)).toBeVisible(SLOW);
   await expect(slate(page, 2)).toContainText("ADP1.3", SLOW);
   expect(await pageText(page)).not.toContain("All ADP");
+  expect(listensSince(page, mark, "all_drafts")).toEqual([]);
+
+  const optIn = async () => {
+    await page
+      .getByRole("button", { name: "Include drafts made after the premiere…" })
+      .click();
+    await page.getByRole("button", { name: "Show all-drafts ADP" }).click();
+    await expect(slate(page, 8)).toContainText("All ADP1.1", live);
+  };
+  const expectDefault = async () => {
+    await expect(slate(page, 2)).toContainText("ADP1.3", SLOW);
+    expect(await pageText(page)).not.toContain("All ADP");
+    await expect(
+      page.getByRole("button", {
+        name: "Include drafts made after the premiere…",
+      }),
+    ).toBeVisible();
+  };
+
+  // ---- Season A, then B, then A again, without a reload: asks again ----
+  // The page takes its season from the URL, so changing only the season in
+  // the address keeps the same draft page mounted with its state.
+  await optIn();
+  mark = listenMark(page);
+  const draftPath = new URL(draftUrl).pathname;
+  await navigateInApp(
+    page,
+    draftPath.replace(`/seasons/${SEASON_ID}/`, `/seasons/${OTHER_SEASON_ID}/`),
+  );
+  await expect(
+    page.getByRole("button", { name: "Draft Other Player 1" }),
+  ).toBeVisible(SLOW);
+  await expect(
+    page.getByText("Average draft position isn't available for this season."),
+  ).toBeVisible(live);
+  expect(await pageText(page)).not.toContain("All ADP");
+  await navigateInApp(page, draftPath);
+  await expect(
+    page.getByRole("button", { name: "Draft Test Player 1" }),
+  ).toBeVisible(SLOW);
+  await expectDefault();
+  expect(listensSince(page, mark, "all_drafts")).toEqual([]);
+
+  // ---- Signing out and back in on the page: asks again ----
+  await optIn();
+  const errorsBefore = pageErrors.get(page)!.length;
+  mark = listenMark(page);
+  const openNav = async () => {
+    if (isMobile)
+      await page.getByRole("button", { name: "Toggle navigation" }).click();
+  };
+  const mainNav = page.getByRole("navigation", { name: "Main navigation" });
+  await openNav();
+  await mainNav.getByRole("button", { name: "Logout" }).click();
+  await expect(
+    mainNav.getByRole("button", { name: "Sign in", exact: true }),
+  ).toBeVisible(SLOW);
+  await expect(page.locator("[data-cohort]")).toHaveCount(0, SLOW);
+  await mainNav.getByRole("button", { name: "Sign in", exact: true }).click();
+  await dialog(page).getByRole("tab", { name: "Sign in" }).click();
+  await dialog(page).getByLabel("Email").fill(hostEmail);
+  await dialog(page).getByRole("textbox", { name: "Password" }).fill(PASSWORD);
+  await dialog(page).getByRole("button", { name: "Sign in" }).click();
+  await expect(dialog(page)).toBeHidden(SLOW);
+  if (isMobile && (await mainNav.isVisible())) await openNav();
+  await expect(turnHeading(page)).toBeVisible(SLOW);
+  await expectDefault();
+  expect(listensSince(page, mark, "all_drafts")).toEqual([]);
+  // While signed out the draft itself is unreadable; those denials are the
+  // expected cost of signing out on a draft page, not a fault of ADP.
+  const errors = pageErrors.get(page)!;
+  const duringSignOut = errors.splice(errorsBefore);
+  errors.push(
+    ...duringSignOut.filter((message) => !/permission.?denied/i.test(message)),
+  );
 
   // ---- Malformed summaries degrade to truthful states, never a crash ----
   await summaryDoc("pre_premiere").set({
@@ -498,11 +655,24 @@ test("two users draft with ADP: default cohort, thresholds, opt-in, and the real
       [id(2)]: { adp: Number.NaN, picks: 14 },
       [id(3)]: { adp: 5.75 },
       [id(4)]: { adp: 3.4, picks: 13 },
+      // Below the 10-draft threshold, and later than the 8th and last pick.
+      [id(5)]: { adp: 2, picks: 9 },
+      [id(6)]: { adp: CAST_SIZE + 1.5, picks: 12 },
     },
   });
   await expect(slate(page, 1)).toContainText("ADP—too few picks", live);
   await expect(slate(page, 4)).toContainText("ADP3.4in 13 of 14");
+  await expect(slate(page, 5)).toContainText("ADP—too few picks");
+  await expect(slate(page, 6)).toContainText("ADP—too few picks");
   await summaryDoc("pre_premiere").set({ ...PRE_SUMMARY, draft_count: "14" });
+  await expect(
+    page.getByText("Average draft position isn't available for this season."),
+  ).toBeVisible(live);
+  await expect(page.locator("[data-cohort]")).toHaveCount(0);
+  // A summary claiming a looser threshold than the policy is not shown at all.
+  await summaryDoc("pre_premiere").set(PRE_SUMMARY);
+  await expect(slate(page, 2)).toContainText("ADP1.3", live);
+  await summaryDoc("pre_premiere").set({ ...PRE_SUMMARY, min_creators: 1 });
   await expect(
     page.getByText("Average draft position isn't available for this season."),
   ).toBeVisible(live);
@@ -510,7 +680,7 @@ test("two users draft with ADP: default cohort, thresholds, opt-in, and the real
   await summaryDoc("pre_premiere").set({ ...PRE_SUMMARY, castaways: {} });
   await expect(
     page.getByText(
-      "No average draft position for this season: 14 drafts were saved before the premiere, and no castaway had picks in at least 10 drafts made by 5 different people.",
+      "No average draft position for this season: 14 drafts saved before the premiere still qualify, and no castaway had picks in at least 10 drafts made by 5 different people.",
     ),
   ).toBeVisible(live);
   await capture(page, "pre-premiere-closed-empty");
@@ -588,11 +758,11 @@ test("two users draft with ADP: default cohort, thresholds, opt-in, and the real
     .toBe(1);
   const competitions = await loadCompetitions(
     adminDb as unknown as CompetitionReader,
-    admin.database() as unknown as DraftReader,
+    adminApp.database() as unknown as DraftReader,
     [SEASON_ID],
   );
   const accounts = await loadAccounts(
-    admin.auth() as unknown as AccountReader,
+    adminApp.auth() as unknown as AccountReader,
     competitions,
   );
   expect(competitions).toHaveLength(1);
@@ -606,15 +776,20 @@ test("two users draft with ADP: default cohort, thresholds, opt-in, and the real
     computedAt: new Date().toISOString(),
   } as const;
 
-  // Premiere not yet aired: the draft counts for both cohorts, unchanged
-  // since it was saved.
+  // Firestore's own write times came through, and nothing wrote the record
+  // after it was saved.
+  const { createdAt, updatedAt } = competitions[0];
+  expect(createdAt).toBeInstanceOf(Date);
+  expect(updatedAt).toBeInstanceOf(Date);
+  expect(updatedAt!.getTime()).toBeGreaterThanOrEqual(createdAt!.getTime());
+
+  // Premiere not yet aired: the draft counts for both cohorts.
   const pre = planCastawayAdp({
     ...base,
     cohort: "pre_premiere",
     premiereAirDate: "2099-01-01",
   });
   expect(pre.summary.draft_count).toBe(1);
-  expect(pre.summary.sealed_count).toBe(1);
   expect(Object.values(pre.excluded).every((count) => count === 0)).toBe(true);
   // One draft is far below 10 drafts from 5 creators: nothing published.
   expect(pre.published).toBe(false);
@@ -649,6 +824,9 @@ test("two users draft with ADP: default cohort, thresholds, opt-in, and the real
   });
   expect(late.summary.draft_count).toBe(0);
   expect(late.excluded.after_premiere).toBe(1);
+
+  // The guest never asked for all-drafts numbers at any point.
+  expect(listensSince(guest, 0, "all_drafts")).toEqual([]);
 
   for (const [p, errors] of pageErrors) {
     expect.soft(errors, `${p === page ? "host" : "guest"} errors`).toEqual([]);
