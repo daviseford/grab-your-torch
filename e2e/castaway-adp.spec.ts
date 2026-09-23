@@ -581,7 +581,7 @@ test("two users draft with ADP: default cohort, thresholds, opt-in, and the real
     await expect(slate(page, 8)).toContainText("All ADP1.1", live);
   };
   const expectDefault = async () => {
-    await expect(slate(page, 2)).toContainText("ADP1.3", SLOW);
+    await expect(slate(page, 2)).toContainText("ADP1.3", live);
     expect(await pageText(page)).not.toContain("All ADP");
     await expect(
       page.getByRole("button", {
@@ -602,7 +602,7 @@ test("two users draft with ADP: default cohort, thresholds, opt-in, and the real
   );
   await expect(
     page.getByRole("button", { name: "Draft Other Player 1" }),
-  ).toBeVisible(SLOW);
+  ).toBeVisible(live);
   await expect(
     page.getByText("Average draft position isn't available for this season."),
   ).toBeVisible(live);
@@ -610,7 +610,7 @@ test("two users draft with ADP: default cohort, thresholds, opt-in, and the real
   await navigateInApp(page, draftPath);
   await expect(
     page.getByRole("button", { name: "Draft Test Player 1" }),
-  ).toBeVisible(SLOW);
+  ).toBeVisible(live);
   await expectDefault();
   expect(listensSince(page, mark, "all_drafts")).toEqual([]);
 
@@ -628,7 +628,7 @@ test("two users draft with ADP: default cohort, thresholds, opt-in, and the real
   await expect(
     mainNav.getByRole("button", { name: "Sign in", exact: true }),
   ).toBeVisible(SLOW);
-  await expect(page.locator("[data-cohort]")).toHaveCount(0, SLOW);
+  await expect(page.locator("[data-cohort]")).toHaveCount(0, live);
   await mainNav.getByRole("button", { name: "Sign in", exact: true }).click();
   await dialog(page).getByRole("tab", { name: "Sign in" }).click();
   await dialog(page).getByLabel("Email").fill(hostEmail);
@@ -636,7 +636,7 @@ test("two users draft with ADP: default cohort, thresholds, opt-in, and the real
   await dialog(page).getByRole("button", { name: "Sign in" }).click();
   await expect(dialog(page)).toBeHidden(SLOW);
   if (isMobile && (await mainNav.isVisible())) await openNav();
-  await expect(turnHeading(page)).toBeVisible(SLOW);
+  await expect(turnHeading(page)).toBeVisible(live);
   await expectDefault();
   expect(listensSince(page, mark, "all_drafts")).toEqual([]);
   // While signed out the draft itself is unreadable; those denials are the

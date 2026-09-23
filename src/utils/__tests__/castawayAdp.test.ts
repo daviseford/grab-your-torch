@@ -9,6 +9,7 @@ import {
   allDraftsOptInFor,
   allDraftsOptInKey,
   castawayAdpState,
+  castawayAdpStateFor,
   formatAdp,
   MIN_ADP_CREATORS,
   MIN_ADP_DRAFTS,
@@ -648,6 +649,46 @@ describe("reading a summary", () => {
       kind: "ready",
       summary,
     });
+  });
+
+  it("ignores data left over from a document no longer watched", () => {
+    // Signed out, or all-drafts not opted in: nothing is watched, so even a
+    // loaded snapshot from before shows nothing.
+    expect(
+      castawayAdpStateFor(undefined, "pre_premiere", CAST_SIZE, true, summary),
+    ).toEqual({ kind: "loading" });
+    expect(
+      castawayAdpStateFor("season_51", null, CAST_SIZE, true, allDrafts),
+    ).toEqual({ kind: "loading" });
+    // On the way to another season, the old season's summary is not shown.
+    expect(
+      castawayAdpStateFor(
+        "season_50",
+        "pre_premiere",
+        CAST_SIZE,
+        true,
+        summary,
+      ),
+    ).toEqual({ kind: "loading" });
+    // The watched season's own summary is.
+    expect(
+      castawayAdpStateFor(
+        "season_51",
+        "pre_premiere",
+        CAST_SIZE,
+        true,
+        summary,
+      ),
+    ).toEqual({ kind: "ready", summary });
+    expect(
+      castawayAdpStateFor(
+        "season_51",
+        "all_drafts",
+        CAST_SIZE,
+        true,
+        undefined,
+      ),
+    ).toEqual({ kind: "unavailable" });
   });
 
   it("offers the all-drafts opt-in only once the premiere has aired", () => {

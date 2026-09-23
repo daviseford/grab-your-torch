@@ -595,6 +595,27 @@ export type CastawayAdpState =
     }
   | { kind: "ready"; summary: CastawayAdpSummary };
 
+/**
+ * What the draft page may show for one season's cohort, from its snapshot.
+ * The snapshot hook keeps its last data when the document it watches changes
+ * or goes away, so data is used only while a document is watched and only if
+ * it is that season's summary: after signing out, or on the way to another
+ * season, the page shows nothing rather than numbers it no longer asked for.
+ */
+export const castawayAdpStateFor = (
+  seasonId: Season["id"] | undefined,
+  cohort: AdpCohort | null,
+  castSize: number,
+  loaded: boolean,
+  data: unknown,
+  now: Date = new Date(),
+): CastawayAdpState => {
+  if (!seasonId || !cohort) return { kind: "loading" };
+  const summary = parseCastawayAdpSummary(data, cohort, castSize);
+  if (summary && summary.season_id !== seasonId) return { kind: "loading" };
+  return castawayAdpState(loaded, summary, now);
+};
+
 export const castawayAdpState = (
   loaded: boolean,
   summary: CastawayAdpSummary | null,

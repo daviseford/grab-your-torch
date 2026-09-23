@@ -4,9 +4,8 @@ import {
   type AdpCohort,
   CASTAWAY_ADP_COLLECTION,
   castawayAdpDocId,
-  castawayAdpState,
   type CastawayAdpState,
-  parseCastawayAdpSummary,
+  castawayAdpStateFor,
 } from "../utils/castawayAdp";
 import { useSharedSnapshot } from "./useSharedSnapshot";
 
@@ -26,13 +25,7 @@ export const useCastawayAdp = (
     seasonId && cohort ? castawayAdpDocId(seasonId, cohort) : undefined;
   const { data, loaded } = useSharedSnapshot(CASTAWAY_ADP_COLLECTION, docId);
   return useMemo(
-    () =>
-      cohort
-        ? castawayAdpState(
-            loaded,
-            parseCastawayAdpSummary(data, cohort, castSize),
-          )
-        : { kind: "loading" },
-    [castSize, cohort, data, loaded],
+    () => castawayAdpStateFor(seasonId, cohort, castSize, loaded, data),
+    [castSize, cohort, data, loaded, seasonId],
   );
 };
