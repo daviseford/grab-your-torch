@@ -1,0 +1,240 @@
+/*
+ * My Stats: lower-third, then boards. Operate surface, so the record reads as
+ * a scannable ledger: caps labels, tabular numerals, one gold moment for wins.
+ */
+.page,
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-md);
+}
+
+.sample {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 500;
+  font-size: 0.6875rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+
+/* Stat tiles: hairline-divided cells, not cards. */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  margin: 0;
+  overflow: clip;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: var(--mantine-spacing-md);
+  box-shadow: inset -1px -1px 0 var(--gyt-rule);
+}
+
+.tileLabel {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-size: 0.6875rem;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+
+.tileValue {
+  margin: 0;
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 1.75rem;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  color: var(--mantine-color-text);
+}
+
+/* Victory Gold is for the win moment only. In light mode gold text on the
+   panel would fail contrast, so the value sits on a gold plate instead. */
+.tileGold {
+  align-self: flex-start;
+  padding: 0 8px;
+  border-radius: var(--mantine-radius-xs);
+  background: var(--mantine-color-gold-4);
+  color: var(--mantine-color-navy-9);
+}
+
+.tileContext {
+  margin: 0;
+  font-size: var(--mantine-font-size-xs);
+  line-height: 1.4;
+  color: var(--mantine-color-dimmed);
+  overflow-wrap: anywhere;
+}
+
+.footnote {
+  padding: var(--mantine-spacing-sm) var(--mantine-spacing-md);
+  border-top: 1px solid var(--gyt-rule);
+  max-width: 78ch;
+}
+
+.propLine {
+  margin: 0;
+  padding: var(--mantine-spacing-md);
+  font-size: var(--mantine-font-size-md);
+}
+
+.propValue {
+  font-family: var(--mantine-headings-font-family);
+  font-variant-numeric: tabular-nums;
+}
+
+.propHint {
+  color: var(--mantine-color-dimmed);
+  font-size: var(--mantine-font-size-sm);
+}
+
+/* Competition record. */
+.nameLink {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 0.9375rem;
+  color: inherit;
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--mantine-color-league-6);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+}
+
+.badgeCell {
+  white-space: nowrap;
+}
+
+.badges {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.finish {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.finishText {
+  font-size: var(--mantine-font-size-sm);
+}
+
+.through {
+  color: var(--mantine-color-dimmed);
+}
+
+.rank {
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 4px;
+  border-radius: var(--mantine-radius-xs);
+  background: var(--mantine-color-league-6);
+  color: var(--mantine-color-white);
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 0.75rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.rankGold {
+  background: var(--mantine-color-gold-4);
+  color: var(--mantine-color-navy-9);
+}
+
+.points {
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.unavailable {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 600;
+}
+
+.unavailableWhy {
+  font-weight: 400;
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+}
+
+/* Mobile: stacked link rows. */
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "name chev"
+    "badges chev"
+    "finish chev";
+  gap: 6px 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--gyt-rule);
+  color: inherit;
+  text-decoration: none;
+
+  &:focus-visible {
+    outline: 2px solid var(--mantine-color-league-6);
+    outline-offset: -2px;
+  }
+}
+
+li:last-child > .row {
+  border-bottom: 0;
+}
+
+.rowName {
+  grid-area: name;
+  min-width: 0;
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 0.9375rem;
+  line-height: 1.2;
+}
+
+.rowBadges {
+  grid-area: badges;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.rowFinish {
+  grid-area: finish;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.rowChevron {
+  grid-area: chev;
+  align-self: center;
+  color: var(--mantine-color-dimmed);
+}

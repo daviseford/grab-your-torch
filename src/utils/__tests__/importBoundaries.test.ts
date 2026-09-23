@@ -92,6 +92,38 @@ export const RULES: BoundaryRule[] = [
     mode: "direct",
   },
   {
+    id: "pool-never-imports-my-stats",
+    reason:
+      "My Stats is competition-ownership machinery: it ranks a participant inside competitions using trades and rosters. A public pool has entrants, not participants, and must never inherit it.",
+    from: [
+      "src/pages/Pool.tsx",
+      "src/components/Pool/**",
+      "src/components/Home/HomePool.tsx",
+      "src/hooks/usePool*.ts",
+      "src/utils/pool*.ts",
+    ],
+    to: [
+      "src/utils/myStats.ts",
+      "src/utils/myStatsSources.ts",
+      "src/hooks/useMyStatsData.ts",
+      "src/pages/MyStats.tsx",
+    ],
+    mode: "direct",
+  },
+  {
+    id: "homepage-never-reaches-my-stats",
+    reason:
+      "My Stats pulls in the scoring engine and prop-bet scoring. It is a lazy route; the homepage entry chunk must not reach it.",
+    from: ["src/components/Home/Home.tsx"],
+    to: [
+      "src/utils/myStats.ts",
+      "src/utils/myStatsSources.ts",
+      "src/hooks/useMyStatsData.ts",
+      "src/pages/MyStats.tsx",
+    ],
+    mode: "transitive",
+  },
+  {
     id: "homepage-never-reaches-season-data",
     reason:
       "src/data/season-metadata.ts exists so the homepage can render season tiles without loading player and episode arrays. Any path from Home.tsx to src/data/seasons or a src/data/season_* module puts that payload in the entry chunk.",

@@ -54,6 +54,9 @@ const ScoringReference = lazy(() =>
     default: m.ScoringReference,
   })),
 );
+const MyStats = lazy(() =>
+  import("./pages/MyStats").then((m) => ({ default: m.MyStats })),
+);
 const Pool = lazy(() =>
   import("./pages/Pool").then((m) => ({ default: m.Pool })),
 );
@@ -239,6 +242,7 @@ export const AppRoutes = () => {
                       <Route path="/competitions" element={<Competitions />} />
 
                       {/* Scoring */}
+                      <Route path="/stats" element={<MyStats />} />
                       <Route path="/scoring" element={<ScoringReference />} />
 
                       {/* Admin */}
