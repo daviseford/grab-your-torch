@@ -62,7 +62,6 @@ const SUMMARY = {
   season_num: 51,
   cohort: "pre_premiere",
   draft_count: 12,
-  sealed_count: 12,
   min_drafts: 10,
   min_creators: 5,
   premiere_cutoff: "2026-09-24T00:00:00.000Z",
@@ -182,6 +181,17 @@ describe("competitions: the recorded draft is frozen once saved", () => {
     await assertFails(
       setDoc(competitionRef(ALICE), {
         ...COMPETITION,
+        draft_picks: [...PICKS].reverse(),
+      }),
+    );
+  });
+
+  it("the creator cannot repoint the record at another draft with new picks", async () => {
+    // The forge the D1 review reproduced under the old rules: point a saved
+    // competition at a draft written after the premiere, picks and all.
+    await assertFails(
+      updateDoc(competitionRef(ALICE), {
+        draft_id: "draft_forged",
         draft_picks: [...PICKS].reverse(),
       }),
     );

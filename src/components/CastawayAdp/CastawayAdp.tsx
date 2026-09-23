@@ -93,10 +93,6 @@ const formatUpdated = (iso: string) => {
 
 const Explanation = ({ summary }: { summary: CastawayAdpSummary }) => {
   const updated = formatUpdated(summary.computed_at);
-  const unsealed =
-    summary.sealed_count === null
-      ? 0
-      : summary.draft_count - summary.sealed_count;
   return (
     <div className={classes.explain}>
       <p>
@@ -107,10 +103,11 @@ const Explanation = ({ summary }: { summary: CastawayAdpSummary }) => {
       {summary.cohort === "pre_premiere" ? (
         <p>
           It counts Grab Your Torch drafts for this season, from every group,
-          that were saved as a competition before the premiere aired. Drafts
-          still in progress, this one included, aren't counted.
-          {unsealed > 0 &&
-            ` ${unsealed} of those ${unsealed === 1 ? "record was" : "records were"} edited after the premiere, for example to reveal an episode, so the picks were matched against the original draft record instead. That check makes a later change to the picks unlikely but can't rule it out.`}
+          that were saved as a competition before the premiere aired and haven't
+          been changed since. A group that has since revealed an episode or
+          renamed a team drops out, because its picks can no longer be shown to
+          predate the premiere. Drafts still in progress, this one included,
+          aren't counted.
         </p>
       ) : (
         <p>
@@ -123,8 +120,8 @@ const Explanation = ({ summary }: { summary: CastawayAdpSummary }) => {
       <p>
         Every draft needs at least two people, and the same group drafting again
         counts once. A castaway's average appears only once it has{" "}
-        {thresholdPhrase(summary)}, so one group's board can't be read back out.
-        Trades don't change it.
+        {thresholdPhrase(summary)}. That makes one group's board harder to work
+        out from the averages, but it isn't a guarantee. Trades don't change it.
       </p>
     </div>
   );
@@ -146,7 +143,7 @@ const emptyMessage = (
     return `No all-drafts averages yet: a castaway needs ${need}. Qualifying drafts so far: ${summary.draft_count}.`;
   }
   return closed
-    ? `No average draft position for this season: ${draftsNoun(summary.draft_count)} were saved before the premiere, and no castaway had ${need}.`
+    ? `No average draft position for this season: ${draftsNoun(summary.draft_count)} saved before the premiere still qualify, and no castaway had ${need}.`
     : `Average draft position appears once a castaway has ${need}, saved before the premiere. Drafts so far: ${summary.draft_count}.`;
 };
 

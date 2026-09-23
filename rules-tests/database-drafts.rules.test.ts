@@ -127,6 +127,25 @@ describe("drafts: creation must be an empty lobby", () => {
     });
   }
 
+  it("a finished draft with another person's picks cannot be written in one go", async () => {
+    // The whole forged source draft from the D1 review, as one write.
+    await assertFails(
+      dbAs(ALICE)
+        .ref(`drafts/${DRAFT_ID}`)
+        .set(
+          lobby({
+            participants: { [ALICE]: { uid: ALICE }, [BOB]: { uid: BOB } },
+            turns: { "1": BOB, "2": ALICE },
+            draft_picks: {
+              "1": pick(1, BOB, "US9002"),
+              "2": pick(2, ALICE, "US9001"),
+            },
+            state: { current_pick_number: 2, started: true, finished: true },
+          }),
+        ),
+    );
+  });
+
   it("a draft cannot be created for someone else", async () => {
     await assertFails(dbAs(BOB).ref(`drafts/${DRAFT_ID}`).set(lobby()));
   });

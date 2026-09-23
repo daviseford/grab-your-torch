@@ -53,8 +53,10 @@ import {
 import { trackEvent } from "../utils/analytics";
 import {
   allDraftsOffered,
+  allDraftsOptInFor,
   allDraftsOptInKey,
   sortByAdp,
+  type AllDraftsOptIn,
 } from "../utils/castawayAdp";
 import { sortCastAlphabetically } from "../utils/castOrder";
 import {
@@ -486,17 +488,27 @@ export const DraftComponent = () => {
   // Pre-premiere ADP is the default: those drafts were saved before anything
   // aired. All-drafts ADP can reflect results, so it is not even fetched
   // until the viewer confirms the spoiler warning, and that choice belongs to
-  // one season and one account: switching either starts from the default.
+  // one season and one account: any change of either, even back to a season
+  // confirmed earlier, or signing out and in, clears it and asks again.
   // Summaries are readable only when signed in; an invitee who has not signed
   // in yet subscribes to nothing rather than to a denied read.
   const adpSeasonId = slimUser ? season?.id : undefined;
-  const preAdp = useCastawayAdp(adpSeasonId, "pre_premiere");
+  const castSize = cast.length;
+  const preAdp = useCastawayAdp(adpSeasonId, "pre_premiere", castSize);
   const adpOptInKey = allDraftsOptInKey(season?.id, slimUser?.uid);
-  const [allDraftsOptIn, setAllDraftsOptIn] = useState<string | null>(null);
-  const showAllDrafts = adpOptInKey !== null && allDraftsOptIn === adpOptInKey;
+  const [storedOptIn, setAllDraftsOptIn] = useState<AllDraftsOptIn>({
+    key: adpOptInKey,
+    on: false,
+  });
+  // Cleared during render, not in an effect, so the render that sees a new
+  // key never subscribes to all-drafts numbers under it.
+  const allDraftsOptIn = allDraftsOptInFor(storedOptIn, adpOptInKey);
+  if (allDraftsOptIn !== storedOptIn) setAllDraftsOptIn(allDraftsOptIn);
+  const showAllDrafts = adpOptInKey !== null && allDraftsOptIn.on;
   const allAdp = useCastawayAdp(
     adpSeasonId,
     showAllDrafts ? "all_drafts" : null,
+    castSize,
   );
   const adpCohort = showAllDrafts ? "all_drafts" : "pre_premiere";
   const adp = showAllDrafts ? allAdp : preAdp;
@@ -943,7 +955,7 @@ export const DraftComponent = () => {
                 ? {
                     active: showAllDrafts,
                     onChange: (active) =>
-                      setAllDraftsOptIn(active ? adpOptInKey : null),
+                      setAllDraftsOptIn({ key: adpOptInKey, on: active }),
                   }
                 : undefined
             }

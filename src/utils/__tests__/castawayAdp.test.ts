@@ -5,6 +5,8 @@ import {
   type AdpPlanInput,
   adpSummaryFingerprint,
   allDraftsOffered,
+  type AllDraftsOptIn,
+  allDraftsOptInFor,
   allDraftsOptInKey,
   castawayAdpState,
   formatAdp,
@@ -175,7 +177,6 @@ describe("planCastawayAdp: cohorts", () => {
       cohort: "all_drafts",
       draft_count: 3,
       premiere_cutoff: null,
-      sealed_count: null,
     });
     expect(result.excluded.unknown_creation_time).toBe(1);
     expect(result.summary.castaways[A]?.adp).toBeCloseTo((1 + 4 + 4) / 3);
@@ -189,14 +190,61 @@ describe("planCastawayAdp: cohorts", () => {
     expect(() => plan(sources(), { premiereAirDate: null })).toThrow();
   });
 
-  it("counts how many pre-premiere records are unchanged since before the cutoff", () => {
-    const result = plan([
+  it("pre-premiere fails closed: a record written since the cutoff, or of unknown write time, is out", () => {
+    const sources = () => [
       promoted([A, B, C, D]),
       promoted([B, A, C, D], { updatedAt: AFTER }),
-      promoted([C, A, B, D], { updatedAt: null }),
-    ]);
-    expect(result.summary.draft_count).toBe(3);
-    expect(result.summary.sealed_count).toBe(1);
+      promoted([C, A, B, D], { updatedAt: CUTOFF }),
+      promoted([D, A, B, C], { updatedAt: null }),
+      promoted([A, C, B, D], {
+        updatedAt: new Date(CUTOFF.getTime() - 1),
+      }),
+    ];
+    const result = plan(sources());
+    expect(result.summary.draft_count).toBe(2);
+    expect(result.excluded.edited_after_premiere).toBe(2);
+    expect(result.excluded.unknown_update_time).toBe(1);
+    expect(result.summary.castaways[A]?.adp).toBe(1);
+    expect(result.summary).not.toHaveProperty("sealed_count");
+
+    // All drafts keeps them: it is opt-in and says it may reflect results.
+    const all = plan(sources(), { cohort: "all_drafts" });
+    expect(all.summary.draft_count).toBe(5);
+    expect(all.excluded.edited_after_premiere).toBe(0);
+    expect(all.excluded.unknown_update_time).toBe(0);
+  });
+
+  it("keeps hindsight out: a legacy record repointed at a forged draft after the premiere is not counted", () => {
+    // The D1 review's repro, as the job would read it back: saved before the
+    // premiere, then (under the old rules) repointed by its creator at a
+    // finished draft written after the premiere, with the picks swapped for
+    // hindsight picks. Record and source agree, so every other check passes.
+    const honest = Array.from({ length: 10 }, (_, i) =>
+      promoted([A, B, C, D], {
+        uids: [`uid_creator_${i}`, `uid_partner_${i}`],
+      }),
+    );
+    const forged = promoted([D, C, B, A], {
+      uids: ["uid_alice", "uid_bob"],
+      createdAt: new Date("2026-09-20T00:00:00Z"),
+      updatedAt: new Date("2026-09-30T00:00:00Z"),
+    });
+    const sources = [...honest, forged];
+    const thresholds = {
+      minDrafts: MIN_ADP_DRAFTS,
+      minCreators: MIN_ADP_CREATORS,
+    };
+
+    const result = plan(sources, thresholds);
+    expect(result.summary.draft_count).toBe(10);
+    expect(result.excluded.edited_after_premiere).toBe(1);
+    expect(result.summary.castaways[D]).toEqual({ adp: 4, picks: 10 });
+    expect(Object.values(result.excluded).reduce((a, b) => a + b)).toBe(1);
+
+    // It would otherwise have counted, and moved D's average.
+    const all = plan(sources, { ...thresholds, cohort: "all_drafts" });
+    expect(all.summary.draft_count).toBe(11);
+    expect(all.summary.castaways[D]?.adp).toBeCloseTo(41 / 11);
   });
 });
 
@@ -428,7 +476,6 @@ describe("planCastawayAdp: thresholds", () => {
     expect(plan([]).summary).toMatchObject({
       cohort: "pre_premiere",
       draft_count: 0,
-      sealed_count: 0,
       castaways: {},
     });
   });
@@ -471,61 +518,108 @@ describe("adpSummaryFingerprint", () => {
 });
 
 describe("reading a summary", () => {
-  const summary = plan([promoted([A, B, C, D])]).summary;
-  const allDrafts = plan([promoted([A, B, C, D])], {
-    cohort: "all_drafts",
-  }).summary;
+  /** What the job publishes at the real thresholds: 10 drafts, 5 creators. */
+  const published = (cohort: "pre_premiere" | "all_drafts") =>
+    plan(
+      Array.from({ length: 12 }, (_, i) =>
+        promoted(i % 2 ? [A, B, C, D] : [B, A, D, C], {
+          uids: [`uid_creator_${i}`, `uid_partner_${i}`],
+        }),
+      ),
+      { cohort, minDrafts: MIN_ADP_DRAFTS, minCreators: MIN_ADP_CREATORS },
+    ).summary;
+  const summary = published("pre_premiere");
+  const allDrafts = published("all_drafts");
+  const CAST_SIZE = CAST.length;
+  const read = (raw: unknown, cohort: "pre_premiere" | "all_drafts") =>
+    parseCastawayAdpSummary(raw, cohort, CAST_SIZE);
 
   it("round-trips what the job publishes, per cohort", () => {
-    expect(parseCastawayAdpSummary(summary, "pre_premiere")).toEqual(summary);
-    expect(parseCastawayAdpSummary(allDrafts, "all_drafts")).toEqual(allDrafts);
+    expect(Object.keys(summary.castaways)).toHaveLength(4);
+    expect(read(summary, "pre_premiere")).toEqual(summary);
+    expect(read(allDrafts, "all_drafts")).toEqual(allDrafts);
   });
 
   it("treats a missing, foreign, or other-cohort document as no data", () => {
-    expect(parseCastawayAdpSummary(undefined, "pre_premiere")).toBeNull();
-    expect(parseCastawayAdpSummary([], "pre_premiere")).toBeNull();
-    expect(
-      parseCastawayAdpSummary({ castaways: {} }, "pre_premiere"),
-    ).toBeNull();
-    expect(parseCastawayAdpSummary(summary, "all_drafts")).toBeNull();
-    expect(parseCastawayAdpSummary(allDrafts, "pre_premiere")).toBeNull();
+    expect(read(undefined, "pre_premiere")).toBeNull();
+    expect(read([], "pre_premiere")).toBeNull();
+    expect(read({ castaways: {} }, "pre_premiere")).toBeNull();
+    expect(read(summary, "all_drafts")).toBeNull();
+    expect(read(allDrafts, "pre_premiere")).toBeNull();
     for (const broken of [
       { premiere_cutoff: "soon" },
       { draft_count: "3" },
       { draft_count: -1 },
       { draft_count: 1.5 },
       { min_drafts: null },
+      { min_creators: "5" },
       { computed_at: 5 },
       { season_id: "US0001" },
-      { sealed_count: 5 },
       { castaways: null },
       { castaways: [] },
     ]) {
-      expect(
-        parseCastawayAdpSummary({ ...summary, ...broken }, "pre_premiere"),
-      ).toBeNull();
+      expect(read({ ...summary, ...broken }, "pre_premiere")).toBeNull();
     }
+    // Without a real cast size nothing can be bounded, so nothing is read.
+    expect(parseCastawayAdpSummary(summary, "pre_premiere", 0)).toBeNull();
+    expect(parseCastawayAdpSummary(summary, "pre_premiere", 2.5)).toBeNull();
   });
 
-  it("drops malformed castaway entries instead of crashing the draft page", () => {
-    const parsed = parseCastawayAdpSummary(
+  it("refuses a summary claiming thresholds below the published policy", () => {
+    for (const lowered of [
+      { min_drafts: MIN_ADP_DRAFTS - 1 },
+      { min_drafts: 0 },
+      { min_creators: MIN_ADP_CREATORS - 1 },
+      { min_creators: 1 },
+    ]) {
+      expect(read({ ...summary, ...lowered }, "pre_premiere")).toBeNull();
+      expect(read({ ...allDrafts, ...lowered }, "all_drafts")).toBeNull();
+    }
+    // A stricter summary is still read, at its own stricter draft threshold.
+    const stricter = read(
       {
         ...summary,
-        draft_count: 3,
+        draft_count: 20,
+        min_drafts: 15,
+        min_creators: 8,
         castaways: {
-          [A]: { adp: 1.5, picks: 2 },
-          [B]: { adp: "3", picks: 2 },
-          [C]: { adp: Number.NaN, picks: 2 },
-          [D]: { adp: 2 },
-          [E]: { adp: 0.5, picks: 1 },
-          [F]: { adp: 2, picks: 4 },
-          US9006: null,
-          US9007: { adp: Infinity, picks: 1 },
+          [A]: { adp: 2, picks: 15 },
+          [B]: { adp: 3, picks: 14 },
         },
       },
       "pre_premiere",
     );
-    expect(parsed?.castaways).toEqual({ [A]: { adp: 1.5, picks: 2 } });
+    expect(stricter?.castaways).toEqual({ [A]: { adp: 2, picks: 15 } });
+  });
+
+  it("drops malformed, below-threshold, and impossible castaway entries instead of crashing the draft page", () => {
+    const parsed = read(
+      {
+        ...summary,
+        draft_count: 20,
+        castaways: {
+          [A]: { adp: 1.5, picks: 12 },
+          [B]: { adp: "3", picks: 12 },
+          [C]: { adp: Number.NaN, picks: 12 },
+          [D]: { adp: 2 },
+          [E]: { adp: 0.5, picks: 12 },
+          [F]: { adp: 2, picks: 21 },
+          US9006: null,
+          US9007: { adp: Infinity, picks: 12 },
+          // Below the 10-draft threshold, though the shape is fine.
+          US9008: { adp: 4, picks: 9 },
+          US9009: { adp: 4, picks: 1 },
+          // Later than the last possible pick in a 12-castaway season.
+          US9010: { adp: CAST_SIZE + 0.5, picks: 12 },
+          US9011: { adp: CAST_SIZE, picks: 12 },
+        },
+      },
+      "pre_premiere",
+    );
+    expect(parsed?.castaways).toEqual({
+      [A]: { adp: 1.5, picks: 12 },
+      US9011: { adp: CAST_SIZE, picks: 12 },
+    });
     // And the survivors format and sort without throwing.
     expect(formatAdp(parsed!.castaways[A]!.adp)).toBe("1.5");
   });
@@ -564,6 +658,30 @@ describe("reading a summary", () => {
     expect(allDraftsOffered(ready, before)).toBe(false);
     expect(allDraftsOffered(ready, after)).toBe(true);
     expect(allDraftsOffered({ kind: "unavailable" }, before)).toBe(true);
+  });
+
+  it("clears the opt-in on any change of season or account, even back again", () => {
+    const S51 = allDraftsOptInKey("season_51", "uid_a");
+    const S50 = allDraftsOptInKey("season_50", "uid_a");
+    const confirmed: AllDraftsOptIn = { key: S51, on: true };
+
+    // Same key: untouched, and the same object so the page does not re-set it.
+    expect(allDraftsOptInFor(confirmed, S51)).toBe(confirmed);
+
+    // Season A, then B, then A again: off on return.
+    const inB = allDraftsOptInFor(confirmed, S50);
+    expect(inB).toEqual({ key: S50, on: false });
+    expect(allDraftsOptInFor(inB, S51)).toEqual({ key: S51, on: false });
+
+    // Signing out and back in as the same account: off.
+    const signedOut = allDraftsOptInFor(confirmed, null);
+    expect(signedOut).toEqual({ key: null, on: false });
+    expect(allDraftsOptInFor(signedOut, S51)).toEqual({ key: S51, on: false });
+
+    // Another account on the same season: off.
+    expect(
+      allDraftsOptInFor(confirmed, allDraftsOptInKey("season_51", "uid_b")),
+    ).toEqual({ key: "season_51:uid_b", on: false });
   });
 
   it("binds an all-drafts opt-in to one season and one account", () => {
