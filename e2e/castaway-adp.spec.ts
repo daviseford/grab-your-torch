@@ -16,7 +16,7 @@
  * - the admin job, run against the draft the two users just made, finds it
  *   through the real Firestore, Realtime Database, and Auth records.
  *
- *   yarn e2e:auth-flows castaway-adp
+ *   yarn firebase emulators:exec --only auth,firestore,database  *     --project demo-auth-flows  *     "playwright test --config playwright.auth-flows.config.ts -g with.ADP"
  *
  * Emulator hosts come from `firebase emulators:exec`, so a local config may
  * move the ports (see playwright.auth-flows.config.ts). Set CASTAWAY_ADP_SHOTS
