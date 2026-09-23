@@ -218,7 +218,7 @@ Semantic colors stay outside the brand system: Mantine green for success, orange
 
 **The Flame Rule.** Ember and Gold are spent only on flame moments: first place, the winner, a fresh pick, an elimination strike, the next episode, the admin mark. Destructive controls use semantic red, never Ember.
 
-**The Plate Rule.** Navy plates stay navy in both schemes and re-point Mantine's text tokens inside them (`--mantine-color-text` to Ice White, `--mantine-color-dimmed` to Mist Blue), so anything placed on a plate reads without per-element color.
+**The Plate Rule.** Navy plates stay navy in both schemes and re-point Mantine's text tokens inside them (`--mantine-color-text` to Ice White, `--mantine-color-dimmed` to Mist Blue), so anything placed on a plate reads without per-element color. One exception: the finished Draft Results spine sits on the Studio Panel in light mode (`.spineStudio`), with Night Navy text, cells on Studio Panel 2, and a darker Signal eyebrow for contrast, so the results read as one surface with the summary below. It stays navy in dark mode, and the lobby, live draft, and prop-bets spines keep the plate.
 
 ## Typography
 

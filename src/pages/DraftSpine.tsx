@@ -15,6 +15,8 @@ type DraftSpineProps = {
   foot?: ReactNode;
   /** The board (or nothing for the form steps). */
   children?: ReactNode;
+  /** In light mode, sit on the studio panel instead of the navy plate. */
+  studio?: boolean;
 };
 
 /**
@@ -30,10 +32,16 @@ export const DraftSpine = ({
   tools,
   foot,
   children,
+  studio = false,
 }: DraftSpineProps) => {
   const titleId = useId();
   return (
-    <section className={classes.spine} aria-labelledby={titleId}>
+    <section
+      className={
+        studio ? `${classes.spine} ${classes.spineStudio}` : classes.spine
+      }
+      aria-labelledby={titleId}
+    >
       <div className={classes.head}>
         <div className={classes.headText}>
           <p className={classes.eyebrow}>
