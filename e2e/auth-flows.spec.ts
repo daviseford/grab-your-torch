@@ -2255,12 +2255,13 @@ test("competitions: finished competitions name their winner, ties included, and 
     .click();
   await signInThrough(page, { email: viewer.email, password: PASSWORD });
 
-  // Desktop rows are table rows; phone rows are links. Both carry the
-  // competition name as their accessible name.
+  // Desktop rows are table rows named by the competition; phone rows are
+  // links whose name starts with the competition and, once it is finished,
+  // goes on to the winner line.
   const expectWinners = async (isPhone: boolean) => {
     const row = (name: string) =>
       isPhone
-        ? main(page).getByRole("link", { name, exact: true })
+        ? main(page).getByRole("link", { name: new RegExp(`^${name}(?: |$)`) })
         : main(page).getByRole("row", { name, exact: true });
 
     await expect(row("Won League")).toContainText(
@@ -2278,6 +2279,27 @@ test("competitions: finished competitions name their winner, ties included, and 
     await expect(row("Running League")).not.toContainText("Winner:");
     if (!isPhone) {
       await expect(row("Running League")).toContainText("No winner yet");
+    }
+    if (isPhone) {
+      // The link is the only place a phone shows the winner, and a screen
+      // reader that announces the link as one element reads only its
+      // accessible name, so the winner has to be in that name, not just in
+      // the DOM text asserted above.
+      await expect(row("Won League")).toHaveAccessibleName(
+        /^Won League Winner: Winning Viewer · \d+ pts$/,
+      );
+      await expect(row("Tied League")).toHaveAccessibleName(
+        /^Tied League Tied winners: Rival, Winning Viewer · \d+ pts$/,
+      );
+      await expect(row("Ghost League")).toHaveAccessibleName(
+        /^Ghost League Winner: Unknown participant · \d+ pts$/,
+      );
+      await expect(row("Behind League")).toHaveAccessibleName(
+        "Behind League Winner: Not available",
+      );
+      await expect(row("Running League")).toHaveAccessibleName(
+        "Running League",
+      );
     }
 
     for (const colorScheme of ["light", "dark"] as const) {
@@ -2297,4 +2319,90 @@ test("competitions: finished competitions name their winner, ties included, and 
   await expectWinners(false);
   await page.setViewportSize({ width: 390, height: 844 });
   await expectWinners(true);
+});
+
+/**
+ * The navbar signs out in place, so /competitions stays mounted through a
+ * sign-out and whatever sign-in follows. Nothing read for one account may
+ * show for the next: not an admin's list of every competition, and not
+ * winners worked out from that account's reads. Signing back in reads afresh
+ * rather than reusing reads that were refused while signed out.
+ */
+test("competitions: an in-place sign-out and account switch shows only the new account's competitions and winners", async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName === "webkit",
+    "WebKit does not receive later Firestore reads from the local emulator",
+  );
+  await seedFinishedSeason();
+  const [viewer, adminUser, plain] = await Promise.all([
+    createUser(uniqueEmail("winner"), PASSWORD, "Winning Viewer"),
+    createUser(uniqueEmail("winner-admin"), PASSWORD, "Admin Viewer"),
+    createUser(uniqueEmail("winner-plain"), PASSWORD, "Plain Viewer"),
+  ]);
+  await admin.auth().setCustomUserClaims(adminUser.uid, { admin: true });
+  const rival = { uid: "rival-uid", displayName: "Rival", email: "" };
+  const [p1, p2] = SEASON_PLAYERS.map((p) => p.castaway_id);
+  await seedCompetition(
+    "competition_won",
+    "Won League",
+    viewer,
+    rival,
+    [p1, p2],
+    { finished: true, current_episode: null },
+  );
+
+  const wonRow = () =>
+    main(page).getByRole("row", { name: "Won League", exact: true });
+  const signInAs = async (user: SeededUser) => {
+    await main(page)
+      .getByRole("button", { name: "Sign in", exact: true })
+      .click();
+    await signInThrough(page, { email: user.email, password: PASSWORD });
+    await expect(
+      mainNav(page).getByRole("button", { name: "Logout" }),
+    ).toBeVisible(SLOW);
+  };
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/competitions");
+  // Proves every step below happens on this one page load.
+  await page.evaluate(() => {
+    (window as unknown as { sameMount: boolean }).sameMount = true;
+  });
+
+  // An admin sees every competition, including one they are not in.
+  await signInAs(adminUser);
+  await expect(wonRow()).toContainText("Winning Viewer", SLOW);
+
+  await signOutViaNavbar(page, false);
+  await expect(
+    main(page).getByRole("heading", {
+      name: "Competitions require an account",
+    }),
+  ).toBeVisible();
+
+  // Someone in no competition sees none, not the admin's list.
+  await signInAs(plain);
+  await expect(
+    main(page).getByText("No competitions yet", { exact: true }),
+  ).toBeVisible(SLOW);
+  await expect(main(page).getByText("Won League")).toHaveCount(0);
+  await expect(main(page).getByText("Winning Viewer")).toHaveCount(0);
+
+  // A participant signing in on the same page gets their winner, read fresh.
+  await signOutViaNavbar(page, false);
+  await signInAs(viewer);
+  await expect(wonRow()).toContainText("Winning Viewer", SLOW);
+  await expect(wonRow()).toContainText("pts");
+  await expect(wonRow()).not.toContainText("Not available");
+
+  await expect(page).toHaveURL(/\/competitions$/);
+  expect(
+    await page.evaluate(
+      () => (window as unknown as { sameMount?: boolean }).sameMount,
+    ),
+  ).toBe(true);
 });

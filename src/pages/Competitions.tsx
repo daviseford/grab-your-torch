@@ -346,7 +346,7 @@ export const Competitions = () => {
   }, [_comps, seasonFilter, statusFilter, scopeFilter, slimUser]);
 
   // Only finished competitions are read; filtering never adds a read.
-  const results = useCompetitionResults(_comps, !!slimUser);
+  const results = useCompetitionResults(_comps, slimUser?.uid);
 
   const sorted = useMemo(() => {
     const compareFn = (a: Competition, b: Competition) => {
@@ -637,10 +637,18 @@ export const Competitions = () => {
                 <Link
                   to={`/competitions/${x.id}`}
                   className={`${classes.row} ${x.finished ? classes.rowFinished : ""}`}
-                  aria-label={x.competition_name}
+                  // Named by the competition name plus, once it is finished,
+                  // the winner line. On a phone this link is the only place
+                  // the winner is shown, and screen readers that announce a
+                  // link as one element read only its name.
+                  aria-labelledby={
+                    x.finished ? `${x.id}-name ${x.id}-winner` : `${x.id}-name`
+                  }
                 >
                   <div className={classes.rowName}>
-                    <div className={classes.name}>{x.competition_name}</div>
+                    <div id={`${x.id}-name`} className={classes.name}>
+                      {x.competition_name}
+                    </div>
                     <div className={classes.creator}>
                       <VisuallyHidden>Created by: </VisuallyHidden>
                       {creatorName(x)}
@@ -650,7 +658,7 @@ export const Competitions = () => {
                     <CompetitionBadges comp={x} />
                   </div>
                   {x.finished && (
-                    <div className={classes.rowWinner}>
+                    <div id={`${x.id}-winner`} className={classes.rowWinner}>
                       <CompetitionWinner result={results[x.id]} compact />
                     </div>
                   )}
