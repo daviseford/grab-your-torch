@@ -21,11 +21,11 @@ import type { CompetitionSeasonData } from "../competitionResult";
 import {
   applyResultRead,
   createResultsSession,
-  listForUser,
   planResultReads,
   resolveCompetitionResults,
   type ResultsSession,
 } from "../competitionResultsSession";
+import { listForUser } from "../userScopedList";
 
 const ALICE = "US0001" as CastawayId;
 const BOB = "US0002" as CastawayId;
