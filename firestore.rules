@@ -154,6 +154,15 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Castaway average draft position: one numbers-only summary per season,
+    // published by scripts/recompute-castaway-adp.ts through the Admin SDK.
+    // It aggregates every group's drafts, so no browser session may write it,
+    // one carrying the admin claim included.
+    match /castaway_adp/{seasonId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
     // Public season pools.
     //
     // Public read is granted by four explicit NON-RECURSIVE matches: the pool
