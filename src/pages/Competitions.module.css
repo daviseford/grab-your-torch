@@ -213,3 +213,53 @@
   gap: 1px;
   padding: var(--mantine-spacing-sm);
 }
+
+/* Finished competitions: who won, never the leader of a running one. */
+.winner {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: var(--mantine-font-size-sm);
+  line-height: 1.3;
+}
+
+.winnerIcon {
+  flex: none;
+  align-self: center;
+  color: var(--mantine-color-gold-7);
+}
+
+[data-mantine-color-scheme="dark"] .winnerIcon {
+  color: var(--mantine-color-gold-4);
+}
+
+.winnerLabel {
+  color: var(--mantine-color-dimmed);
+}
+
+.winnerName {
+  font-weight: 700;
+}
+
+.winnerPoints {
+  color: var(--mantine-color-dimmed);
+  white-space: nowrap;
+}
+
+.winnerEmpty {
+  font-size: var(--mantine-font-size-sm);
+  color: var(--mantine-color-dimmed);
+}
+
+.rowFinished {
+  grid-template-areas:
+    "name chev"
+    "badges chev"
+    "winner chev"
+    "people chev";
+}
+
+.rowWinner {
+  grid-area: winner;
+  min-width: 0;
+}
