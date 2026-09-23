@@ -15,6 +15,7 @@ import {
   IconChevronDown,
   IconChevronRight,
   IconChevronUp,
+  IconTrophy,
 } from "@tabler/icons-react";
 import { collection, doc, getDoc, getDocs } from "firebase/firestore";
 import { useEffect, useMemo, useState } from "react";
@@ -28,6 +29,10 @@ import {
   type StatusKind,
 } from "../components/Layout";
 import { db } from "../firebase";
+import {
+  useCompetitionResults,
+  type CompetitionResultState,
+} from "../hooks/useCompetitionResults";
 import { useCompetitions } from "../hooks/useCompetitions";
 import { useIsMobile } from "../hooks/useIsMobile";
 import { useMyCompetitions } from "../hooks/useMyCompetitions";
@@ -222,6 +227,68 @@ const CompetitionBadges = ({ comp }: { comp: Competition }) => (
   </>
 );
 
+const formatPoints = (total: number) =>
+  `${total} ${Math.abs(total) === 1 ? "pt" : "pts"}`;
+
+/**
+ * Who won, for a finished competition. A running competition shows no one:
+ * its leader has not won anything yet. A tie names everyone who shares the
+ * top total, since the scoring has no tiebreaker.
+ */
+const CompetitionWinner = ({
+  result,
+  compact = false,
+}: {
+  result: CompetitionResultState | undefined;
+  compact?: boolean;
+}) => {
+  if (!result || result.kind === "in-progress") {
+    return compact ? null : (
+      <span className={classes.winnerEmpty}>
+        <span aria-hidden="true">—</span>
+        <VisuallyHidden>No winner yet</VisuallyHidden>
+      </span>
+    );
+  }
+
+  if (result.kind === "loading") {
+    return (
+      <>
+        <Skeleton height={14} width={compact ? 140 : 110} radius="sm" />
+        <VisuallyHidden>Loading winner</VisuallyHidden>
+      </>
+    );
+  }
+
+  if (result.kind === "unavailable") {
+    return (
+      <span className={classes.winnerEmpty}>
+        {compact && "Winner: "}Not available
+      </span>
+    );
+  }
+
+  const { winners } = result;
+  const isTie = winners.length > 1;
+  return (
+    <span className={classes.winner}>
+      <IconTrophy size={14} className={classes.winnerIcon} aria-hidden="true" />
+      <span>
+        <span className={classes.winnerLabel}>
+          {isTie ? "Tied winners: " : compact ? "Winner: " : ""}
+        </span>
+        <span className={classes.winnerName}>
+          {winners.map((w) => w.name).join(", ")}
+        </span>
+        <span className={classes.winnerPoints}>
+          {" · "}
+          {formatPoints(winners[0].total)}
+        </span>
+      </span>
+    </span>
+  );
+};
+
 export const Competitions = () => {
   const { slimUser } = useUser();
   const isMobile = useIsMobile();
@@ -277,6 +344,9 @@ export const Competitions = () => {
       return true;
     });
   }, [_comps, seasonFilter, statusFilter, scopeFilter, slimUser]);
+
+  // Only finished competitions are read; filtering never adds a read.
+  const results = useCompetitionResults(_comps, !!slimUser);
 
   const sorted = useMemo(() => {
     const compareFn = (a: Competition, b: Competition) => {
@@ -397,6 +467,9 @@ export const Competitions = () => {
       </Table.Td>
       <Table.Td>
         <div className={classes.people}>{formatParticipants(x)}</div>
+      </Table.Td>
+      <Table.Td>
+        <CompetitionWinner result={results[x.id]} />
       </Table.Td>
       <Table.Td className={classes.badgeCell}>
         <StatusBadge
@@ -563,7 +636,7 @@ export const Competitions = () => {
               <li key={x.id}>
                 <Link
                   to={`/competitions/${x.id}`}
-                  className={classes.row}
+                  className={`${classes.row} ${x.finished ? classes.rowFinished : ""}`}
                   aria-label={x.competition_name}
                 >
                   <div className={classes.rowName}>
@@ -576,6 +649,11 @@ export const Competitions = () => {
                   <div className={classes.rowBadges}>
                     <CompetitionBadges comp={x} />
                   </div>
+                  {x.finished && (
+                    <div className={classes.rowWinner}>
+                      <CompetitionWinner result={results[x.id]} compact />
+                    </div>
+                  )}
                   <div className={classes.rowPeople}>
                     {formatParticipants(x)}
                   </div>
@@ -593,7 +671,7 @@ export const Competitions = () => {
 
       {!isLoading && sorted.length > 0 && !isMobile && (
         <div className={classes.board}>
-          <Table.ScrollContainer minWidth={640}>
+          <Table.ScrollContainer minWidth={760}>
             <Table highlightOnHover verticalSpacing="sm">
               <Table.Thead>
                 <Table.Tr>
@@ -618,6 +696,7 @@ export const Competitions = () => {
                     sortDir={sortDir}
                     onSort={handleSort}
                   />
+                  <Table.Th scope="col">Winner</Table.Th>
                   <SortableHeader
                     label="Type"
                     field="type"

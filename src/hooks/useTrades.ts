@@ -16,7 +16,7 @@ type TradesState = {
  * inside the snapshot callback and taking the whole trades UI down for every
  * participant — `allow delete: if false` means only an admin could clean it up.
  */
-const isRenderableTrade = (trade: Trade): boolean =>
+export const isRenderableTrade = (trade: Trade): boolean =>
   typeof trade?.created_at === "string" &&
   Array.isArray(trade.offered_castaway_ids) &&
   Array.isArray(trade.requested_castaway_ids);

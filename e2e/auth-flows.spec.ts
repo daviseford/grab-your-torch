@@ -2067,3 +2067,234 @@ test("pool: after the freeze there is no handle form and a pick change is refuse
   expect(afterEdit?.picks).toEqual(seededPicks);
   expect(afterEdit?.handle).toBe("Handle Entrant");
 });
+
+// ---------------------------------------------------------------------------
+// Competitions list: the winning participant of a finished competition
+// ---------------------------------------------------------------------------
+
+/**
+ * Season 1 with a finale (episode 3). Test Player 1 is the Sole Survivor;
+ * Test Players 3 and 4 share an immunity win so their owners can tie.
+ */
+const seedFinishedSeason = async () => {
+  const episodes = [1, 2, 3].map((order) => ({
+    id: `episode_s1e${order}`,
+    season_id: SEASON_ID,
+    season_num: SEASON_ORDER,
+    order,
+    name: `Episode ${order}`,
+    finale: order === 3,
+    post_merge: order >= 2,
+    merge_occurs: order === 2,
+  }));
+  const [p1, p2, p3, p4] = SEASON_PLAYERS.map((p) => p.castaway_id);
+  const record = (episode: number) => ({
+    season_id: SEASON_ID,
+    season_num: SEASON_ORDER,
+    episode_id: `episode_s1e${episode}`,
+    episode_num: episode,
+  });
+  await Promise.all([
+    adminDb.doc(`seasons/${SEASON_ID}`).set({
+      id: SEASON_ID,
+      order: SEASON_ORDER,
+      name: SEASON_NAME,
+      img: "",
+      players: SEASON_PLAYERS,
+      episodes,
+      castawayLookup: {},
+    }),
+    adminDb.doc(`challenges/${SEASON_ID}`).set({
+      challenge_1: {
+        id: "challenge_1",
+        ...record(1),
+        order: 1,
+        variant: "immunity",
+        winning_castaways: [p2],
+      },
+      challenge_2: {
+        id: "challenge_2",
+        ...record(1),
+        order: 2,
+        variant: "immunity",
+        winning_castaways: [p3, p4],
+      },
+    }),
+    adminDb.doc(`eliminations/${SEASON_ID}`).set({}),
+    adminDb.doc(`events/${SEASON_ID}`).set({
+      event_win: {
+        id: "event_win",
+        ...record(3),
+        action: "win_survivor",
+        multiplier: null,
+        castaway_id: p1,
+      },
+    }),
+  ]);
+};
+
+const seedCompetition = async (
+  id: string,
+  name: string,
+  owner: SeededUser,
+  rival: { uid: string; displayName: string; email: string },
+  picks: [string, string],
+  state: { finished: boolean; current_episode: number | null },
+) => {
+  const participants = [owner, rival].map((p) => ({
+    uid: p.uid,
+    displayName: p.displayName,
+    email: p.email,
+    isAdmin: false,
+  }));
+  await adminDb.doc(`competitions/${id}`).set({
+    id,
+    competition_name: name,
+    season_id: SEASON_ID,
+    season_num: SEASON_ORDER,
+    draft_id: `draft_${id}`,
+    creator_uid: owner.uid,
+    participant_uids: participants.map((p) => p.uid),
+    participants,
+    draft_picks: [owner, rival].map((p, i) => ({
+      season_id: SEASON_ID,
+      season_num: SEASON_ORDER,
+      order: i + 1,
+      user_name: p.displayName,
+      user_uid: p.uid,
+      castaway_id: picks[i],
+      player_name: picks[i],
+    })),
+    ...state,
+  });
+};
+
+/**
+ * One Chromium page covers both layouts: the desktop table first, then the
+ * phone list after narrowing the viewport. WebKit is skipped because, against
+ * the local emulators, it never delivers season data (challenges, events)
+ * requested after the first page load; the existing competition page's
+ * scoreboard stays at zero points there too, so a WebKit run would test that
+ * harness limitation rather than this page.
+ */
+test("competitions: finished competitions name their winner, ties included, and running ones do not", async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName === "webkit",
+    "WebKit does not receive later Firestore reads from the local emulator",
+  );
+  await seedFinishedSeason();
+  const viewer = await createUser(
+    uniqueEmail("winner"),
+    PASSWORD,
+    "Winning Viewer",
+  );
+  // Never an Auth account: stands in for a participant whose profile is gone.
+  const rival = { uid: "rival-uid", displayName: "Rival", email: "" };
+  const ghost = { uid: "ghost-uid", displayName: "", email: "" };
+  const [p1, p2, p3, p4] = SEASON_PLAYERS.map((p) => p.castaway_id);
+  const live = { finished: true, current_episode: null };
+
+  await Promise.all([
+    seedCompetition(
+      "competition_won",
+      "Won League",
+      viewer,
+      rival,
+      [p1, p2],
+      live,
+    ),
+    seedCompetition(
+      "competition_tied",
+      "Tied League",
+      viewer,
+      rival,
+      [p3, p4],
+      live,
+    ),
+    seedCompetition(
+      "competition_running",
+      "Running League",
+      viewer,
+      rival,
+      [p1, p2],
+      {
+        finished: false,
+        current_episode: null,
+      },
+    ),
+    // Marked finished while the group is still behind the finale: the
+    // winner must stay hidden from them.
+    seedCompetition(
+      "competition_behind",
+      "Behind League",
+      viewer,
+      rival,
+      [p1, p2],
+      {
+        finished: true,
+        current_episode: 2,
+      },
+    ),
+    seedCompetition(
+      "competition_ghost",
+      "Ghost League",
+      viewer,
+      ghost,
+      [p2, p1],
+      live,
+    ),
+  ]);
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/competitions");
+  await main(page)
+    .getByRole("button", { name: "Sign in", exact: true })
+    .click();
+  await signInThrough(page, { email: viewer.email, password: PASSWORD });
+
+  // Desktop rows are table rows; phone rows are links. Both carry the
+  // competition name as their accessible name.
+  const expectWinners = async (isPhone: boolean) => {
+    const row = (name: string) =>
+      isPhone
+        ? main(page).getByRole("link", { name, exact: true })
+        : main(page).getByRole("row", { name, exact: true });
+
+    await expect(row("Won League")).toContainText(
+      isPhone ? "Winner: Winning Viewer" : "Winning Viewer",
+      SLOW,
+    );
+    await expect(row("Won League")).toContainText("pts");
+    await expect(row("Tied League")).toContainText(
+      "Tied winners: Rival, Winning Viewer",
+    );
+    await expect(row("Ghost League")).toContainText("Unknown participant");
+    await expect(row("Behind League")).toContainText("Not available");
+    await expect(row("Behind League")).not.toContainText("pts");
+    await expect(row("Running League")).not.toContainText("pts");
+    await expect(row("Running League")).not.toContainText("Winner:");
+    if (!isPhone) {
+      await expect(row("Running League")).toContainText("No winner yet");
+    }
+
+    for (const colorScheme of ["light", "dark"] as const) {
+      await page.emulateMedia({ colorScheme });
+      await expect(row("Won League")).toContainText("Winning Viewer");
+      await page.screenshot({
+        path: test
+          .info()
+          .outputPath(
+            `competitions-winner-${isPhone ? "phone" : "desktop"}-${colorScheme}.png`,
+          ),
+        fullPage: true,
+      });
+    }
+  };
+
+  await expectWinners(false);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expectWinners(true);
+});
