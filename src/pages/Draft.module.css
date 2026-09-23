@@ -4,7 +4,8 @@
  * rounds-by-participants draft board; the rundown, the cast grid, and the
  * result boards follow on the page ground. Mantine text tokens are
  * re-pointed inside the plate so Title, Text, and inputs read on navy in
- * both color schemes.
+ * both color schemes. The Draft Results summary is the one exception: its
+ * spine follows light mode (`.spineStudio`).
  */
 
 .page {
@@ -22,8 +23,13 @@
 /* ---------- Spine (navy plate) ---------- */
 
 .spine {
-  --mantine-color-text: var(--mantine-color-dark-0);
-  --mantine-color-dimmed: var(--mantine-color-dark-1);
+  --spine-bg: var(--gyt-plate);
+  --spine-text: var(--mantine-color-dark-0);
+  --spine-dimmed: var(--mantine-color-dark-1);
+  --spine-accent: var(--mantine-color-signal-5);
+  --spine-thumb: var(--gyt-plate);
+  --mantine-color-text: var(--spine-text);
+  --mantine-color-dimmed: var(--spine-dimmed);
   --mantine-color-anchor: var(--mantine-color-signal-5);
   --spine-rule: var(--gyt-plate-rule);
   --spine-rule-strong: rgba(184, 217, 238, 0.35);
@@ -33,8 +39,8 @@
     calc(-1 * var(--app-shell-padding, 0px)) 0;
   padding: var(--mantine-spacing-lg) var(--app-shell-padding, 0px)
     var(--mantine-spacing-lg);
-  background: var(--gyt-plate);
-  color: var(--mantine-color-dark-0);
+  background: var(--spine-bg);
+  color: var(--spine-text);
   border-bottom: 1px solid var(--gyt-rule);
 
   @media (max-width: $mantine-breakpoint-xs) {
@@ -47,6 +53,23 @@
   --spine-cell: var(--gyt-panel-2);
   --spine-rule: var(--gyt-rule);
   --spine-rule-strong: var(--gyt-rule-strong);
+}
+
+/* Studio spine: in light mode the finished Draft Results sit on the studio
+ * panel instead of the navy plate, so the page reads as one surface into the
+ * summary below. Same board, same League Blue column; only the plate, text,
+ * and rule tokens change. Contrast on the panel: text 16.9:1, dimmed 6.1:1
+ * (5.4:1 on cells), eyebrow 7.6:1. Dark mode keeps the plate above. */
+[data-mantine-color-scheme="light"] .spineStudio {
+  --spine-bg: var(--gyt-panel);
+  --spine-text: var(--mantine-color-navy-9);
+  --spine-dimmed: #4b6480;
+  --spine-accent: var(--mantine-color-signal-8);
+  --spine-thumb: var(--gyt-rule);
+  --spine-cell: var(--gyt-panel-2);
+  --spine-rule: var(--gyt-rule);
+  --spine-rule-strong: var(--gyt-rule-strong);
+  --mantine-color-anchor: var(--mantine-color-league-7);
 }
 
 .head {
@@ -82,7 +105,7 @@
   font-size: 0.6875rem;
   letter-spacing: var(--gyt-label-tracking);
   text-transform: uppercase;
-  color: var(--mantine-color-signal-5);
+  color: var(--spine-accent);
 }
 
 .liveDot {
@@ -97,7 +120,7 @@
   margin: 0;
   font-size: clamp(1.625rem, 1.2rem + 1.6vw, 2.25rem);
   line-height: 1.1;
-  color: var(--mantine-color-dark-0);
+  color: var(--spine-text);
   text-wrap: balance;
   overflow-wrap: anywhere;
 }
@@ -105,7 +128,7 @@
 .sub {
   margin: 6px 0 0;
   max-width: 60ch;
-  color: var(--mantine-color-dark-1);
+  color: var(--spine-dimmed);
   overflow-wrap: anywhere;
 }
 
@@ -136,7 +159,7 @@
   min-width: 0;
   max-width: 100%;
   font-size: var(--mantine-font-size-sm);
-  color: var(--mantine-color-dark-1);
+  color: var(--spine-dimmed);
 }
 
 /* A long picker name truncates inside the badge instead of widening the page. */
@@ -175,12 +198,12 @@
   font-size: 0.6875rem;
   letter-spacing: var(--gyt-label-tracking);
   text-transform: uppercase;
-  color: var(--mantine-color-dark-1);
+  color: var(--spine-dimmed);
 }
 
 .share :global(.mantine-Input-input) {
   background: rgba(234, 248, 255, 0.06);
-  color: var(--mantine-color-dark-0);
+  color: var(--spine-text);
   border-color: var(--spine-rule-strong);
   font-variant-numeric: tabular-nums;
 }
@@ -188,7 +211,7 @@
 .foot {
   margin: 10px 0 0;
   font-size: var(--mantine-font-size-sm);
-  color: var(--mantine-color-dark-1);
+  color: var(--spine-dimmed);
 }
 
 /* ---------- Draft board ---------- */
@@ -256,7 +279,7 @@
 
 .hdName small {
   font-weight: 500;
-  color: var(--mantine-color-dark-1);
+  color: var(--spine-dimmed);
 
   @media (max-width: $mantine-breakpoint-xs) {
     display: none;
@@ -270,7 +293,7 @@
 
 .hdOpen {
   font-weight: 500;
-  color: var(--mantine-color-dark-1);
+  color: var(--spine-dimmed);
   border-bottom-style: dashed;
 }
 
@@ -316,7 +339,7 @@
   font-weight: 600;
   font-size: 0.6875rem;
   letter-spacing: 0.1em;
-  color: var(--mantine-color-dark-1);
+  color: var(--spine-dimmed);
 
   @media (max-width: $mantine-breakpoint-xs) {
     font-size: 0.625rem;
@@ -338,7 +361,7 @@
   background: var(--spine-cell);
   border: 1px solid var(--spine-rule);
   border-radius: var(--mantine-radius-sm);
-  color: var(--mantine-color-dark-0);
+  color: var(--spine-text);
   font-size: 0.8125rem;
   line-height: 1.15;
   overflow: hidden;
@@ -360,8 +383,8 @@
   object-position: top;
   display: grid;
   place-items: center;
-  background: var(--gyt-plate);
-  color: var(--mantine-color-dark-1);
+  background: var(--spine-thumb);
+  color: var(--spine-dimmed);
   font-family: var(--mantine-headings-font-family);
   font-weight: 700;
   font-size: 0.625rem;
@@ -389,7 +412,7 @@
   font-family: var(--mantine-headings-font-family);
   font-size: 0.625rem;
   letter-spacing: 0.1em;
-  color: var(--mantine-color-dark-1);
+  color: var(--spine-dimmed);
   font-variant-numeric: tabular-nums;
 
   @media (max-width: $mantine-breakpoint-xs) {
@@ -408,7 +431,7 @@
   background: transparent;
   border-style: dashed;
   border-color: var(--spine-rule-strong);
-  color: var(--mantine-color-dark-1);
+  color: var(--spine-dimmed);
   font-family: var(--mantine-headings-font-family);
   font-size: 0.75rem;
   font-variant-numeric: tabular-nums;

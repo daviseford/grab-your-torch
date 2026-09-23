@@ -16,7 +16,7 @@
 
 import { expect, test, type Page } from "@playwright/test";
 import admin from "firebase-admin";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 // ---------------------------------------------------------------------------
@@ -331,6 +331,104 @@ const probes = (page: Page) =>
   });
 
 // ---------------------------------------------------------------------------
+// Draft Results colors
+// ---------------------------------------------------------------------------
+
+const parseRgb = (value: string) => {
+  const [r, g, b] = (value.match(/\d+(\.\d+)?/g) ?? []).map(Number);
+  return [r, g, b];
+};
+
+const luminance = (value: string) => {
+  const [r, g, b] = parseRgb(value)
+    .map((c) => c / 255)
+    .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+
+const contrast = (a: string, b: string) => {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+};
+
+/**
+ * Reads the rendered Draft Results spine in both schemes. Light mode puts it
+ * on the studio panel with readable text; dark mode keeps the navy plate.
+ * The readings are written next to the screenshots as evidence.
+ */
+const checkResultsSpineColors = async (page: Page) => {
+  const label = test.info().project.name.includes("mobile")
+    ? "mobile"
+    : "desktop";
+  const readings: Record<string, Record<string, string>> = {};
+  for (const scheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.waitForTimeout(250);
+    readings[scheme] = await page.evaluate(() => {
+      const h1 = [...document.querySelectorAll("h1")].find(
+        (el) => el.textContent?.trim() === "Draft Results",
+      );
+      const spine = h1?.closest("section");
+      if (!h1 || !spine) throw new Error("Draft Results spine not found");
+      const cell = spine.querySelector<HTMLElement>(
+        '[role="cell"][aria-label]',
+      );
+      const mine = [
+        ...spine.querySelectorAll<HTMLElement>('[role="cell"][aria-label]'),
+      ].find((el) => getComputedStyle(el).boxShadow.includes("inset"));
+      const rowHeader = spine.querySelector<HTMLElement>('[role="rowheader"]');
+      const eyebrow = spine.querySelector<HTMLElement>("p");
+      if (!cell || !mine || !rowHeader || !eyebrow) {
+        throw new Error("Draft Results board cells not found");
+      }
+      const cs = (el: Element) => getComputedStyle(el);
+      return {
+        spineBackground: cs(spine).backgroundColor,
+        titleColor: cs(h1).color,
+        eyebrowColor: cs(eyebrow).color,
+        roundLabelColor: cs(rowHeader).color,
+        cellBackground: cs(cell).backgroundColor,
+        cellColor: cs(cell).color,
+        ownColumnBorder: cs(mine).borderLeftColor,
+        ownColumnShadow: cs(mine).boxShadow,
+      };
+    });
+  }
+  await page.emulateMedia({ colorScheme: "light" });
+  writeFileSync(
+    path.join(shotDir, `summary-spine-colors-${label}.json`),
+    JSON.stringify(readings, null, 2),
+  );
+
+  const light = readings.light;
+  expect(
+    luminance(light.spineBackground),
+    "light spine surface",
+  ).toBeGreaterThan(0.8);
+  expect(luminance(light.cellBackground), "light cell surface").toBeGreaterThan(
+    0.8,
+  );
+  for (const [name, fg, bg] of [
+    ["title", light.titleColor, light.spineBackground],
+    ["eyebrow", light.eyebrowColor, light.spineBackground],
+    ["round label", light.roundLabelColor, light.spineBackground],
+    ["castaway name", light.cellColor, light.cellBackground],
+  ]) {
+    expect(contrast(fg, bg), `light ${name} contrast`).toBeGreaterThanOrEqual(
+      4.5,
+    );
+  }
+  // The viewer's column keeps its League Blue edge in both schemes.
+  for (const scheme of ["light", "dark"] as const) {
+    expect(readings[scheme].ownColumnBorder).toBe("rgb(17, 119, 255)");
+    expect(readings[scheme].ownColumnShadow).toContain("rgb(17, 119, 255)");
+  }
+  // Dark mode is unchanged: the navy plate and Ice White text.
+  expect(readings.dark.spineBackground).toBe("rgb(11, 35, 68)");
+  expect(readings.dark.titleColor).toBe("rgb(234, 248, 255)");
+};
+
+// ---------------------------------------------------------------------------
 // Suite
 // ---------------------------------------------------------------------------
 
@@ -635,6 +733,7 @@ test("two users draft a season end to end on the board spine", async ({
     page.getByText(`Waiting for prop bets: 1 of 2 submitted`),
   ).toBeVisible(SLOW);
   await capture(page, "summary-waiting", { fullPage: true });
+  await checkResultsSpineColors(page);
 
   await fillPropBets(guest, 2);
   await expect(
