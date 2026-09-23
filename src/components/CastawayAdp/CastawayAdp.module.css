@@ -92,8 +92,8 @@
 }
 
 /* The spoiler warning shown before all-drafts numbers, and the bar that keeps
- * naming the cohort while they are on screen. Hairline rule plus a warning
- * edge, in the same quiet type as the note. */
+ * naming the cohort while they are on screen: a warning-tinted hairline in
+ * the same quiet type as the note. */
 .warning,
 .cohortBar {
   display: flex;
@@ -101,16 +101,15 @@
   align-items: center;
   gap: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
   padding: 6px 10px;
-  border: 1px solid var(--mantine-color-default-border);
-  border-left: 3px solid var(--mantine-color-orange-filled);
+  border: 1px solid var(--mantine-color-orange-outline);
   border-radius: 4px;
   background: var(--mantine-color-orange-light);
   font-size: var(--mantine-font-size-xs);
   color: var(--mantine-color-text);
 }
 
-/* The standing reminder is quieter than the confirmation: the warning edge
- * and icon stay, the fill goes. */
+/* The standing reminder is quieter than the confirmation: the outline and
+ * icon stay, the fill goes. */
 .cohortBar {
   background: transparent;
 }
