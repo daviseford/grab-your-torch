@@ -465,6 +465,34 @@
   }
 }
 
+/* Own-turn edge glow: one fade up and down, inset to the viewport edges,
+ * pointer-transparent, and never rendered under reduced motion (JS gate). */
+.turnEdge {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 300; /* above AppShell header (100), below Mantine notifications */
+  box-shadow:
+    inset 0 0 0 3px var(--mantine-color-signal-5),
+    inset 0 0 28px var(--mantine-color-signal-5);
+  opacity: 0;
+  animation: turnEdge 1200ms ease-out 1 forwards;
+}
+
+@keyframes turnEdge {
+  20% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* The prop-bets nudge scrolls here; clear the fixed header on mobile. */
+.propBetsTarget {
+  scroll-margin-top: calc(var(--gyt-header-height) + var(--mantine-spacing-sm));
+}
+
 /* ---------- Rundown (the draft steps) ---------- */
 
 .rundown {

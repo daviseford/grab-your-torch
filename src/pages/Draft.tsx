@@ -6,8 +6,10 @@ import {
   Switch,
   Text,
   TextInput,
+  VisuallyHidden,
 } from "@mantine/core";
 import { isNotEmpty, useForm } from "@mantine/form";
+import { useReducedMotion } from "@mantine/hooks";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { IconCheck, IconX } from "@tabler/icons-react";
@@ -49,6 +51,11 @@ import {
 import { trackEvent } from "../utils/analytics";
 import { sortCastAlphabetically } from "../utils/castOrder";
 import {
+  isRepeatTurn,
+  shouldNudgePropBets,
+  turnAlertKey,
+} from "../utils/draftAttention";
+import {
   buildPickOrderUidMap,
   buildTurnsMap,
   planDraftPicks,
@@ -66,6 +73,7 @@ import {
 import { participantName } from "./DraftNames";
 import { DraftSpine } from "./DraftSpine";
 import { DraftSteps } from "./DraftSteps";
+import { DraftTurnAlert } from "./DraftTurnAlert";
 
 /** Rounds shown on the lobby's empty board before the real count is known. */
 const LOBBY_PREVIEW_ROUNDS = 6;
@@ -482,9 +490,9 @@ export const DraftComponent = () => {
     ) : null,
   );
 
-  if (!season) return <div>Error: Missing data</div>;
-
-  // Determine current phase
+  // Determine current phase. Kept above the season early return so the
+  // prop-bets nudge hooks below run unconditionally; nothing here needs
+  // season data.
   const phase = !draft?.started
     ? "pre-draft"
     : isRevealing
@@ -494,6 +502,71 @@ export const DraftComponent = () => {
         : !userHasSubmittedPropBets
           ? "prop-bets"
           : "completed";
+
+  // Post-draft prop-bets nudge: one time per visit, mobile only, and only on
+  // the live drafting-to-prop-bets transition. `nudgedRef` flips inside the
+  // frame callback so a canceled frame (StrictMode replay, phase flip) never
+  // marks the nudge done before it happens.
+  const sawDraftingRef = useRef(false);
+  const nudgedRef = useRef(false);
+  const reduceMotion = useReducedMotion(false, {
+    getInitialValueInEffect: false,
+  });
+
+  // A different draft under the same route must not inherit this draft's
+  // "already saw" or "already nudged" state.
+  useEffect(() => {
+    sawDraftingRef.current = false;
+    nudgedRef.current = false;
+  }, [routeDraftId]);
+
+  // routeDraftId is a dep so navigating between two live drafts under the
+  // same route re-marks "saw drafting" for the new draft right after the
+  // reset above.
+  useEffect(() => {
+    if (phase === "drafting") {
+      sawDraftingRef.current = true;
+    }
+  }, [phase, routeDraftId]);
+
+  useEffect(() => {
+    const narrow = window.matchMedia("(max-width: 48em)").matches;
+    if (
+      !shouldNudgePropBets({
+        phase,
+        sawDrafting: sawDraftingRef.current,
+        alreadyNudged: nudgedRef.current,
+        isParticipant: userIsParticipant,
+        hasSubmittedPropBets: userHasSubmittedPropBets,
+        narrow,
+      })
+    ) {
+      return;
+    }
+    const frame = requestAnimationFrame(() => {
+      nudgedRef.current = true;
+      const target = document.getElementById("prop-bet-questions");
+      if (!target) return;
+      const active = document.activeElement;
+      if (
+        active instanceof HTMLElement &&
+        (["INPUT", "TEXTAREA", "SELECT"].includes(active.tagName) ||
+          active.isContentEditable)
+      ) {
+        return;
+      }
+      const headerHeight = narrow ? 56 : 60;
+      const top = target.getBoundingClientRect().top;
+      if (top >= headerHeight && top <= window.innerHeight * 0.4) return;
+      target.scrollIntoView({
+        behavior: reduceMotion ? "auto" : "smooth",
+        block: "start",
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [phase, userIsParticipant, userHasSubmittedPropBets, reduceMotion]);
+
+  if (!season) return <div>Error: Missing data</div>;
 
   const activeStep = phase === "drafting" ? 0 : phase === "prop-bets" ? 1 : 2;
 
@@ -754,6 +827,15 @@ export const DraftComponent = () => {
         />
       ) : phase === "drafting" ? (
         <>
+          {/* Keyed by draft so navigating between drafts remounts it and
+           * resets its per-draft alert state. */}
+          <DraftTurnAlert
+            key={draft!.id}
+            draftId={draft!.id}
+            viewerUid={slimUser?.uid}
+            alertKey={turnAlertKey(draft, slimUser?.uid)}
+            repeat={isRepeatTurn(draft, slimUser?.uid)}
+          />
           {/* ===== STEP 0: DRAFT ===== */}
           <DraftSpine
             live
@@ -774,11 +856,14 @@ export const DraftComponent = () => {
                   role="status"
                   aria-live="polite"
                 >
-                  <StatusBadge kind="live" size="md">
-                    {isCurrentDrafter
-                      ? "Your turn"
-                      : `${currentPickerName} picking`}
-                  </StatusBadge>
+                  {/* The toast's role="alert" is the current drafter's turn
+                   * announcement; spectators keep this polite text instead of
+                   * the removed badge. */}
+                  {!isCurrentDrafter && (
+                    <VisuallyHidden>
+                      {currentPickerName} is picking.
+                    </VisuallyHidden>
+                  )}
                   <span className={classes.markerMeta}>
                     Pick {draft.current_pick_number} of {draft.total_players} ·
                     Round {currentRound} of {roundCount}
@@ -849,7 +934,7 @@ export const DraftComponent = () => {
           <DraftSpine
             eyebrow={`Draft complete · ${totalPicks} of ${totalPicks} picked`}
             title="Place Your Bets"
-            description="Predict what happens this season. Earn bonus points for correct answers."
+            description="The draft is done. Next: answer the prop bet questions below the cast to earn bonus points."
           />
 
           <DraftSteps active={activeStep} />
@@ -860,7 +945,13 @@ export const DraftComponent = () => {
             <CastGallery cast={cast} />
           </Board>
 
-          <Board title="Prop bet questions" titleAs="h2">
+          <Board
+            title="Prop bet questions"
+            subtitle="Next step"
+            titleAs="h2"
+            id="prop-bet-questions"
+            className={classes.propBetsTarget}
+          >
             <PropBetsForm
               cast={season.players}
               castawayLookup={season.castawayLookup}

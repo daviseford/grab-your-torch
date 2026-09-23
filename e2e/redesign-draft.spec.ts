@@ -211,13 +211,32 @@ const readHealth = (page: Page) =>
   }));
 
 const consoleErrors = new Map<Page, string[]>();
+// A reload aborts Firestore's in-flight WebChannel requests. Chromium logs
+// that as net::ERR_ABORTED (filtered at the end of the test); WebKit raises
+// it as a pageerror ending "due to access control checks". Drop only that
+// message, and only while the page is reloading, so real errors still fail.
+const reloading = new Set<Page>();
+const firestoreChannelAbort =
+  /\/google\.firestore\.v1\.Firestore\/(Listen|Write)\/channel\?.* due to access control checks\.$/;
+const reloadPage = async (page: Page) => {
+  reloading.add(page);
+  try {
+    await page.reload();
+  } finally {
+    reloading.delete(page);
+  }
+};
 const trackConsole = (page: Page) => {
   const errors: string[] = [];
   consoleErrors.set(page, errors);
+  const record = (text: string) => {
+    if (reloading.has(page) && firestoreChannelAbort.test(text)) return;
+    errors.push(text);
+  };
   page.on("console", (msg) => {
-    if (msg.type() === "error") errors.push(msg.text());
+    if (msg.type() === "error") record(msg.text());
   });
-  page.on("pageerror", (err) => errors.push(`pageerror: ${err.message}`));
+  page.on("pageerror", (err) => record(`pageerror: ${err.message}`));
 };
 
 let shotDir = SHOTS_DIR;
@@ -266,6 +285,52 @@ const capture = async (
 };
 
 // ---------------------------------------------------------------------------
+// Browser probes (installed with addInitScript before the first goto)
+// ---------------------------------------------------------------------------
+
+type ProbeWindow = {
+  /** Vibrate patterns the page tried to fire. */
+  __vib: (number | number[])[];
+  /** Computed pointer-events of every edge-glow element that ever mounted. */
+  __edges: string[];
+};
+
+/** Records vibrations and edge-glow mounts; pins reloads to the top. */
+const installProbes = (withVibrate: boolean) => {
+  // Manual restoration: after a reload the page starts at the top, so any
+  // scroll afterwards can only come from the app.
+  history.scrollRestoration = "manual";
+  const w = window as unknown as ProbeWindow;
+  w.__vib = [];
+  w.__edges = [];
+  if (withVibrate) {
+    navigator.vibrate = (pattern) => (w.__vib.push(pattern), true);
+  } else {
+    // Simulate iOS Safari: no vibration API at all.
+    (navigator as unknown as { vibrate?: unknown }).vibrate = undefined;
+  }
+  new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      for (const node of mutation.addedNodes) {
+        if (!(node instanceof HTMLElement)) continue;
+        const edge = node.matches("[data-turn-edge]")
+          ? node
+          : node.querySelector("[data-turn-edge]");
+        if (edge) w.__edges.push(getComputedStyle(edge).pointerEvents);
+      }
+    }
+  }).observe(document, { childList: true, subtree: true });
+};
+
+// Window is a host object whose expando properties do not survive
+// evaluate() serialization, so project the probes into a plain object.
+const probes = (page: Page) =>
+  page.evaluate(() => {
+    const w = window as unknown as Partial<ProbeWindow>;
+    return { __vib: w.__vib ?? [], __edges: w.__edges ?? [] };
+  });
+
+// ---------------------------------------------------------------------------
 // Suite
 // ---------------------------------------------------------------------------
 
@@ -298,6 +363,7 @@ test("two users draft a season end to end on the board spine", async ({
     isMobile ? { width: 375, height: 812 } : { width: 1280, height: 800 },
   );
   trackConsole(page);
+  await page.addInitScript(installProbes, true);
   await seedSeason();
 
   // ---- Host registers from the season page and lands in the lobby ----
@@ -331,10 +397,13 @@ test("two users draft a season end to end on the board spine", async ({
     viewport: isMobile
       ? { width: 375, height: 812 }
       : { width: 1280, height: 800 },
+    // The guest watches with reduced motion: no edge glow, instant nudge.
+    reducedMotion: "reduce",
   });
   await guardContext(guestContext);
   const guest = await guestContext.newPage();
   trackConsole(guest);
+  await guest.addInitScript(installProbes, false);
   await guest.goto(draftUrl);
   await expect(
     guest.getByRole("heading", { name: "You're invited to this draft!" }),
@@ -394,8 +463,14 @@ test("two users draft a season end to end on the board spine", async ({
       : { picker: guest, watcher: page };
   };
 
+  const turnToast = (p: Page) =>
+    p.getByRole("alert").filter({ hasText: "You're up!" });
+  // Two players snake A B B A A B B A: these picks are consecutive turns.
+  const SNAKE_PICKS = new Set([3, 5, 7]);
+
   for (let pick = 1; pick <= CAST_SIZE; pick++) {
     const { picker, watcher } = await pickerOf();
+    const pickerName = picker === page ? "Ada Host" : "Bo Guest";
     await expect(picker.getByText(`Pick ${pick} of ${CAST_SIZE}`)).toBeVisible(
       SLOW,
     );
@@ -408,9 +483,62 @@ test("two users draft a season end to end on the board spine", async ({
       watcher.getByRole("button", { name: /^Draft Test Player/ }).first(),
     ).toBeDisabled();
 
+    // The duplicate teal "[NAME] PICKING" badge is gone; the h1 remains.
+    await expect(
+      watcher.getByText(`${pickerName} picking`, { exact: true }),
+    ).toHaveCount(0);
+
+    // Own-turn toast on the picker only, with snake copy on repeat turns.
+    await expect(turnToast(picker)).toHaveCount(1);
+    await expect(turnToast(watcher)).toHaveCount(0);
+    await expect(
+      turnToast(picker).filter({
+        hasText: SNAKE_PICKS.has(pick)
+          ? "Snake turn: you pick again."
+          : "Pick a castaway from the cast below.",
+      }),
+    ).toHaveCount(1);
+
+    if (pick === 4) {
+      // The toast is fixed-position and survives the capture's scroll reset.
+      await capture(picker, "active-your-turn-toast");
+    }
+
+    // Edge glow: the host (no reduced motion, activated page) gets one pulse
+    // with pointer-events: none; the reduced-motion guest never renders it.
+    if (picker === page) {
+      await expect
+        .poll(async () => (await probes(page)).__edges.length)
+        .toBeGreaterThan(0);
+      for (const pointerEvents of (await probes(page)).__edges) {
+        expect(pointerEvents).toBe("none");
+      }
+      // The pulse is one-shot: the overlay detaches on its own.
+      await expect(page.locator("[data-turn-edge]")).toHaveCount(0, {
+        timeout: 3000,
+      });
+      // Vibration fires only after the page has been activated (the host
+      // clicked through registration and the draft).
+      await expect
+        .poll(async () => (await probes(page)).__vib.length)
+        .toBeGreaterThan(0);
+    } else {
+      await expect(guest.locator("[data-turn-edge]")).toHaveCount(0);
+      expect((await probes(guest)).__edges).toEqual([]);
+    }
+
     if (pick === 4) {
       await capture(picker, "active-your-turn", { fullPage: true });
       await capture(watcher, "active-waiting", { fullPage: true });
+
+      // Reload dedupe: this tab already alerted for pick 4, so the reload
+      // must not toast again.
+      await reloadPage(picker);
+      await expect(
+        picker.getByRole("heading", { name: "Your turn to pick!" }),
+      ).toBeVisible(SLOW);
+      await picker.waitForTimeout(1500);
+      await expect(turnToast(picker)).toHaveCount(0);
     }
 
     await picker
@@ -433,7 +561,39 @@ test("two users draft a season end to end on the board spine", async ({
     await expect(
       p.getByRole("heading", { name: "Place Your Bets" }),
     ).toBeVisible(SLOW);
+    await expect(
+      p.getByText(
+        "The draft is done. Next: answer the prop bet questions below the cast to earn bonus points.",
+      ),
+    ).toBeVisible(SLOW);
+    // The turn toast must not linger past the final pick.
+    await expect(turnToast(p)).toHaveCount(0);
   }
+
+  if (isMobile) {
+    // Both participants watched the draft finish live, so each is nudged
+    // once to the questions board, which must clear the fixed header.
+    for (const p of [page, guest]) {
+      await expect(
+        p.getByRole("heading", { name: "Prop bet questions" }),
+      ).toBeInViewport(SLOW);
+      await expect(p.getByText("Next step")).toBeVisible();
+    }
+    // Viewport shot at the nudged position: capture() resets scroll to the
+    // top, which would erase exactly what this proves.
+    await page.screenshot({
+      path: path.join(shotDir, "prop-bets-nudged-mobile-light.png"),
+    });
+
+    // Late load: reloading straight into prop-bets must not auto-scroll.
+    await reloadPage(page);
+    await expect(
+      page.getByRole("heading", { name: "Place Your Bets" }),
+    ).toBeVisible(SLOW);
+    await page.waitForTimeout(1000);
+    expect(await page.evaluate(() => window.scrollY)).toBeLessThan(100);
+  }
+
   await capture(page, "prop-bets", { fullPage: true });
 
   // Submitting with nothing answered surfaces validation and stays put.
