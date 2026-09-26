@@ -14,6 +14,20 @@ describe("castaway bios", () => {
     } satisfies Player;
     expect(rosterGenderBreakdown([amber])).toBe("0 male · 1 female");
   });
+  it("keeps Jelly's curated bio under survivoR's name for her", () => {
+    const jelly = SEASON_51_PLAYERS.find(
+      (p) => p.full_name === "Jelly Loblack",
+    )!;
+    const renamed = {
+      ...jelly,
+      castaway_id: "US0756",
+      full_name: "Angelica Loblack",
+    } satisfies Player;
+    expect(getCastawayBio(renamed).sources).toEqual(
+      getCastawayBio(jelly).sources,
+    );
+    expect(getCastawayBio(renamed).sources).toBeDefined();
+  });
   it("counts the screenshot roster using documented genders", () => {
     const names = [
       "Danny Kilby",

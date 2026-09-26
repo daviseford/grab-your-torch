@@ -1,38 +1,41 @@
 /**
- * Remap a season's stored castaway ids from the app's committed (provisional)
- * ids to survivoR's published ids.
+ * Remap a season's stored castaway ids from the app's provisional ids to
+ * survivoR's published ids.
  *
  * Built for Season 51, whose cast was bootstrapped from the wiki with
  * predicted ids before survivoR published, and whose drafts, competitions,
- * trades and pool entries were all saved on those ids. survivoR's ids came
- * out as a permutation of the same range, so this is a one-lookup,
- * apply-at-most-once remap; see `scripts/lib/castaway-id-remap.ts` and
- * `docs/castaway-id-mapping.md`.
+ * trades, pool entries, season document and ADP summaries were all saved on
+ * those ids. survivoR's ids came out as a permutation of the same range, so
+ * this is a one-lookup, apply-at-most-once remap. See
+ * `scripts/lib/castaway-id-remap.ts` and `docs/castaway-id-mapping.md`.
  *
- * Three modes:
+ * Modes:
  *
- *   dry run (default)  Reads survivoR at a pinned commit, the committed season
- *                      file, and production (read-only). Writes a plan file
- *                      that is also the field-level backup (every change
- *                      carries `before` and `after`). Prints counts only.
- *   --write            Applies a reviewed plan file. Each document is
- *                      compare-and-set against the plan's `before`, so a
- *                      document that moved on is skipped as stale, and each
- *                      applied path is recorded in a ledger document so a
- *                      rerun never remaps it twice.
- *   --rollback         Restores `before` wherever a document still holds the
- *                      plan's `after`, and clears those ledger entries.
- *
- * Writes need `--plan <file>` and `--project <id>` naming the project the
- * service account belongs to. Derived data is not remapped here: rerun
- * `yarn recompute-castaway-adp <season> --write` afterwards, from a checkout
- * whose season file carries survivoR's ids.
+ *   --generate-mapping  Once per season: match the committed provisional cast
+ *                       to survivoR at a pinned commit and write the reviewed
+ *                       mapping to scripts/castaway-id-remaps/season_N.json.
+ *   (default) dry run   Verify the committed mapping (hash, and re-derived
+ *                       from the pinned upstream), read production read-only,
+ *                       and write a plan file that is also the field-level
+ *                       backup. Prints counts only.
+ *   --write             Apply a reviewed plan. Refuses unless the plan is for
+ *                       this project and mapping, is fresh, a new read of
+ *                       production plans exactly the same changes, it has no
+ *                       problems, and no draft is live (or each live draft is
+ *                       acknowledged). Each document is compare-and-set and
+ *                       marked applied in the same transaction.
+ *   --rollback          Restore a plan's `before` wherever its `after` is still
+ *                       in place, clearing the applied marks. Newest plan first.
+ *   --rewrite-season-file  Local only: rewrite src/data/season_N/index.ts
+ *                       to survivoR's ids and names from the committed mapping,
+ *                       adding no episode data. For the follow-up code PR.
  *
  * Usage:
+ *   yarn remap-castaway-ids 51 --generate-mapping [--upstream <sha>]
  *   yarn remap-castaway-ids 51
- *   yarn remap-castaway-ids 51 --upstream <survivoR commit sha>
- *   yarn remap-castaway-ids 51 --write --plan <file> --project survivor-fantasy-51c4b
+ *   yarn remap-castaway-ids 51 --write --plan <file> --project survivor-fantasy-51c4b [--ack-live-draft drafts/<id> ...]
  *   yarn remap-castaway-ids 51 --rollback --plan <file> --project survivor-fantasy-51c4b
+ *   yarn remap-castaway-ids 51 --rewrite-season-file
  *
  * The Admin SDK key defaults to `firebase-private-key.json` in the project
  * root; `FIREBASE_PRIVATE_KEY_PATH` overrides it (useful from a worktree).
@@ -41,48 +44,70 @@
 import * as fs from "fs";
 import * as path from "path";
 import { pathToFileURL } from "url";
+import { isDeepStrictEqual } from "util";
 import type { CastawayLookup } from "../src/types";
 import {
   applyCastawayIdRemap,
-  type CastawayIdMappingPlan,
+  type CastawayIdMappingFile,
+  type CastState,
+  classifyCommittedCast,
+  type CommittedCastaway,
+  fieldsEqual,
   planCastawayIdMapping,
   planDocumentRemap,
   type RemapDocChange,
-  type RemapDocKind,
   type RemapDocumentPlan,
+  type RemapMark,
   type RemapSourceDoc,
   type RemapStore,
+  rewriteSeasonSource,
   rollbackCastawayIdRemap,
+  RTDB_REMAP_MARKER,
   type UpstreamCastaway,
+  verifyMappingFile,
 } from "./lib/castaway-id-remap.js";
 
 /** survivoR commit that first published Season 51 (reviewed 2026-09-26). */
 export const DEFAULT_UPSTREAM_COMMIT =
   "7336413e39c34c31231b9fa17281a47f731837e0";
 
-const LEDGER_COLLECTION = "admin_migrations";
-const ledgerDocId = (seasonNum: number) =>
+export const REMAP_LEDGER_COLLECTION = "admin_migrations";
+export const remapLedgerDocId = (seasonNum: number) =>
   `castaway_id_remap_season_${seasonNum}`;
 
-const PLAN_DIR = path.join("data", "migration-output", "castaway-id-remap");
+const SCRIPTS_DIR = import.meta.dirname;
+const PROJECT_ROOT = path.resolve(SCRIPTS_DIR, "..");
+export const mappingFilePath = (seasonNum: number) =>
+  path.join(SCRIPTS_DIR, "castaway-id-remaps", `season_${seasonNum}.json`);
+const seasonFilePath = (seasonNum: number) =>
+  path.join(PROJECT_ROOT, "src", "data", `season_${seasonNum}`, "index.ts");
+const PLAN_DIR = path.join(
+  PROJECT_ROOT,
+  "data",
+  "migration-output",
+  "castaway-id-remap",
+);
 
-/** Per-season collections keyed by season id; inventoried, not remapped. */
-const SEASON_DOC_COLLECTIONS = [
-  "seasons",
+/** Per-season results keyed by castaway id: must be empty to remap. */
+const SEASON_RESULT_COLLECTIONS = [
   "challenges",
   "eliminations",
   "events",
   "vote_history",
-  "teams",
-  "team_assignments",
 ] as const;
+
+const UPSTREAM_TABLES = [
+  "dev/json/castaways.json",
+  "dev/json/castaway_details.json",
+];
 
 export type RemapPlanFile = {
   season_num: number;
   created_at: string;
-  project_id: string | null;
-  upstream: { repo: "doehm/survivoR"; commit: string; tables: string[] };
-  mapping: CastawayIdMappingPlan;
+  project_id: string;
+  mapping_hash: string;
+  upstream_commit: string;
+  local_season_file: CastState;
   inventory: Record<string, number | boolean>;
   documents: RemapDocumentPlan;
 };
@@ -131,13 +156,21 @@ export async function loadUpstreamCast(
   return out;
 }
 
-async function loadCommittedLookup(seasonNum: number): Promise<CastawayLookup> {
+async function loadCommittedCast(
+  seasonNum: number,
+): Promise<CommittedCastaway[]> {
   const mod = (await import(
-    `../src/data/season_${seasonNum}/index.ts`
+    pathToFileURL(seasonFilePath(seasonNum)).href
   )) as Record<string, unknown>;
-  const lookup = mod[`SEASON_${seasonNum}_CASTAWAY_LOOKUP`];
+  const lookup = mod[`SEASON_${seasonNum}_CASTAWAY_LOOKUP`] as
+    | CastawayLookup
+    | undefined;
   if (!lookup) throw new Error(`No SEASON_${seasonNum}_CASTAWAY_LOOKUP export`);
-  return lookup as CastawayLookup;
+  return Object.entries(lookup).map(([castaway_id, v]) => ({
+    castaway_id,
+    full_name: v.full_name,
+    castaway: v.castaway,
+  }));
 }
 
 async function castawayPropBetKeys(): Promise<Set<string>> {
@@ -147,6 +180,40 @@ async function castawayPropBetKeys(): Promise<Set<string>> {
       .filter(([, q]) => q.answer_type === "castaway")
       .map(([key]) => key),
   );
+}
+
+export function readMappingFile(seasonNum: number): CastawayIdMappingFile {
+  const file = mappingFilePath(seasonNum);
+  if (!fs.existsSync(file)) {
+    throw new Error(
+      `No committed mapping at ${file}. Run --generate-mapping, review, and commit it first.`,
+    );
+  }
+  return JSON.parse(fs.readFileSync(file, "utf-8")) as CastawayIdMappingFile;
+}
+
+/** Verify the committed mapping, re-deriving it from its pinned upstream. */
+async function verifiedMapping(
+  seasonNum: number,
+): Promise<CastawayIdMappingFile> {
+  const file = readMappingFile(seasonNum);
+  if (file.season_num !== seasonNum) {
+    throw new Error("The committed mapping is for another season");
+  }
+  const upstream = await loadUpstreamCast(file.upstream.commit, seasonNum);
+  const provisional = file.mappings.map((m) => ({
+    castaway_id: m.from,
+    full_name: m.from_name,
+    castaway: "",
+  }));
+  const errors = verifyMappingFile(
+    file,
+    planCastawayIdMapping(provisional, upstream),
+  );
+  if (errors.length > 0) {
+    throw new Error(`Mapping verification failed: ${errors.join("; ")}`);
+  }
+  return file;
 }
 
 /* ------------------------------------------------------------------ *
@@ -173,156 +240,244 @@ async function loadAdmin(): Promise<Admin> {
 const plain = (v: unknown): Record<string, unknown> =>
   JSON.parse(JSON.stringify(v ?? {}));
 
-async function readProduction(
-  { firestore, rtdb }: Admin,
+/**
+ * The minimal read surface `readProduction` needs, so tests can supply a
+ * fake instead of Firebase.
+ */
+export type ProductionReader = {
+  competitions(seasonId: string): Promise<{ id: string; data: unknown }[]>;
+  trades(competitionId: string): Promise<{ id: string; data: unknown }[]>;
+  drafts(seasonId: string): Promise<{ id: string; data: unknown }[]>;
+  doc(docPath: string): Promise<unknown | null>;
+  subcollection(docPath: string): Promise<{ id: string; data: unknown }[]>;
+  adpDocs(seasonId: string): Promise<{ id: string; data: unknown }[]>;
+};
+
+export function firebaseReader({ firestore, rtdb }: Admin): ProductionReader {
+  const rows = (snap: import("firebase-admin/firestore").QuerySnapshot) =>
+    snap.docs.map((d) => ({ id: d.id, data: d.data() }));
+  return {
+    competitions: async (seasonId) =>
+      rows(
+        await firestore
+          .collection("competitions")
+          .where("season_id", "==", seasonId)
+          .get(),
+      ),
+    trades: async (id) =>
+      rows(await firestore.collection(`competitions/${id}/trades`).get()),
+    drafts: async (seasonId) => {
+      const snap = await rtdb
+        .ref("drafts")
+        .orderByChild("season_id")
+        .equalTo(seasonId)
+        .once("value");
+      const out: { id: string; data: unknown }[] = [];
+      snap.forEach((child) => {
+        out.push({ id: child.key!, data: child.val() });
+      });
+      return out;
+    },
+    doc: async (docPath) => {
+      const snap = await firestore.doc(docPath).get();
+      return snap.exists ? snap.data() : null;
+    },
+    subcollection: async (docPath) =>
+      rows(await firestore.collection(docPath).get()),
+    adpDocs: async (seasonId) =>
+      rows(
+        await firestore
+          .collection("castaway_adp")
+          .where("season_id", "==", seasonId)
+          .get(),
+      ),
+  };
+}
+
+export async function readProduction(
+  reader: ProductionReader,
   seasonNum: number,
 ): Promise<{
   docs: RemapSourceDoc[];
   inventory: Record<string, number | boolean>;
-  appliedPaths: Set<string>;
+  ledger: Map<string, string>;
+  ledgerHash: string | null;
 }> {
   const seasonId = `season_${seasonNum}`;
   const poolId = `pool_season_${seasonNum}`;
   const docs: RemapSourceDoc[] = [];
   const inventory: Record<string, number | boolean> = {};
+  const push = (kind: RemapSourceDoc["kind"], p: string, data: unknown) =>
+    docs.push({ kind, path: p, data: plain(data) });
 
-  const competitions = await firestore
-    .collection("competitions")
-    .where("season_id", "==", seasonId)
-    .get();
-  inventory.competitions = competitions.size;
+  const competitions = await reader.competitions(seasonId);
+  inventory.competitions = competitions.length;
   let tradeCount = 0;
-  for (const comp of competitions.docs) {
-    docs.push({
-      kind: "competition",
-      path: `competitions/${comp.id}`,
-      data: plain(comp.data()),
-    });
-    const trades = await comp.ref.collection("trades").get();
-    tradeCount += trades.size;
-    for (const t of trades.docs) {
-      docs.push({
-        kind: "trade",
-        path: `competitions/${comp.id}/trades/${t.id}`,
-        data: plain(t.data()),
-      });
+  for (const comp of competitions) {
+    push("competition", `competitions/${comp.id}`, comp.data);
+    const trades = await reader.trades(comp.id);
+    tradeCount += trades.length;
+    for (const t of trades) {
+      push("trade", `competitions/${comp.id}/trades/${t.id}`, t.data);
     }
   }
   inventory.trades = tradeCount;
 
-  const drafts = await rtdb
-    .ref("drafts")
-    .orderByChild("season_id")
-    .equalTo(seasonId)
-    .once("value");
-  let draftCount = 0;
-  drafts.forEach((child) => {
-    draftCount++;
-    docs.push({
-      kind: "rtdb_draft",
-      path: `drafts/${child.key}`,
-      data: plain(child.val()),
-    });
-  });
-  inventory.rtdb_drafts = draftCount;
+  const drafts = await reader.drafts(seasonId);
+  inventory.rtdb_drafts = drafts.length;
+  for (const d of drafts) push("rtdb_draft", `drafts/${d.id}`, d.data);
 
-  const pool = await firestore.collection("pools").doc(poolId).get();
-  inventory.pool_config = pool.exists;
-  if (pool.exists) {
-    docs.push({
-      kind: "pool_config",
-      path: `pools/${poolId}`,
-      data: plain(pool.data()),
-    });
-    const entries = await pool.ref.collection("entries").get();
-    inventory.pool_entries = entries.size;
-    for (const e of entries.docs) {
-      docs.push({
-        kind: "pool_entry",
-        path: `pools/${poolId}/entries/${e.id}`,
-        data: plain(e.data()),
-      });
+  const pool = await reader.doc(`pools/${poolId}`);
+  inventory.pool_config = pool !== null;
+  if (pool !== null) {
+    push("pool_config", `pools/${poolId}`, pool);
+    const entries = await reader.subcollection(`pools/${poolId}/entries`);
+    inventory.pool_entries = entries.length;
+    for (const e of entries) {
+      push("pool_entry", `pools/${poolId}/entries/${e.id}`, e.data);
     }
   }
 
-  for (const collection of SEASON_DOC_COLLECTIONS) {
-    const doc = await firestore.collection(collection).doc(seasonId).get();
-    inventory[`${collection}/${seasonId}`] = doc.exists;
+  const season = await reader.doc(`seasons/${seasonId}`);
+  inventory[`seasons/${seasonId}`] = season !== null;
+  if (season !== null) push("season", `seasons/${seasonId}`, season);
+
+  const teamAssignments = await reader.doc(`team_assignments/${seasonId}`);
+  inventory[`team_assignments/${seasonId}`] = teamAssignments !== null;
+  if (teamAssignments !== null) {
+    push("team_assignments", `team_assignments/${seasonId}`, teamAssignments);
   }
-  const adp = await firestore
-    .collection("castaway_adp")
-    .where("season_id", "==", seasonId)
-    .get();
-  inventory.castaway_adp_docs = adp.size;
 
-  const ledger = await firestore
-    .collection(LEDGER_COLLECTION)
-    .doc(ledgerDocId(seasonNum))
-    .get();
-  const appliedPaths = new Set<string>(
-    (ledger.data()?.applied_paths as string[] | undefined) ?? [],
+  for (const collection of SEASON_RESULT_COLLECTIONS) {
+    const doc = await reader.doc(`${collection}/${seasonId}`);
+    inventory[`${collection}/${seasonId}`] = doc !== null;
+    if (doc !== null) push("season_results", `${collection}/${seasonId}`, doc);
+  }
+
+  const adp = await reader.adpDocs(seasonId);
+  inventory.castaway_adp_docs = adp.length;
+  for (const a of adp) push("castaway_adp", `castaway_adp/${a.id}`, a.data);
+
+  const ledgerDoc = plain(
+    await reader.doc(
+      `${REMAP_LEDGER_COLLECTION}/${remapLedgerDocId(seasonNum)}`,
+    ),
   );
-  inventory.ledger_applied_paths = appliedPaths.size;
-
-  return { docs, inventory, appliedPaths };
+  const ledger = new Map<string, string>();
+  const applied = ledgerDoc.applied;
+  if (applied && typeof applied === "object") {
+    for (const [p, v] of Object.entries(applied as Record<string, unknown>)) {
+      const h = (v as { mapping_hash?: unknown })?.mapping_hash;
+      if (typeof h === "string") ledger.set(p, h);
+    }
+  }
+  inventory.ledger_applied_paths = ledger.size;
+  inventory.rtdb_drafts_marked = drafts.filter(
+    (d) => (d.data as Record<string, unknown> | null)?.[RTDB_REMAP_MARKER],
+  ).length;
+  return {
+    docs,
+    inventory,
+    ledger,
+    ledgerHash:
+      typeof ledgerDoc.mapping_hash === "string"
+        ? ledgerDoc.mapping_hash
+        : null,
+  };
 }
 
-const fieldsEqual = (
-  current: Record<string, unknown> | null | undefined,
-  expected: Record<string, unknown>,
-) =>
-  Object.entries(expected).every(
-    ([k, v]) =>
-      JSON.stringify(current?.[k] ?? null) === JSON.stringify(v ?? null),
-  );
+/** Whether `mark` may be applied given the document's current mark hash. */
+export const markAllows = (
+  mark: RemapMark,
+  current: string | undefined,
+  hash: string,
+): boolean => (mark === "set" ? current === undefined : current === hash);
 
 function productionStore(
   { firestore, rtdb }: Admin,
   seasonNum: number,
-  meta: { mapping_hash: string; upstream_commit: string },
+  hash: string,
 ): RemapStore {
   const ledgerRef = firestore
-    .collection(LEDGER_COLLECTION)
-    .doc(ledgerDocId(seasonNum));
+    .collection(REMAP_LEDGER_COLLECTION)
+    .doc(remapLedgerDocId(seasonNum));
   return {
-    async compareAndSet(kind: RemapDocKind, docPath, expected, next) {
-      if (kind === "rtdb_draft") {
-        const result = await rtdb.ref(docPath).transaction((current) => {
-          // The first call usually sees null (nothing cached locally).
-          // Returning null lets the server reject it and call back with the
-          // real value; a node that is truly absent stays absent.
+    async compareAndSet(change, expected, next, mark) {
+      const now = new Date().toISOString();
+      if (change.kind === "rtdb_draft") {
+        const result = await rtdb.ref(change.path).transaction((current) => {
+          // The handler first runs against the local cache, which is empty
+          // (null) for a node this process never read. Returning null asks
+          // the server to store null; the server sees the real value differs,
+          // rejects, and reruns this handler with it. If the node is truly
+          // absent, null is committed (a no-op) and the check below reports
+          // the document as stale rather than applied.
           if (current === null) return null;
-          if (!fieldsEqual(plain(current), expected)) return; // abort
-          return { ...current, ...next };
+          const node = plain(current);
+          const markHash = (
+            node[RTDB_REMAP_MARKER] as { mapping_hash?: string }
+          )?.mapping_hash;
+          if (
+            !fieldsEqual(node, expected) ||
+            !markAllows(mark, markHash, hash)
+          ) {
+            return; // abort: nothing written
+          }
+          const updated: Record<string, unknown> = { ...current, ...next };
+          if (mark === "set") {
+            updated[RTDB_REMAP_MARKER] = {
+              mapping_hash: hash,
+              applied_at: now,
+            };
+          } else if (mark === "clear") {
+            delete updated[RTDB_REMAP_MARKER];
+          }
+          return updated;
         });
-        return (
-          result.committed &&
-          result.snapshot.exists() &&
-          fieldsEqual(plain(result.snapshot.val()), next)
-        );
+        if (!result.committed || !result.snapshot.exists()) return false;
+        const stored = plain(result.snapshot.val());
+        return fieldsEqual(stored, next);
       }
+      const { FieldPath, FieldValue } =
+        await import("firebase-admin/firestore");
       return firestore.runTransaction(async (tx) => {
-        const ref = firestore.doc(docPath);
-        const snap = await tx.get(ref);
-        if (!snap.exists || !fieldsEqual(plain(snap.data()), expected)) {
+        const ref = firestore.doc(change.path);
+        const [snap, ledger] = await Promise.all([
+          tx.get(ref),
+          tx.get(ledgerRef),
+        ]);
+        if (!snap.exists || !ledger.exists) return false;
+        const entry = (
+          ledger.data()?.applied as
+            | Record<string, { mapping_hash?: string }>
+            | undefined
+        )?.[change.path];
+        if (
+          !fieldsEqual(plain(snap.data()), expected) ||
+          !markAllows(mark, entry?.mapping_hash, hash)
+        ) {
           return false;
         }
-        tx.update(ref, next);
+        // Field paths, not dotted strings: team_assignments fields are
+        // episode numbers, and no field name is parsed as a path.
+        const [[firstKey, firstValue], ...rest] = Object.entries(next);
+        tx.update(
+          ref,
+          new FieldPath(firstKey),
+          firstValue,
+          ...rest.flatMap(([k, v]) => [new FieldPath(k), v]),
+        );
+        if (mark !== "keep") {
+          tx.update(
+            ledgerRef,
+            new FieldPath("applied", change.path),
+            mark === "set"
+              ? { mapping_hash: hash, applied_at: now, kind: change.kind }
+              : FieldValue.delete(),
+          );
+        }
         return true;
       });
-    },
-    async setLedger(docPath, applied) {
-      const { FieldValue } = await import("firebase-admin/firestore");
-      await ledgerRef.set(
-        {
-          ...meta,
-          updated_at: new Date().toISOString(),
-          applied_paths: applied
-            ? FieldValue.arrayUnion(docPath)
-            : FieldValue.arrayRemove(docPath),
-        },
-        { merge: true },
-      );
     },
   };
 }
@@ -331,23 +486,31 @@ function productionStore(
  * CLI
  * ------------------------------------------------------------------ */
 
-type Args = {
+export type Args = {
   seasonNum: number | null;
   upstream: string;
+  generateMapping: boolean;
+  rewriteSeasonFile: boolean;
   write: boolean;
   rollback: boolean;
   plan: string | null;
   project: string | null;
+  ackLiveDrafts: string[];
+  maxPlanAgeHours: number;
 };
 
 export function parseArgs(argv: readonly string[]): Args {
   const parsed: Args = {
     seasonNum: null,
     upstream: DEFAULT_UPSTREAM_COMMIT,
+    generateMapping: false,
+    rewriteSeasonFile: false,
     write: false,
     rollback: false,
     plan: null,
     project: null,
+    ackLiveDrafts: [],
+    maxPlanAgeHours: 6,
   };
   const value = (i: number, flag: string) => {
     const v = argv[i];
@@ -360,26 +523,142 @@ export function parseArgs(argv: readonly string[]): Args {
     const arg = argv[i];
     if (arg === "--write") parsed.write = true;
     else if (arg === "--rollback") parsed.rollback = true;
+    else if (arg === "--generate-mapping") parsed.generateMapping = true;
+    else if (arg === "--rewrite-season-file") parsed.rewriteSeasonFile = true;
     else if (arg === "--upstream") parsed.upstream = value(++i, arg);
     else if (arg === "--plan") parsed.plan = value(++i, arg);
     else if (arg === "--project") parsed.project = value(++i, arg);
-    else if (/^\d+$/.test(arg)) parsed.seasonNum = Number(arg);
+    else if (arg === "--ack-live-draft") {
+      parsed.ackLiveDrafts.push(value(++i, arg));
+    } else if (arg === "--max-plan-age-hours") {
+      parsed.maxPlanAgeHours = Number(value(++i, arg));
+      if (!(parsed.maxPlanAgeHours > 0)) {
+        throw new Error("--max-plan-age-hours must be a positive number");
+      }
+    } else if (/^\d+$/.test(arg)) parsed.seasonNum = Number(arg);
     else throw new Error(`Unknown argument: ${arg}`);
   }
   if (!/^[0-9a-f]{40}$/.test(parsed.upstream)) {
     throw new Error("--upstream must be a full 40-character commit sha");
   }
+  const modes = [
+    parsed.write,
+    parsed.rollback,
+    parsed.generateMapping,
+    parsed.rewriteSeasonFile,
+  ].filter(Boolean).length;
+  if (modes > 1) {
+    throw new Error(
+      "--write, --rollback, --generate-mapping and --rewrite-season-file are exclusive",
+    );
+  }
+  if ((parsed.write || parsed.rollback) && (!parsed.plan || !parsed.project)) {
+    throw new Error(
+      "--write and --rollback need --plan <file> and --project <id>",
+    );
+  }
   return parsed;
 }
+
+/** Comparable form of a plan's changes, for the write-time freshness check. */
+const changeKey = (c: RemapDocChange) =>
+  JSON.stringify([c.kind, c.path, c.mode]);
+
+/**
+ * Reasons a reviewed plan must not be written now. Pure, so every guard is
+ * testable without Firebase.
+ */
+export function writeRefusals(input: {
+  plan: RemapPlanFile;
+  seasonNum: number;
+  project: string;
+  adminProjectId: string | null;
+  mappingHash: string;
+  ledgerHash: string | null;
+  now: Date;
+  maxPlanAgeHours: number;
+  fresh: RemapDocumentPlan;
+  ackLiveDrafts: readonly string[];
+}): string[] {
+  const { plan, fresh } = input;
+  const out: string[] = [];
+  if (plan.season_num !== input.seasonNum)
+    out.push("the plan is for another season");
+  if (input.adminProjectId !== input.project) {
+    out.push(
+      `--project ${input.project} is not the service account's project ${input.adminProjectId}`,
+    );
+  }
+  if (plan.project_id !== input.project) {
+    out.push(
+      `the plan was made against ${plan.project_id}, not ${input.project}`,
+    );
+  }
+  if (plan.mapping_hash !== input.mappingHash) {
+    out.push(
+      "the plan was made with a different mapping than the committed one",
+    );
+  }
+  if (input.ledgerHash !== null && input.ledgerHash !== input.mappingHash) {
+    out.push(`production is already marked with mapping ${input.ledgerHash}`);
+  }
+  const ageHours = (input.now.getTime() - Date.parse(plan.created_at)) / 3.6e6;
+  if (!(ageHours <= input.maxPlanAgeHours)) {
+    out.push(`the plan is ${ageHours.toFixed(1)}h old; dry-run again`);
+  }
+  if (plan.documents.problems.length > 0 || fresh.problems.length > 0) {
+    out.push("the plan or a fresh read reports problems");
+  }
+  const reviewed = new Map(
+    plan.documents.changes.map((c) => [changeKey(c), c]),
+  );
+  const same =
+    reviewed.size === fresh.changes.length &&
+    fresh.changes.every((c) => {
+      const r = reviewed.get(changeKey(c));
+      return (
+        r !== undefined &&
+        isDeepStrictEqual(r.before, c.before) &&
+        isDeepStrictEqual(r.after, c.after)
+      );
+    });
+  if (!same) {
+    out.push("production changed since the plan was reviewed; dry-run again");
+  }
+  const unacked = fresh.live_drafts.filter(
+    (p) => !input.ackLiveDrafts.includes(p),
+  );
+  if (unacked.length > 0) {
+    out.push(
+      `${unacked.length} draft(s) are live (users can still write castaway ids); wait, or acknowledge each with --ack-live-draft <path>`,
+    );
+  }
+  return out;
+}
+
+const PROVISIONAL_HEADER =
+  /^\/\/ Cast bootstrapped from the Survivor Wiki[\s\S]*?\n(?=import)/;
+
+export const rewriteSeasonFileSource = (
+  source: string,
+  file: CastawayIdMappingFile,
+): string =>
+  rewriteSeasonSource(source, file.mappings).replace(
+    PROVISIONAL_HEADER,
+    `// Cast bootstrapped from the Survivor Wiki, then moved to survivoR's ids and\n` +
+      `// names (doehm/survivoR@${file.upstream.commit.slice(0, 7)}) by\n` +
+      `// \`yarn remap-castaway-ids ${file.season_num} --rewrite-season-file\`, mapping ${file.mapping_hash}.\n` +
+      `// See docs/castaway-id-mapping.md.\n`,
+  );
 
 const fail = (message: string): never => {
   console.error(`Refusing to run: ${message}.`);
   process.exit(1);
 };
 
-const countBy = (changes: readonly RemapDocChange[]) =>
-  changes.reduce<Record<string, number>>((acc, c) => {
-    acc[c.kind] = (acc[c.kind] ?? 0) + 1;
+const countBy = <T>(items: readonly T[], key: (t: T) => string) =>
+  items.reduce<Record<string, number>>((acc, t) => {
+    acc[key(t)] = (acc[key(t)] ?? 0) + 1;
     return acc;
   }, {});
 
@@ -388,107 +667,183 @@ async function main(): Promise<void> {
   const { seasonNum } = args;
   if (seasonNum === null) {
     return fail(
-      "no season given. Usage: yarn remap-castaway-ids <season> [--upstream <sha>] [--write|--rollback --plan <file> --project <id>]",
+      "no season given. Usage: yarn remap-castaway-ids <season> [--generate-mapping|--rewrite-season-file|--write|--rollback] ...",
     );
   }
-  if (args.write && args.rollback) fail("--write and --rollback are exclusive");
+
+  if (args.generateMapping) {
+    const out = mappingFilePath(seasonNum);
+    if (fs.existsSync(out))
+      fail(`${out} already exists; the mapping is fixed once reviewed`);
+    const [upstream, cast] = await Promise.all([
+      loadUpstreamCast(args.upstream, seasonNum),
+      loadCommittedCast(seasonNum),
+    ]);
+    const plan = planCastawayIdMapping(cast, upstream);
+    for (const e of plan.errors) console.log(`  ERROR ${e}`);
+    if (plan.errors.length > 0) fail("the mapping has errors");
+    const file: CastawayIdMappingFile = {
+      season_num: seasonNum,
+      upstream: {
+        repo: "doehm/survivoR",
+        commit: args.upstream,
+        tables: UPSTREAM_TABLES,
+      },
+      mapping_hash: plan.mapping_hash,
+      mappings: plan.mappings,
+    };
+    fs.mkdirSync(path.dirname(out), { recursive: true });
+    fs.writeFileSync(out, JSON.stringify(file, null, 2) + "\n");
+    console.log(
+      `Wrote ${out} (mapping ${plan.mapping_hash}). Review and commit it.`,
+    );
+    return;
+  }
+
+  const mapping = await verifiedMapping(seasonNum);
+  console.log(
+    `Mapping ${mapping.mapping_hash} (survivoR ${mapping.upstream.commit}) verified: ` +
+      `${mapping.mappings.length} castaways, ${mapping.mappings.filter((m) => m.from !== m.to).length} ids change.`,
+  );
+
+  if (args.rewriteSeasonFile) {
+    const file = seasonFilePath(seasonNum);
+    const state = classifyCommittedCast(
+      await loadCommittedCast(seasonNum),
+      mapping.mappings,
+    );
+    if (state !== "provisional")
+      fail(`the season file is ${state}, not provisional`);
+    fs.writeFileSync(
+      file,
+      rewriteSeasonFileSource(fs.readFileSync(file, "utf-8"), mapping),
+    );
+    console.log(`Rewrote ${file}. Run yarn format, then review the diff.`);
+    return;
+  }
+
+  const [propKeys, localCast] = await Promise.all([
+    castawayPropBetKeys(),
+    loadCommittedCast(seasonNum),
+  ]);
+  const localState = classifyCommittedCast(localCast, mapping.mappings);
+  console.log(`Local season file: ${localState}`);
+
+  const admin = await loadAdmin();
+  const planFrom = async () => {
+    const read = await readProduction(firebaseReader(admin), seasonNum);
+    return {
+      ...read,
+      documents: planDocumentRemap(read.docs, {
+        mappings: mapping.mappings,
+        mappingHash: mapping.mapping_hash,
+        castawayPropBetKeys: propKeys,
+        ledger: read.ledger,
+      }),
+    };
+  };
 
   if (args.write || args.rollback) {
-    if (!args.plan) fail("writes need --plan <file> from a reviewed dry run");
-    if (!args.project) fail("writes need --project <id>");
     const plan = JSON.parse(
       fs.readFileSync(args.plan!, "utf-8"),
     ) as RemapPlanFile;
-    if (plan.season_num !== seasonNum) fail("the plan is for another season");
-    if (plan.mapping.errors.length > 0) fail("the plan's mapping has errors");
-    if (plan.documents.problems.length > 0) {
-      fail("the plan reports problems; resolve them and dry-run again");
-    }
-    const admin = await loadAdmin();
-    if (admin.projectId !== args.project) {
-      fail(
-        `--project ${args.project} does not match the service account's project ${admin.projectId}`,
+    const store = productionStore(admin, seasonNum, mapping.mapping_hash);
+    if (args.rollback) {
+      const refusals = [
+        plan.season_num !== seasonNum && "the plan is for another season",
+        admin.projectId !== args.project &&
+          `--project ${args.project} is not the service account's project ${admin.projectId}`,
+        plan.project_id !== args.project &&
+          `the plan was made against ${plan.project_id}`,
+        plan.mapping_hash !== mapping.mapping_hash &&
+          "the plan used another mapping",
+      ].filter((r): r is string => typeof r === "string");
+      if (refusals.length > 0) fail(refusals.join("; "));
+      const result = await rollbackCastawayIdRemap(
+        plan.documents.changes,
+        store,
       );
+      console.log(
+        `Rolled back ${result.applied.length} of ${plan.documents.changes.length}; ${result.stale.length} no longer held this plan's values.`,
+      );
+      process.exitCode = result.stale.length > 0 ? 1 : 0;
+      return;
     }
-    const store = productionStore(admin, seasonNum, {
-      mapping_hash: plan.mapping.mapping_hash,
-      upstream_commit: plan.upstream.commit,
+
+    const fresh = await planFrom();
+    const refusals = writeRefusals({
+      plan,
+      seasonNum,
+      project: args.project!,
+      adminProjectId: admin.projectId,
+      mappingHash: mapping.mapping_hash,
+      ledgerHash: fresh.ledgerHash,
+      now: new Date(),
+      maxPlanAgeHours: args.maxPlanAgeHours,
+      fresh: fresh.documents,
+      ackLiveDrafts: args.ackLiveDrafts,
     });
-    const run = args.write ? applyCastawayIdRemap : rollbackCastawayIdRemap;
-    const result = await run(plan.documents.changes, store);
+    if (refusals.length > 0) fail(refusals.join("; "));
+
+    // Create the ledger before the first document so every Firestore
+    // transaction can update it, and so the ADP job sees the remap has begun.
+    const ledgerRef = admin.firestore
+      .collection(REMAP_LEDGER_COLLECTION)
+      .doc(remapLedgerDocId(seasonNum));
+    await admin.firestore.runTransaction(async (tx) => {
+      const snap = await tx.get(ledgerRef);
+      if (!snap.exists) {
+        tx.set(ledgerRef, {
+          season_num: seasonNum,
+          mapping_hash: mapping.mapping_hash,
+          upstream_commit: mapping.upstream.commit,
+          started_at: new Date().toISOString(),
+          applied: {},
+        });
+      } else if (snap.data()?.mapping_hash !== mapping.mapping_hash) {
+        throw new Error("The ledger belongs to another mapping");
+      }
+    });
+
+    const result = await applyCastawayIdRemap(plan.documents.changes, store);
     console.log(
-      `${args.write ? "Applied" : "Rolled back"} ${result.applied.length} of ${plan.documents.changes.length} documents; ${result.stale.length} stale.`,
+      `Applied ${result.applied.length} of ${plan.documents.changes.length}; ${result.stale.length} stale.`,
     );
-    for (const p of result.stale) console.log(`  stale: ${p}`);
-    if (result.stale.length > 0) {
-      console.log("Dry-run again to re-plan the stale documents.");
+    const after = await planFrom();
+    console.log(
+      `Re-read: ${after.documents.changes.length} changes left, ${after.documents.already_applied.length} applied, ${after.documents.problems.length} problems.`,
+    );
+    if (result.stale.length > 0 || after.documents.changes.length > 0) {
+      console.log("Dry-run again and apply the new plan for what remains.");
       process.exitCode = 1;
     }
     return;
   }
 
-  console.log(`survivoR commit: ${args.upstream}`);
-  const [upstream, lookup, propKeys] = await Promise.all([
-    loadUpstreamCast(args.upstream, seasonNum),
-    loadCommittedLookup(seasonNum),
-    castawayPropBetKeys(),
-  ]);
-  const committed = Object.entries(lookup).map(([castaway_id, v]) => ({
-    castaway_id,
-    full_name: v.full_name,
-    castaway: v.castaway,
-  }));
-  const mapping = planCastawayIdMapping(committed, upstream);
-
-  console.log(
-    `Mapping: ${mapping.mappings.length} castaways, ${mapping.changed.length} ids change, hash ${mapping.mapping_hash}`,
-  );
-  for (const m of mapping.mappings) {
-    console.log(
-      `  ${m.from} ${m.from === m.to ? "==" : "->"} ${m.to}  ${m.from_name}${m.from_name === m.to_name ? "" : ` (survivoR: ${m.to_name})`}  [${m.matched_by}]`,
-    );
-  }
-  for (const e of mapping.errors) console.log(`  ERROR ${e}`);
-  if (mapping.errors.length > 0) return fail("the mapping has errors");
-
-  const admin = await loadAdmin();
+  const { inventory, documents, ledgerHash } = await planFrom();
   console.log(`\nFirebase project: ${admin.projectId} (read-only)`);
-  const { docs, inventory, appliedPaths } = await readProduction(
-    admin,
-    seasonNum,
-  );
-  const documents = planDocumentRemap(docs, {
-    mapping: mapping.mappings,
-    castawayPropBetKeys: propKeys,
-    appliedPaths,
-  });
-
   console.log("Inventory:");
   for (const [k, v] of Object.entries(inventory)) console.log(`  ${k}: ${v}`);
+  if (ledgerHash) console.log(`  ledger mapping: ${ledgerHash}`);
   console.log(
-    `Plan: ${documents.changes.length} documents to change ${JSON.stringify(countBy(documents.changes))}, ` +
+    `Plan: ${documents.changes.length} documents to change ${JSON.stringify(countBy(documents.changes, (c) => `${c.kind}:${c.mode}`))}, ` +
       `${documents.changes.reduce((n, c) => n + c.id_changes, 0)} id values; ` +
       `${documents.unchanged.length} unchanged, ${documents.already_applied.length} already applied, ` +
-      `${documents.problems.length} problems`,
-  );
-  const problemCounts = documents.problems.reduce<Record<string, number>>(
-    (acc, p) => ((acc[p.reason] = (acc[p.reason] ?? 0) + 1), acc),
-    {},
+      `${documents.problems.length} problems, ${documents.live_drafts.length} live drafts`,
   );
   if (documents.problems.length > 0) {
-    console.log(`Problems by reason: ${JSON.stringify(problemCounts)}`);
+    console.log(
+      `Problems by reason: ${JSON.stringify(countBy(documents.problems, (p) => p.reason))}`,
+    );
   }
 
   const file: RemapPlanFile = {
     season_num: seasonNum,
     created_at: new Date().toISOString(),
-    project_id: admin.projectId,
-    upstream: {
-      repo: "doehm/survivoR",
-      commit: args.upstream,
-      tables: ["dev/json/castaways.json", "dev/json/castaway_details.json"],
-    },
-    mapping,
+    project_id: admin.projectId ?? "",
+    mapping_hash: mapping.mapping_hash,
+    upstream_commit: mapping.upstream.commit,
+    local_season_file: localState,
     inventory,
     documents,
   };

@@ -19,6 +19,7 @@ import {
   describePlan,
   type DraftReader,
   type Fixture,
+  frozenPrePremiere,
   isDirectRun,
   loadAccounts,
   loadCompetitions,
@@ -317,6 +318,23 @@ describe("publishPlans", () => {
     };
     return { docs, writes, store };
   };
+
+  it("leaves a remapped season's pre-premiere summary alone", async () => {
+    // After a castaway id remap every competition reads as edited after the
+    // premiere; recomputing would publish an empty cohort over the permuted one.
+    const { writes, store, docs } = memoryStore();
+    docs.set("season_51_pre_premiere", { permuted: true });
+    const [, allDrafts] = planFor("2026-09-21T00:00:00Z");
+    const frozen = frozenPrePremiere("season_51");
+    expect(describePlan(frozen)).toEqual([
+      "season_51 pre_premiere: skipped, castaway ids were remapped after the premiere, so the pre-premiere summary is frozen as remapped.",
+    ]);
+    expect(await publishPlans([frozen, allDrafts], store)).toEqual([
+      "Published castaway_adp/season_51_all_drafts.",
+    ]);
+    expect(writes).toEqual(["season_51_all_drafts"]);
+    expect(docs.get("season_51_pre_premiere")).toEqual({ permuted: true });
+  });
 
   it("writes each named cohort once and skips a rerun with the same numbers", async () => {
     const { writes, store, docs } = memoryStore();

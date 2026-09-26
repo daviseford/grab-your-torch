@@ -209,8 +209,8 @@ export const Pool = () => {
   const controls = resolvePoolEntryControls({ state, hasEntry: !!entry });
 
   const details = useMemo(
-    () => buildPoolCastDetails(pool?.season_id),
-    [pool?.season_id],
+    () => buildPoolCastDetails(pool?.season_id, pool?.roster),
+    [pool?.season_id, pool?.roster],
   );
 
   useBugContext(pool ? pool.name : null);

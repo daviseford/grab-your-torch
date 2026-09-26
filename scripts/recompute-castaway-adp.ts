@@ -194,6 +194,8 @@ type FixtureRow = {
 export type Fixture = {
   competitions: FixtureRow[];
   accounts: Record<string, string>;
+  /** Season ids whose castaway ids were remapped (see below). */
+  remapped_seasons?: string[];
 };
 
 const toDate = (iso: string | null | undefined) => (iso ? new Date(iso) : null);
@@ -262,6 +264,28 @@ export const planSeason = (
     }),
   };
 };
+
+/**
+ * The pre-premiere summary of a season whose castaway ids were remapped.
+ *
+ * `yarn remap-castaway-ids` rewrites every competition of the season after
+ * the premiere, so Firestore's `updateTime` no longer says when a draft was
+ * saved and every record would read as `edited_after_premiere`. The remap
+ * permutes the published pre-premiere summary in place instead, and this job
+ * leaves it alone from then on. The cohort was closed at the premiere anyway.
+ * A season counts as remapped once its ledger document exists.
+ */
+export const frozenPrePremiere = (seasonId: Season["id"]): SeasonAdpPlan => ({
+  seasonId,
+  cohort: "pre_premiere",
+  ok: false,
+  reason:
+    "castaway ids were remapped after the premiere, so the pre-premiere summary is frozen as remapped",
+});
+
+/** `admin_migrations/castaway_id_remap_season_N`, as written by the remap. */
+export const remapLedgerPath = (seasonId: Season["id"]): string =>
+  `admin_migrations/castaway_id_remap_${seasonId}`;
 
 /**
  * What the operator sees. Counts only: never a competition id, uid, name, or
@@ -385,13 +409,16 @@ async function main(): Promise<void> {
 
   let competitions: AdpCompetitionSource[];
   let accounts: AdpAccounts;
+  let remapped: Set<string>;
   let firestore: import("firebase-admin/firestore").Firestore | null = null;
 
   if (fixture) {
     console.log(`Reading competitions from the fixture at ${fixture}.`);
-    ({ competitions, accounts } = readFixture(
-      JSON.parse(fs.readFileSync(fixture, "utf-8")) as Fixture,
-    ));
+    const parsedFixture = JSON.parse(
+      fs.readFileSync(fixture, "utf-8"),
+    ) as Fixture;
+    ({ competitions, accounts } = readFixture(parsedFixture));
+    remapped = new Set(parsedFixture.remapped_seasons ?? []);
     competitions = competitions.filter((c) =>
       (seasonIds as string[]).includes(c.data.season_id as string),
     );
@@ -409,6 +436,16 @@ async function main(): Promise<void> {
       );
     }
     firestore = getFirestore();
+    const db = firestore;
+    remapped = new Set(
+      (
+        await Promise.all(
+          seasonIds.map(async (id) =>
+            (await db.doc(remapLedgerPath(id)).get()).exists ? id : null,
+          ),
+        )
+      ).filter((id): id is Season["id"] => id !== null),
+    );
     competitions = await loadCompetitions(
       firestore as unknown as CompetitionReader,
       getDatabase() as unknown as DraftReader,
@@ -424,14 +461,16 @@ async function main(): Promise<void> {
   const seasons = SEASONS as Partial<Record<Season["id"], SeasonSource>>;
   const results = seasonIds.flatMap((seasonId) =>
     cohorts.map((cohort) =>
-      planSeason(
-        seasons[seasonId],
-        seasonId,
-        cohort,
-        competitions,
-        accounts,
-        computedAt,
-      ),
+      cohort === "pre_premiere" && remapped.has(seasonId)
+        ? frozenPrePremiere(seasonId)
+        : planSeason(
+            seasons[seasonId],
+            seasonId,
+            cohort,
+            competitions,
+            accounts,
+            computedAt,
+          ),
     ),
   );
 
