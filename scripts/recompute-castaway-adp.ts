@@ -49,6 +49,13 @@ import {
   castawayAdpDocId,
   planCastawayAdp,
 } from "../src/utils/castawayAdp";
+import {
+  readRemapLedgerStatus,
+  remapLedgerPath,
+  type RemapLedgerStatus,
+} from "./lib/remap-ledger";
+
+export { remapLedgerPath };
 
 /* ------------------------------------------------------------------ *
  * Inputs
@@ -196,6 +203,8 @@ export type Fixture = {
   accounts: Record<string, string>;
   /** Season ids whose castaway ids were remapped (see below). */
   remapped_seasons?: string[];
+  /** Season ids whose castaway id remap is still in progress. */
+  remap_in_progress_seasons?: string[];
 };
 
 const toDate = (iso: string | null | undefined) => (iso ? new Date(iso) : null);
@@ -273,7 +282,8 @@ export const planSeason = (
  * saved and every record would read as `edited_after_premiere`. The remap
  * permutes the published pre-premiere summary in place instead, and this job
  * leaves it alone from then on. The cohort was closed at the premiere anyway.
- * A season counts as remapped once its ledger document exists.
+ * A season counts as remapped once its ledger document exists, whatever its
+ * status: a rolled-back remap has rewritten every competition too.
  */
 export const frozenPrePremiere = (seasonId: Season["id"]): SeasonAdpPlan => ({
   seasonId,
@@ -283,9 +293,33 @@ export const frozenPrePremiere = (seasonId: Season["id"]): SeasonAdpPlan => ({
     "castaway ids were remapped after the premiere, so the pre-premiere summary is frozen as remapped",
 });
 
-/** `admin_migrations/castaway_id_remap_season_N`, as written by the remap. */
-export const remapLedgerPath = (seasonId: Season["id"]): string =>
-  `admin_migrations/castaway_id_remap_${seasonId}`;
+/**
+ * Any cohort of a season whose castaway id remap is in progress. Stored
+ * picks are then a mix of provisional and survivoR ids, so any summary built
+ * from them would credit the wrong castaways. `--finalize` or a rollback
+ * releases it.
+ */
+export const heldForRemap = (
+  seasonId: Season["id"],
+  cohort: AdpCohort,
+): SeasonAdpPlan => ({
+  seasonId,
+  cohort,
+  ok: false,
+  reason:
+    "a castaway id remap is in progress, so stored picks mix two id sets; held until it is finalized or rolled back",
+});
+
+/** What the job does with one cohort, given the season's remap ledger. */
+export const adpCohortAction = (
+  status: RemapLedgerStatus,
+  cohort: AdpCohort,
+): "hold" | "frozen" | "compute" =>
+  status === "in_progress"
+    ? "hold"
+    : cohort === "pre_premiere" && status !== "none"
+      ? "frozen"
+      : "compute";
 
 /**
  * What the operator sees. Counts only: never a competition id, uid, name, or
@@ -409,7 +443,7 @@ async function main(): Promise<void> {
 
   let competitions: AdpCompetitionSource[];
   let accounts: AdpAccounts;
-  let remapped: Set<string>;
+  let remapStatus: Map<string, RemapLedgerStatus>;
   let firestore: import("firebase-admin/firestore").Firestore | null = null;
 
   if (fixture) {
@@ -418,7 +452,14 @@ async function main(): Promise<void> {
       fs.readFileSync(fixture, "utf-8"),
     ) as Fixture;
     ({ competitions, accounts } = readFixture(parsedFixture));
-    remapped = new Set(parsedFixture.remapped_seasons ?? []);
+    remapStatus = new Map<string, RemapLedgerStatus>([
+      ...(parsedFixture.remapped_seasons ?? []).map(
+        (id) => [id, "finalized"] as const,
+      ),
+      ...(parsedFixture.remap_in_progress_seasons ?? []).map(
+        (id) => [id, "in_progress"] as const,
+      ),
+    ]);
     competitions = competitions.filter((c) =>
       (seasonIds as string[]).includes(c.data.season_id as string),
     );
@@ -437,14 +478,12 @@ async function main(): Promise<void> {
     }
     firestore = getFirestore();
     const db = firestore;
-    remapped = new Set(
-      (
-        await Promise.all(
-          seasonIds.map(async (id) =>
-            (await db.doc(remapLedgerPath(id)).get()).exists ? id : null,
-          ),
-        )
-      ).filter((id): id is Season["id"] => id !== null),
+    remapStatus = new Map(
+      await Promise.all(
+        seasonIds.map(
+          async (id) => [id, await readRemapLedgerStatus(db, id)] as const,
+        ),
+      ),
     );
     competitions = await loadCompetitions(
       firestore as unknown as CompetitionReader,
@@ -460,18 +499,24 @@ async function main(): Promise<void> {
   const computedAt = new Date().toISOString();
   const seasons = SEASONS as Partial<Record<Season["id"], SeasonSource>>;
   const results = seasonIds.flatMap((seasonId) =>
-    cohorts.map((cohort) =>
-      cohort === "pre_premiere" && remapped.has(seasonId)
-        ? frozenPrePremiere(seasonId)
-        : planSeason(
-            seasons[seasonId],
-            seasonId,
-            cohort,
-            competitions,
-            accounts,
-            computedAt,
-          ),
-    ),
+    cohorts.map((cohort) => {
+      const action = adpCohortAction(
+        remapStatus.get(seasonId) ?? "none",
+        cohort,
+      );
+      return action === "hold"
+        ? heldForRemap(seasonId, cohort)
+        : action === "frozen"
+          ? frozenPrePremiere(seasonId)
+          : planSeason(
+              seasons[seasonId],
+              seasonId,
+              cohort,
+              competitions,
+              accounts,
+              computedAt,
+            );
+    }),
   );
 
   for (const result of results) {

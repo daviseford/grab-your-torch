@@ -18,27 +18,38 @@
  *                       from the pinned upstream), read production read-only,
  *                       and write a plan file that is also the field-level
  *                       backup. Prints counts only.
- *   --write             Apply a reviewed plan. Refuses unless the plan is for
- *                       this project and mapping, is fresh, a new read of
- *                       production plans exactly the same changes, it has no
- *                       problems, and no draft is live (or each live draft is
- *                       acknowledged). Each document is compare-and-set and
- *                       marked applied in the same transaction.
- *   --rollback          Restore a plan's `before` wherever its `after` is still
- *                       in place, clearing the applied marks. Newest plan first.
+ *   --write             Apply a reviewed plan. The first write begins the
+ *                       cutover: it records a census of every document in the
+ *                       ledger, then switches the season document first.
+ *                       Later writes repair and mark what the census missed.
+ *                       Refuses unless the plan is for this project, database
+ *                       and mapping, is fresh, a new read plans exactly the
+ *                       same changes, nothing global is wrong, and every live
+ *                       draft it touches is acknowledged.
+ *   --finalize          Close the cutover once every census document is on
+ *                       survivoR's ids and the bundled season file is too.
+ *                       Until then the sync push, ADP job and draft cleanup
+ *                       refuse to touch the season.
+ *   --rollback          Inside the cutover window only (not finalized, no
+ *                       document created since it began): restore a plan's
+ *                       `before` wherever its `after` is still in place,
+ *                       clearing the marks. Newest plan first.
  *   --rewrite-season-file  Local only: rewrite src/data/season_N/index.ts
  *                       to survivoR's ids and names from the committed mapping,
  *                       adding no episode data. For the follow-up code PR.
  *
  * Usage:
  *   yarn remap-castaway-ids 51 --generate-mapping [--upstream <sha>]
- *   yarn remap-castaway-ids 51
- *   yarn remap-castaway-ids 51 --write --plan <file> --project survivor-fantasy-51c4b [--ack-live-draft drafts/<id> ...]
+ *   yarn remap-castaway-ids 51 [--accept-born <path> ...]
+ *   yarn remap-castaway-ids 51 --write --plan <file> --project survivor-fantasy-51c4b [--ack-live-draft drafts/<id> ...] [--accept-born <path> ...]
+ *   yarn remap-castaway-ids 51 --finalize --project survivor-fantasy-51c4b
  *   yarn remap-castaway-ids 51 --rollback --plan <file> --project survivor-fantasy-51c4b
  *   yarn remap-castaway-ids 51 --rewrite-season-file
  *
  * The Admin SDK key defaults to `firebase-private-key.json` in the project
  * root; `FIREBASE_PRIVATE_KEY_PATH` overrides it (useful from a worktree).
+ * The Realtime Database URL comes from `VITE_FIREBASE_DATABASE_URL` and must
+ * belong to the same project.
  */
 
 import * as fs from "fs";
@@ -48,13 +59,18 @@ import { isDeepStrictEqual } from "util";
 import type { CastawayLookup } from "../src/types";
 import {
   applyCastawayIdRemap,
+  buildCensus,
   type CastawayIdMappingFile,
   type CastState,
+  type Census,
+  type CensusEntry,
+  changedFields,
   classifyCommittedCast,
   type CommittedCastaway,
   fieldsEqual,
   planCastawayIdMapping,
   planDocumentRemap,
+  type RemapApplyResult,
   type RemapDocChange,
   type RemapDocumentPlan,
   type RemapMark,
@@ -66,14 +82,19 @@ import {
   type UpstreamCastaway,
   verifyMappingFile,
 } from "./lib/castaway-id-remap.js";
+import {
+  databaseUrlRefusal,
+  ledgerStatusOf,
+  REMAP_LEDGER_COLLECTION,
+  remapLedgerDocId,
+  type RemapLedgerStatus,
+} from "./lib/remap-ledger.js";
+
+export { REMAP_LEDGER_COLLECTION, remapLedgerDocId };
 
 /** survivoR commit that first published Season 51 (reviewed 2026-09-26). */
 export const DEFAULT_UPSTREAM_COMMIT =
   "7336413e39c34c31231b9fa17281a47f731837e0";
-
-export const REMAP_LEDGER_COLLECTION = "admin_migrations";
-export const remapLedgerDocId = (seasonNum: number) =>
-  `castaway_id_remap_season_${seasonNum}`;
 
 const SCRIPTS_DIR = import.meta.dirname;
 const PROJECT_ROOT = path.resolve(SCRIPTS_DIR, "..");
@@ -105,9 +126,15 @@ export type RemapPlanFile = {
   season_num: number;
   created_at: string;
   project_id: string;
+  /** The Realtime Database the drafts were read from. */
+  database_url: string;
   mapping_hash: string;
   upstream_commit: string;
   local_season_file: CastState;
+  /** The cutover state when the plan was made; a write needs the same. */
+  ledger_status: RemapLedgerStatus;
+  /** `--accept-born` paths the plan was made with. */
+  accept_born: string[];
   inventory: Record<string, number | boolean>;
   documents: RemapDocumentPlan;
 };
@@ -156,7 +183,7 @@ export async function loadUpstreamCast(
   return out;
 }
 
-async function loadCommittedCast(
+export async function loadCommittedCast(
   seasonNum: number,
 ): Promise<CommittedCastaway[]> {
   const mod = (await import(
@@ -173,7 +200,7 @@ async function loadCommittedCast(
   }));
 }
 
-async function castawayPropBetKeys(): Promise<Set<string>> {
+export async function castawayPropBetKeys(): Promise<Set<string>> {
   const { PropBetsQuestions } = await import("../src/data/propbets.js");
   return new Set(
     Object.entries(PropBetsQuestions)
@@ -220,8 +247,10 @@ async function verifiedMapping(
  * Firebase adapters
  * ------------------------------------------------------------------ */
 
-type Admin = {
+export type Admin = {
   projectId: string | null;
+  /** The Realtime Database instance the Admin SDK talks to. */
+  databaseUrl: string | null;
   firestore: import("firebase-admin/firestore").Firestore;
   rtdb: import("firebase-admin/database").Database;
 };
@@ -232,6 +261,7 @@ async function loadAdmin(): Promise<Admin> {
   const { getDatabase } = await import("firebase-admin/database");
   return {
     projectId: adminApp.options.projectId ?? null,
+    databaseUrl: adminApp.options.databaseURL ?? null,
     firestore: getFirestore(),
     rtdb: getDatabase(),
   };
@@ -294,15 +324,20 @@ export function firebaseReader({ firestore, rtdb }: Admin): ProductionReader {
   };
 }
 
-export async function readProduction(
-  reader: ProductionReader,
-  seasonNum: number,
-): Promise<{
+export type ProductionRead = {
   docs: RemapSourceDoc[];
   inventory: Record<string, number | boolean>;
   ledger: Map<string, string>;
   ledgerHash: string | null;
-}> {
+  ledgerStatus: RemapLedgerStatus;
+  /** Null until a cutover begins, and again after a rollback. */
+  census: Census | null;
+};
+
+export async function readProduction(
+  reader: ProductionReader,
+  seasonNum: number,
+): Promise<ProductionRead> {
   const seasonId = `season_${seasonNum}`;
   const poolId = `pool_season_${seasonNum}`;
   const docs: RemapSourceDoc[] = [];
@@ -358,11 +393,11 @@ export async function readProduction(
   inventory.castaway_adp_docs = adp.length;
   for (const a of adp) push("castaway_adp", `castaway_adp/${a.id}`, a.data);
 
-  const ledgerDoc = plain(
-    await reader.doc(
-      `${REMAP_LEDGER_COLLECTION}/${remapLedgerDocId(seasonNum)}`,
-    ),
+  const rawLedger = await reader.doc(
+    `${REMAP_LEDGER_COLLECTION}/${remapLedgerDocId(seasonNum)}`,
   );
+  const ledgerDoc = plain(rawLedger);
+  const ledgerStatus = ledgerStatusOf(rawLedger);
   const ledger = new Map<string, string>();
   const applied = ledgerDoc.applied;
   if (applied && typeof applied === "object") {
@@ -371,7 +406,25 @@ export async function readProduction(
       if (typeof h === "string") ledger.set(p, h);
     }
   }
+  const rawCensus = ledgerDoc.census;
+  const census =
+    (ledgerStatus === "in_progress" || ledgerStatus === "finalized") &&
+    rawCensus &&
+    typeof rawCensus === "object"
+      ? new Map(Object.entries(rawCensus as Record<string, CensusEntry>))
+      : null;
+  if (
+    census === null &&
+    (ledgerStatus === "in_progress" || ledgerStatus === "finalized")
+  ) {
+    // A ledger from before the census existed cannot tell born documents
+    // from pre-existing ones; stop rather than guess.
+    throw new Error(
+      "The remap ledger has no census; it predates this tool version. Stop and inspect it.",
+    );
+  }
   inventory.ledger_applied_paths = ledger.size;
+  inventory.ledger_census_paths = census?.size ?? 0;
   inventory.rtdb_drafts_marked = drafts.filter(
     (d) => (d.data as Record<string, unknown> | null)?.[RTDB_REMAP_MARKER],
   ).length;
@@ -383,6 +436,8 @@ export async function readProduction(
       typeof ledgerDoc.mapping_hash === "string"
         ? ledgerDoc.mapping_hash
         : null,
+    ledgerStatus,
+    census,
   };
 }
 
@@ -393,7 +448,21 @@ export const markAllows = (
   hash: string,
 ): boolean => (mark === "set" ? current === undefined : current === hash);
 
-function productionStore(
+/** Whether a committed document carries the mark `mark` should leave. */
+export const markHolds = (
+  mark: RemapMark,
+  stored: string | undefined,
+  hash: string,
+): boolean => (mark === "clear" ? stored === undefined : stored === hash);
+
+const markerHash = (node: Record<string, unknown>): string | undefined => {
+  const marker = node[RTDB_REMAP_MARKER] as { mapping_hash?: unknown };
+  return typeof marker?.mapping_hash === "string"
+    ? marker.mapping_hash
+    : undefined;
+};
+
+export function productionStore(
   { firestore, rtdb }: Admin,
   seasonNum: number,
   hash: string,
@@ -404,30 +473,31 @@ function productionStore(
   return {
     async compareAndSet(change, expected, next, mark) {
       const now = new Date().toISOString();
+      const writes = changedFields(expected, next);
+      const origin = change.mode === "born" ? "born" : "remapped";
       if (change.kind === "rtdb_draft") {
         const result = await rtdb.ref(change.path).transaction((current) => {
-          // The handler first runs against the local cache, which is empty
-          // (null) for a node this process never read. Returning null asks
-          // the server to store null; the server sees the real value differs,
-          // rejects, and reruns this handler with it. If the node is truly
-          // absent, null is committed (a no-op) and the check below reports
-          // the document as stale rather than applied.
+          // The SDK may call this first with its local copy of the node,
+          // which is null when this process holds none. Aborting on that
+          // guess would end the transaction without asking the server, so
+          // null is answered with null: if the server holds data, its hash
+          // differs, the write is rejected and this runs again with the real
+          // value. If the node really is absent, null is committed (nothing
+          // changes) and the check after the commit reports it stale.
           if (current === null) return null;
           const node = plain(current);
-          const markHash = (
-            node[RTDB_REMAP_MARKER] as { mapping_hash?: string }
-          )?.mapping_hash;
           if (
             !fieldsEqual(node, expected) ||
-            !markAllows(mark, markHash, hash)
+            !markAllows(mark, markerHash(node), hash)
           ) {
             return; // abort: nothing written
           }
-          const updated: Record<string, unknown> = { ...current, ...next };
+          const updated: Record<string, unknown> = { ...current, ...writes };
           if (mark === "set") {
             updated[RTDB_REMAP_MARKER] = {
               mapping_hash: hash,
               applied_at: now,
+              origin,
             };
           } else if (mark === "clear") {
             delete updated[RTDB_REMAP_MARKER];
@@ -435,8 +505,12 @@ function productionStore(
           return updated;
         });
         if (!result.committed || !result.snapshot.exists()) return false;
+        // Check what was committed, fields and mark, rather than trusting
+        // that the handler's last run was the one that wrote.
         const stored = plain(result.snapshot.val());
-        return fieldsEqual(stored, next);
+        return (
+          fieldsEqual(stored, next) && markHolds(mark, markerHash(stored), hash)
+        );
       }
       const { FieldPath, FieldValue } =
         await import("firebase-admin/firestore");
@@ -460,19 +534,30 @@ function productionStore(
         }
         // Field paths, not dotted strings: team_assignments fields are
         // episode numbers, and no field name is parsed as a path.
-        const [[firstKey, firstValue], ...rest] = Object.entries(next);
-        tx.update(
-          ref,
-          new FieldPath(firstKey),
-          firstValue,
-          ...rest.flatMap(([k, v]) => [new FieldPath(k), v]),
-        );
+        const pairs = Object.entries(writes).flatMap(([k, v]) => [
+          new FieldPath(k),
+          v === null ? FieldValue.delete() : v,
+        ]);
+        if (pairs.length > 0) {
+          const [first, firstValue, ...rest] = pairs;
+          tx.update(
+            ref,
+            first as InstanceType<typeof FieldPath>,
+            firstValue,
+            ...rest,
+          );
+        }
         if (mark !== "keep") {
           tx.update(
             ledgerRef,
             new FieldPath("applied", change.path),
             mark === "set"
-              ? { mapping_hash: hash, applied_at: now, kind: change.kind }
+              ? {
+                  mapping_hash: hash,
+                  applied_at: now,
+                  kind: change.kind,
+                  origin,
+                }
               : FieldValue.delete(),
           );
         }
@@ -483,81 +568,110 @@ function productionStore(
 }
 
 /* ------------------------------------------------------------------ *
- * CLI
+ * Flows (exported so the emulator tests run exactly what the CLI runs)
  * ------------------------------------------------------------------ */
 
-export type Args = {
-  seasonNum: number | null;
-  upstream: string;
-  generateMapping: boolean;
-  rewriteSeasonFile: boolean;
-  write: boolean;
-  rollback: boolean;
-  plan: string | null;
-  project: string | null;
-  ackLiveDrafts: string[];
-  maxPlanAgeHours: number;
+export type RemapContext = {
+  seasonNum: number;
+  mapping: CastawayIdMappingFile;
+  propKeys: ReadonlySet<string>;
+  acceptBorn: readonly string[];
 };
 
-export function parseArgs(argv: readonly string[]): Args {
-  const parsed: Args = {
-    seasonNum: null,
-    upstream: DEFAULT_UPSTREAM_COMMIT,
-    generateMapping: false,
-    rewriteSeasonFile: false,
-    write: false,
-    rollback: false,
-    plan: null,
-    project: null,
-    ackLiveDrafts: [],
-    maxPlanAgeHours: 6,
+export async function planFromProduction(
+  admin: Admin,
+  ctx: RemapContext,
+): Promise<{ read: ProductionRead; documents: RemapDocumentPlan }> {
+  const read = await readProduction(firebaseReader(admin), ctx.seasonNum);
+  if (
+    read.ledgerHash !== null &&
+    read.ledgerHash !== ctx.mapping.mapping_hash
+  ) {
+    throw new Error(
+      `Production is marked with mapping ${read.ledgerHash}, not ${ctx.mapping.mapping_hash}`,
+    );
+  }
+  return {
+    read,
+    documents: planDocumentRemap(read.docs, {
+      mappings: ctx.mapping.mappings,
+      mappingHash: ctx.mapping.mapping_hash,
+      castawayPropBetKeys: ctx.propKeys,
+      ledger: read.ledger,
+      census: read.census,
+      acceptBorn: new Set(ctx.acceptBorn),
+    }),
   };
-  const value = (i: number, flag: string) => {
-    const v = argv[i];
-    if (v === undefined || v.startsWith("--")) {
-      throw new Error(`${flag} needs a value`);
+}
+
+export async function dryRun(
+  admin: Admin,
+  ctx: RemapContext,
+  localState: CastState,
+  now = new Date(),
+): Promise<RemapPlanFile> {
+  const { read, documents } = await planFromProduction(admin, ctx);
+  return {
+    season_num: ctx.seasonNum,
+    created_at: now.toISOString(),
+    project_id: admin.projectId ?? "",
+    database_url: admin.databaseUrl ?? "",
+    mapping_hash: ctx.mapping.mapping_hash,
+    upstream_commit: ctx.mapping.upstream.commit,
+    local_season_file: localState,
+    ledger_status: read.ledgerStatus,
+    accept_born: [...ctx.acceptBorn].sort(),
+    inventory: read.inventory,
+    documents,
+  };
+}
+
+/** Refusals shared by every production write: project, database, mapping. */
+export function targetRefusals(input: {
+  plan?: Pick<
+    RemapPlanFile,
+    "season_num" | "project_id" | "database_url" | "mapping_hash"
+  >;
+  seasonNum: number;
+  project: string;
+  adminProjectId: string | null;
+  databaseUrl: string | null;
+  mappingHash: string;
+  ledgerHash: string | null;
+}): string[] {
+  const out: string[] = [];
+  const { plan } = input;
+  if (input.adminProjectId !== input.project) {
+    out.push(
+      `--project ${input.project} is not the service account's project ${input.adminProjectId}`,
+    );
+  }
+  const db = databaseUrlRefusal(input.databaseUrl, input.project);
+  if (db) out.push(db);
+  if (input.ledgerHash !== null && input.ledgerHash !== input.mappingHash) {
+    out.push(`production is already marked with mapping ${input.ledgerHash}`);
+  }
+  if (plan) {
+    if (plan.season_num !== input.seasonNum) {
+      out.push("the plan is for another season");
     }
-    return v;
-  };
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg === "--write") parsed.write = true;
-    else if (arg === "--rollback") parsed.rollback = true;
-    else if (arg === "--generate-mapping") parsed.generateMapping = true;
-    else if (arg === "--rewrite-season-file") parsed.rewriteSeasonFile = true;
-    else if (arg === "--upstream") parsed.upstream = value(++i, arg);
-    else if (arg === "--plan") parsed.plan = value(++i, arg);
-    else if (arg === "--project") parsed.project = value(++i, arg);
-    else if (arg === "--ack-live-draft") {
-      parsed.ackLiveDrafts.push(value(++i, arg));
-    } else if (arg === "--max-plan-age-hours") {
-      parsed.maxPlanAgeHours = Number(value(++i, arg));
-      if (!(parsed.maxPlanAgeHours > 0)) {
-        throw new Error("--max-plan-age-hours must be a positive number");
-      }
-    } else if (/^\d+$/.test(arg)) parsed.seasonNum = Number(arg);
-    else throw new Error(`Unknown argument: ${arg}`);
+    if (plan.project_id !== input.project) {
+      out.push(
+        `the plan was made against ${plan.project_id}, not ${input.project}`,
+      );
+    }
+    if (plan.database_url !== input.databaseUrl) {
+      out.push(
+        `the plan read drafts from ${plan.database_url}, not ${input.databaseUrl}`,
+      );
+    }
+    if (plan.mapping_hash !== input.mappingHash) {
+      out.push(
+        "the plan was made with a different mapping than the committed one",
+      );
+    }
   }
-  if (!/^[0-9a-f]{40}$/.test(parsed.upstream)) {
-    throw new Error("--upstream must be a full 40-character commit sha");
-  }
-  const modes = [
-    parsed.write,
-    parsed.rollback,
-    parsed.generateMapping,
-    parsed.rewriteSeasonFile,
-  ].filter(Boolean).length;
-  if (modes > 1) {
-    throw new Error(
-      "--write, --rollback, --generate-mapping and --rewrite-season-file are exclusive",
-    );
-  }
-  if ((parsed.write || parsed.rollback) && (!parsed.plan || !parsed.project)) {
-    throw new Error(
-      "--write and --rollback need --plan <file> and --project <id>",
-    );
-  }
-  return parsed;
+  return out;
 }
 
 /** Comparable form of a plan's changes, for the write-time freshness check. */
@@ -573,41 +687,43 @@ export function writeRefusals(input: {
   seasonNum: number;
   project: string;
   adminProjectId: string | null;
+  databaseUrl: string | null;
   mappingHash: string;
   ledgerHash: string | null;
+  ledgerStatus: RemapLedgerStatus;
   now: Date;
   maxPlanAgeHours: number;
   fresh: RemapDocumentPlan;
   ackLiveDrafts: readonly string[];
+  acceptBorn: readonly string[];
 }): string[] {
   const { plan, fresh } = input;
-  const out: string[] = [];
-  if (plan.season_num !== input.seasonNum)
-    out.push("the plan is for another season");
-  if (input.adminProjectId !== input.project) {
+  const out = targetRefusals(input);
+  if (plan.ledger_status !== input.ledgerStatus) {
     out.push(
-      `--project ${input.project} is not the service account's project ${input.adminProjectId}`,
+      `the cutover was ${plan.ledger_status} when the plan was made and is ${input.ledgerStatus} now; dry-run again`,
     );
   }
-  if (plan.project_id !== input.project) {
-    out.push(
-      `the plan was made against ${plan.project_id}, not ${input.project}`,
-    );
-  }
-  if (plan.mapping_hash !== input.mappingHash) {
-    out.push(
-      "the plan was made with a different mapping than the committed one",
-    );
-  }
-  if (input.ledgerHash !== null && input.ledgerHash !== input.mappingHash) {
-    out.push(`production is already marked with mapping ${input.ledgerHash}`);
+  if (
+    !isDeepStrictEqual(
+      [...plan.accept_born].sort(),
+      [...input.acceptBorn].sort(),
+    )
+  ) {
+    out.push("--accept-born differs from the plan's");
   }
   const ageHours = (input.now.getTime() - Date.parse(plan.created_at)) / 3.6e6;
   if (!(ageHours <= input.maxPlanAgeHours)) {
     out.push(`the plan is ${ageHours.toFixed(1)}h old; dry-run again`);
   }
-  if (plan.documents.problems.length > 0 || fresh.problems.length > 0) {
-    out.push("the plan or a fresh read reports problems");
+  const all = [...plan.documents.problems, ...fresh.problems];
+  if (all.some((p) => p.scope === "global")) {
+    out.push("the plan or a fresh read reports a global problem");
+  }
+  const beginning =
+    input.ledgerStatus === "none" || input.ledgerStatus === "rolled_back";
+  if (beginning && all.length > 0) {
+    out.push("the cutover can only begin from a plan with no problems");
   }
   const reviewed = new Map(
     plan.documents.changes.map((c) => [changeKey(c), c]),
@@ -625,15 +741,334 @@ export function writeRefusals(input: {
   if (!same) {
     out.push("production changed since the plan was reviewed; dry-run again");
   }
-  const unacked = fresh.live_drafts.filter(
-    (p) => !input.ackLiveDrafts.includes(p),
-  );
+  const unacked = fresh.changes
+    .filter((c) => fresh.live_drafts.includes(c.path))
+    .filter((c) => !input.ackLiveDrafts.includes(c.path));
   if (unacked.length > 0) {
     out.push(
-      `${unacked.length} draft(s) are live (users can still write castaway ids); wait, or acknowledge each with --ack-live-draft <path>`,
+      `${unacked.length} draft(s) the plan writes are live (users can still write castaway ids); wait, or acknowledge each with --ack-live-draft <path>`,
     );
   }
   return out;
+}
+
+const ledgerRefOf = (admin: Admin, seasonNum: number) =>
+  admin.firestore
+    .collection(REMAP_LEDGER_COLLECTION)
+    .doc(remapLedgerDocId(seasonNum));
+
+export type WriteOutcome =
+  | { refusals: string[] }
+  | {
+      refusals: [];
+      result: RemapApplyResult;
+      began: boolean;
+      after: RemapDocumentPlan;
+    };
+
+export async function runWrite(
+  admin: Admin,
+  ctx: RemapContext,
+  input: {
+    plan: RemapPlanFile;
+    project: string;
+    ackLiveDrafts: readonly string[];
+    maxPlanAgeHours: number;
+    now?: Date;
+  },
+): Promise<WriteOutcome> {
+  const hash = ctx.mapping.mapping_hash;
+  const fresh = await planFromProduction(admin, ctx);
+  const refusals = writeRefusals({
+    plan: input.plan,
+    seasonNum: ctx.seasonNum,
+    project: input.project,
+    adminProjectId: admin.projectId,
+    databaseUrl: admin.databaseUrl,
+    mappingHash: hash,
+    ledgerHash: fresh.read.ledgerHash,
+    ledgerStatus: fresh.read.ledgerStatus,
+    now: input.now ?? new Date(),
+    maxPlanAgeHours: input.maxPlanAgeHours,
+    fresh: fresh.documents,
+    ackLiveDrafts: input.ackLiveDrafts,
+    acceptBorn: ctx.acceptBorn,
+  });
+  if (refusals.length > 0) return { refusals };
+
+  const began =
+    fresh.read.ledgerStatus === "none" ||
+    fresh.read.ledgerStatus === "rolled_back";
+  if (began) {
+    // Begin the cutover: the census is every document the fresh read saw.
+    // Anything created from here on is classified, never remapped, and the
+    // other jobs hold the season until --finalize.
+    const ref = ledgerRefOf(admin, ctx.seasonNum);
+    await admin.firestore.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const status = snap.exists ? ledgerStatusOf(snap.data()) : "none";
+      if (status !== fresh.read.ledgerStatus) {
+        throw new Error("The ledger changed since the fresh read");
+      }
+      const prior = snap.data() ?? {};
+      if (snap.exists && prior.mapping_hash !== hash) {
+        throw new Error("The ledger belongs to another mapping");
+      }
+      if (Object.keys(prior.applied ?? {}).length > 0) {
+        throw new Error(
+          "The rolled-back ledger still records applied documents",
+        );
+      }
+      tx.set(ref, {
+        season_num: ctx.seasonNum,
+        mapping_hash: hash,
+        upstream_commit: ctx.mapping.upstream.commit,
+        status: "in_progress",
+        started_at: new Date().toISOString(),
+        census: buildCensus(fresh.read.docs),
+        applied: {},
+        ...(prior.rolled_back_at
+          ? { previous_rollback_at: prior.rolled_back_at }
+          : {}),
+      });
+    });
+  }
+
+  const result = await applyCastawayIdRemap(
+    input.plan.documents.changes,
+    productionStore(admin, ctx.seasonNum, hash),
+  );
+  const after = await planFromProduction(admin, ctx);
+  return { refusals: [], result, began, after: after.documents };
+}
+
+/** Census documents that still exist and are not marked applied. */
+export const unmarkedCensus = (read: ProductionRead, hash: string): string[] =>
+  read.census === null
+    ? read.docs.filter((d) => d.kind !== "season_results").map((d) => d.path)
+    : read.docs
+        .filter((d) => read.census!.has(d.path))
+        .filter((d) =>
+          d.kind === "rtdb_draft"
+            ? markerHash(d.data) !== hash
+            : read.ledger.get(d.path) !== hash,
+        )
+        .map((d) => d.path);
+
+/** Documents that exist now but were not there when the cutover began. */
+export const bornSinceCensus = (read: ProductionRead): string[] =>
+  read.census === null
+    ? []
+    : read.docs
+        .filter((d) => d.kind !== "season_results")
+        .filter((d) => !read.census!.has(d.path))
+        .map((d) => d.path);
+
+export async function runFinalize(
+  admin: Admin,
+  ctx: RemapContext,
+  input: { project: string; localState: CastState },
+): Promise<{ refusals: string[] }> {
+  const hash = ctx.mapping.mapping_hash;
+  const { read, documents } = await planFromProduction(admin, ctx);
+  const refusals = targetRefusals({
+    seasonNum: ctx.seasonNum,
+    project: input.project,
+    adminProjectId: admin.projectId,
+    databaseUrl: admin.databaseUrl,
+    mappingHash: hash,
+    ledgerHash: read.ledgerHash,
+  });
+  if (read.ledgerStatus !== "in_progress") {
+    refusals.push(`the cutover is ${read.ledgerStatus}, not in progress`);
+  }
+  if (input.localState !== "remapped") {
+    refusals.push(
+      `the bundled season file is ${input.localState}; merge the rewritten season file first and finalize from it`,
+    );
+  }
+  if (documents.changes.length > 0) {
+    refusals.push(`${documents.changes.length} change(s) are still planned`);
+  }
+  if (documents.problems.length > 0) {
+    refusals.push(`${documents.problems.length} problem(s) are unresolved`);
+  }
+  const unmarked = unmarkedCensus(read, hash);
+  if (unmarked.length > 0) {
+    refusals.push(`${unmarked.length} census document(s) are not marked`);
+  }
+  if (refusals.length > 0) return { refusals };
+
+  const ref = ledgerRefOf(admin, ctx.seasonNum);
+  await admin.firestore.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (ledgerStatusOf(snap.data()) !== "in_progress") {
+      throw new Error("The ledger changed since the fresh read");
+    }
+    tx.update(ref, {
+      status: "finalized",
+      finalized_at: new Date().toISOString(),
+    });
+  });
+  return { refusals: [] };
+}
+
+export type RollbackOutcome =
+  | { refusals: string[] }
+  | { refusals: []; result: RemapApplyResult; rolledBack: boolean };
+
+export async function runRollback(
+  admin: Admin,
+  ctx: RemapContext,
+  input: { plan: RemapPlanFile; project: string },
+): Promise<RollbackOutcome> {
+  const hash = ctx.mapping.mapping_hash;
+  const { read } = await planFromProduction(admin, ctx);
+  const refusals = targetRefusals({
+    plan: input.plan,
+    seasonNum: ctx.seasonNum,
+    project: input.project,
+    adminProjectId: admin.projectId,
+    databaseUrl: admin.databaseUrl,
+    mappingHash: hash,
+    ledgerHash: read.ledgerHash,
+  });
+  if (read.ledgerStatus === "finalized") {
+    refusals.push(
+      "the cutover is finalized; roll forward (repair) instead of back",
+    );
+  } else if (read.ledgerStatus !== "in_progress") {
+    refusals.push(`the cutover is ${read.ledgerStatus}; nothing to roll back`);
+  }
+  const born = bornSinceCensus(read);
+  if (born.length > 0) {
+    refusals.push(
+      `${born.length} document(s) were created since the cutover began, on survivoR's ids; rolling back would strand them, so roll forward instead`,
+    );
+  }
+  if (refusals.length > 0) return { refusals };
+
+  const result = await rollbackCastawayIdRemap(
+    input.plan.documents.changes,
+    productionStore(admin, ctx.seasonNum, hash),
+  );
+
+  // Once nothing is marked, the season is provisional again.
+  const after = await readProduction(firebaseReader(admin), ctx.seasonNum);
+  const marked = after.docs.filter((d) =>
+    d.kind === "rtdb_draft"
+      ? markerHash(d.data) !== undefined
+      : after.ledger.has(d.path),
+  );
+  let rolledBack = false;
+  if (marked.length === 0 && after.ledger.size === 0) {
+    const ref = ledgerRefOf(admin, ctx.seasonNum);
+    rolledBack = await admin.firestore.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const applied = snap.data()?.applied ?? {};
+      if (
+        ledgerStatusOf(snap.data()) !== "in_progress" ||
+        Object.keys(applied).length > 0
+      ) {
+        return false;
+      }
+      tx.update(ref, {
+        status: "rolled_back",
+        rolled_back_at: new Date().toISOString(),
+      });
+      return true;
+    });
+  }
+  return { refusals: [], result, rolledBack };
+}
+
+/* ------------------------------------------------------------------ *
+ * CLI
+ * ------------------------------------------------------------------ */
+
+export type Args = {
+  seasonNum: number | null;
+  upstream: string;
+  generateMapping: boolean;
+  rewriteSeasonFile: boolean;
+  write: boolean;
+  rollback: boolean;
+  finalize: boolean;
+  plan: string | null;
+  project: string | null;
+  ackLiveDrafts: string[];
+  acceptBorn: string[];
+  maxPlanAgeHours: number;
+};
+
+export function parseArgs(argv: readonly string[]): Args {
+  const parsed: Args = {
+    seasonNum: null,
+    upstream: DEFAULT_UPSTREAM_COMMIT,
+    generateMapping: false,
+    rewriteSeasonFile: false,
+    write: false,
+    rollback: false,
+    finalize: false,
+    plan: null,
+    project: null,
+    ackLiveDrafts: [],
+    acceptBorn: [],
+    maxPlanAgeHours: 6,
+  };
+  const value = (i: number, flag: string) => {
+    const v = argv[i];
+    if (v === undefined || v.startsWith("--")) {
+      throw new Error(`${flag} needs a value`);
+    }
+    return v;
+  };
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === "--write") parsed.write = true;
+    else if (arg === "--rollback") parsed.rollback = true;
+    else if (arg === "--finalize") parsed.finalize = true;
+    else if (arg === "--generate-mapping") parsed.generateMapping = true;
+    else if (arg === "--rewrite-season-file") parsed.rewriteSeasonFile = true;
+    else if (arg === "--upstream") parsed.upstream = value(++i, arg);
+    else if (arg === "--plan") parsed.plan = value(++i, arg);
+    else if (arg === "--project") parsed.project = value(++i, arg);
+    else if (arg === "--ack-live-draft") {
+      parsed.ackLiveDrafts.push(value(++i, arg));
+    } else if (arg === "--accept-born") {
+      parsed.acceptBorn.push(value(++i, arg));
+    } else if (arg === "--max-plan-age-hours") {
+      parsed.maxPlanAgeHours = Number(value(++i, arg));
+      if (!(parsed.maxPlanAgeHours > 0)) {
+        throw new Error("--max-plan-age-hours must be a positive number");
+      }
+    } else if (/^\d+$/.test(arg)) parsed.seasonNum = Number(arg);
+    else throw new Error(`Unknown argument: ${arg}`);
+  }
+  if (!/^[0-9a-f]{40}$/.test(parsed.upstream)) {
+    throw new Error("--upstream must be a full 40-character commit sha");
+  }
+  const modes = [
+    parsed.write,
+    parsed.rollback,
+    parsed.finalize,
+    parsed.generateMapping,
+    parsed.rewriteSeasonFile,
+  ].filter(Boolean).length;
+  if (modes > 1) {
+    throw new Error(
+      "--write, --rollback, --finalize, --generate-mapping and --rewrite-season-file are exclusive",
+    );
+  }
+  if ((parsed.write || parsed.rollback) && (!parsed.plan || !parsed.project)) {
+    throw new Error(
+      "--write and --rollback need --plan <file> and --project <id>",
+    );
+  }
+  if (parsed.finalize && !parsed.project) {
+    throw new Error("--finalize needs --project <id>");
+  }
+  return parsed;
 }
 
 const PROVISIONAL_HEADER =
@@ -662,12 +1097,27 @@ const countBy = <T>(items: readonly T[], key: (t: T) => string) =>
     return acc;
   }, {});
 
+const describeDocuments = (documents: RemapDocumentPlan): string[] => {
+  const lines = [
+    `Plan: ${documents.changes.length} documents to change ${JSON.stringify(countBy(documents.changes, (c) => `${c.kind}:${c.mode}`))}, ` +
+      `${documents.changes.reduce((n, c) => n + c.id_changes, 0)} id values; ` +
+      `${documents.already_applied.length} already applied, ${documents.born_pending.length} created since the cutover and not yet classifiable, ` +
+      `${documents.problems.length} problems, ${documents.live_drafts.length} live drafts`,
+  ];
+  if (documents.problems.length > 0) {
+    lines.push(
+      `Problems by scope and reason: ${JSON.stringify(countBy(documents.problems, (p) => `${p.scope}:${p.reason}`))}`,
+    );
+  }
+  return lines;
+};
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const { seasonNum } = args;
   if (seasonNum === null) {
     return fail(
-      "no season given. Usage: yarn remap-castaway-ids <season> [--generate-mapping|--rewrite-season-file|--write|--rollback] ...",
+      "no season given. Usage: yarn remap-castaway-ids <season> [--generate-mapping|--rewrite-season-file|--write|--finalize|--rollback] ...",
     );
   }
 
@@ -728,125 +1178,86 @@ async function main(): Promise<void> {
   ]);
   const localState = classifyCommittedCast(localCast, mapping.mappings);
   console.log(`Local season file: ${localState}`);
-
-  const admin = await loadAdmin();
-  const planFrom = async () => {
-    const read = await readProduction(firebaseReader(admin), seasonNum);
-    return {
-      ...read,
-      documents: planDocumentRemap(read.docs, {
-        mappings: mapping.mappings,
-        mappingHash: mapping.mapping_hash,
-        castawayPropBetKeys: propKeys,
-        ledger: read.ledger,
-      }),
-    };
+  const ctx: RemapContext = {
+    seasonNum,
+    mapping,
+    propKeys,
+    acceptBorn: args.acceptBorn,
   };
 
-  if (args.write || args.rollback) {
-    const plan = JSON.parse(
-      fs.readFileSync(args.plan!, "utf-8"),
-    ) as RemapPlanFile;
-    const store = productionStore(admin, seasonNum, mapping.mapping_hash);
-    if (args.rollback) {
-      const refusals = [
-        plan.season_num !== seasonNum && "the plan is for another season",
-        admin.projectId !== args.project &&
-          `--project ${args.project} is not the service account's project ${admin.projectId}`,
-        plan.project_id !== args.project &&
-          `the plan was made against ${plan.project_id}`,
-        plan.mapping_hash !== mapping.mapping_hash &&
-          "the plan used another mapping",
-      ].filter((r): r is string => typeof r === "string");
-      if (refusals.length > 0) fail(refusals.join("; "));
-      const result = await rollbackCastawayIdRemap(
-        plan.documents.changes,
-        store,
-      );
-      console.log(
-        `Rolled back ${result.applied.length} of ${plan.documents.changes.length}; ${result.stale.length} no longer held this plan's values.`,
-      );
-      process.exitCode = result.stale.length > 0 ? 1 : 0;
-      return;
-    }
+  const admin = await loadAdmin();
+  const readPlan = () =>
+    JSON.parse(fs.readFileSync(args.plan!, "utf-8")) as RemapPlanFile;
 
-    const fresh = await planFrom();
-    const refusals = writeRefusals({
-      plan,
-      seasonNum,
+  if (args.rollback) {
+    const outcome = await runRollback(admin, ctx, {
+      plan: readPlan(),
       project: args.project!,
-      adminProjectId: admin.projectId,
-      mappingHash: mapping.mapping_hash,
-      ledgerHash: fresh.ledgerHash,
-      now: new Date(),
-      maxPlanAgeHours: args.maxPlanAgeHours,
-      fresh: fresh.documents,
+    });
+    if (!("result" in outcome)) return fail(outcome.refusals.join("; "));
+    console.log(
+      `Rolled back ${outcome.result.applied.length}; ${outcome.result.stale.length} no longer held this plan's values.` +
+        (outcome.rolledBack
+          ? " Nothing is marked any more: the cutover is rolled back."
+          : " Documents are still marked: roll back the next-older plan."),
+    );
+    process.exitCode = outcome.result.stale.length > 0 ? 1 : 0;
+    return;
+  }
+
+  if (args.finalize) {
+    const outcome = await runFinalize(admin, ctx, {
+      project: args.project!,
+      localState,
+    });
+    if (outcome.refusals.length > 0) return fail(outcome.refusals.join("; "));
+    console.log(
+      "Finalized: the sync push, ADP job and draft cleanup may touch the season again.",
+    );
+    return;
+  }
+
+  if (args.write) {
+    const outcome = await runWrite(admin, ctx, {
+      plan: readPlan(),
+      project: args.project!,
       ackLiveDrafts: args.ackLiveDrafts,
+      maxPlanAgeHours: args.maxPlanAgeHours,
     });
-    if (refusals.length > 0) fail(refusals.join("; "));
-
-    // Create the ledger before the first document so every Firestore
-    // transaction can update it, and so the ADP job sees the remap has begun.
-    const ledgerRef = admin.firestore
-      .collection(REMAP_LEDGER_COLLECTION)
-      .doc(remapLedgerDocId(seasonNum));
-    await admin.firestore.runTransaction(async (tx) => {
-      const snap = await tx.get(ledgerRef);
-      if (!snap.exists) {
-        tx.set(ledgerRef, {
-          season_num: seasonNum,
-          mapping_hash: mapping.mapping_hash,
-          upstream_commit: mapping.upstream.commit,
-          started_at: new Date().toISOString(),
-          applied: {},
-        });
-      } else if (snap.data()?.mapping_hash !== mapping.mapping_hash) {
-        throw new Error("The ledger belongs to another mapping");
-      }
-    });
-
-    const result = await applyCastawayIdRemap(plan.documents.changes, store);
+    if (!("result" in outcome)) return fail(outcome.refusals.join("; "));
+    if (outcome.began) console.log("Cutover begun: census recorded.");
     console.log(
-      `Applied ${result.applied.length} of ${plan.documents.changes.length}; ${result.stale.length} stale.`,
+      `Applied ${outcome.result.applied.length}; ${outcome.result.stale.length} stale.`,
     );
-    const after = await planFrom();
-    console.log(
-      `Re-read: ${after.documents.changes.length} changes left, ${after.documents.already_applied.length} applied, ${after.documents.problems.length} problems.`,
-    );
-    if (result.stale.length > 0 || after.documents.changes.length > 0) {
-      console.log("Dry-run again and apply the new plan for what remains.");
+    console.log("Re-read:");
+    for (const line of describeDocuments(outcome.after))
+      console.log(`  ${line}`);
+    if (
+      outcome.result.stale.length > 0 ||
+      outcome.after.changes.length > 0 ||
+      outcome.after.problems.length > 0
+    ) {
+      console.log(
+        "Dry-run again, resolve what it reports, and apply the new plan.",
+      );
       process.exitCode = 1;
     }
     return;
   }
 
-  const { inventory, documents, ledgerHash } = await planFrom();
+  const file = await dryRun(admin, ctx, localState);
+  const target = databaseUrlRefusal(admin.databaseUrl, admin.projectId);
   console.log(`\nFirebase project: ${admin.projectId} (read-only)`);
-  console.log("Inventory:");
-  for (const [k, v] of Object.entries(inventory)) console.log(`  ${k}: ${v}`);
-  if (ledgerHash) console.log(`  ledger mapping: ${ledgerHash}`);
   console.log(
-    `Plan: ${documents.changes.length} documents to change ${JSON.stringify(countBy(documents.changes, (c) => `${c.kind}:${c.mode}`))}, ` +
-      `${documents.changes.reduce((n, c) => n + c.id_changes, 0)} id values; ` +
-      `${documents.unchanged.length} unchanged, ${documents.already_applied.length} already applied, ` +
-      `${documents.problems.length} problems, ${documents.live_drafts.length} live drafts`,
+    `Realtime Database: ${target ? `WARNING, ${target}` : "belongs to the project"}`,
   );
-  if (documents.problems.length > 0) {
-    console.log(
-      `Problems by reason: ${JSON.stringify(countBy(documents.problems, (p) => p.reason))}`,
-    );
+  console.log(`Cutover: ${file.ledger_status}`);
+  console.log("Inventory:");
+  for (const [k, v] of Object.entries(file.inventory)) {
+    console.log(`  ${k}: ${v}`);
   }
+  for (const line of describeDocuments(file.documents)) console.log(line);
 
-  const file: RemapPlanFile = {
-    season_num: seasonNum,
-    created_at: new Date().toISOString(),
-    project_id: admin.projectId ?? "",
-    mapping_hash: mapping.mapping_hash,
-    upstream_commit: mapping.upstream.commit,
-    local_season_file: localState,
-    inventory,
-    documents,
-  };
   fs.mkdirSync(PLAN_DIR, { recursive: true });
   const out = path.join(
     PLAN_DIR,
