@@ -1,0 +1,133 @@
+{
+  "source": "https://github.com/doehm/survivoR/tree/7336413e39c34c31231b9fa17281a47f731837e0/dev/json",
+  "commit": "7336413e39c34c31231b9fa17281a47f731837e0",
+  "tables": ["castaways.json", "castaway_details.json"],
+  "castaways": [
+    {
+      "castaway_id": "US0752",
+      "full_name": "Aaliyah Puglia",
+      "castaway": "Aaliyah",
+      "details_full_name": "Aaliyah Puglia"
+    },
+    {
+      "castaway_id": "US0753",
+      "full_name": "Alexis Levine",
+      "castaway": "Alexis",
+      "details_full_name": "Alexis Levine"
+    },
+    {
+      "castaway_id": "US0754",
+      "full_name": "Thien An Nguyen",
+      "castaway": "Thien An",
+      "details_full_name": "An Nguyen"
+    },
+    {
+      "castaway_id": "US0755",
+      "full_name": "Ana Sani",
+      "castaway": "Ana",
+      "details_full_name": "Ana Sani"
+    },
+    {
+      "castaway_id": "US0756",
+      "full_name": "Angelica Loblack",
+      "castaway": "Jelly",
+      "details_full_name": "Angelica Loblack"
+    },
+    {
+      "castaway_id": "US0757",
+      "full_name": "Brady Booker",
+      "castaway": "Brady",
+      "details_full_name": "Brady Booker"
+    },
+    {
+      "castaway_id": "US0758",
+      "full_name": "Carter Krull",
+      "castaway": "Carter",
+      "details_full_name": "Carter Krull"
+    },
+    {
+      "castaway_id": "US0759",
+      "full_name": "Cristian Chavez",
+      "castaway": "Cristian",
+      "details_full_name": "Cristian Chavez"
+    },
+    {
+      "castaway_id": "US0760",
+      "full_name": "Danny Kilby",
+      "castaway": "Danny",
+      "details_full_name": "Danny Kilby"
+    },
+    {
+      "castaway_id": "US0761",
+      "full_name": "Devin Way",
+      "castaway": "Devin",
+      "details_full_name": "Devin Way"
+    },
+    {
+      "castaway_id": "US0762",
+      "full_name": "Eric Macksoud",
+      "castaway": "Eric",
+      "details_full_name": "Eric Macksoud"
+    },
+    {
+      "castaway_id": "US0763",
+      "full_name": "Jenna Doore",
+      "castaway": "Jenna",
+      "details_full_name": "Jenna Doore"
+    },
+    {
+      "castaway_id": "US0764",
+      "full_name": "Kristin Flickinger",
+      "castaway": "Kristin",
+      "details_full_name": "Kristin Flickinger"
+    },
+    {
+      "castaway_id": "US0765",
+      "full_name": "Lewis Kelly",
+      "castaway": "Lewis",
+      "details_full_name": "Lewis Kelly"
+    },
+    {
+      "castaway_id": "US0766",
+      "full_name": "Linnea Capobianco",
+      "castaway": "Linnea",
+      "details_full_name": "Linnea Capobianco"
+    },
+    {
+      "castaway_id": "US0767",
+      "full_name": "Maggie Nestor",
+      "castaway": "Maggie",
+      "details_full_name": "Maggie Nestor"
+    },
+    {
+      "castaway_id": "US0768",
+      "full_name": "Mike Pinsky",
+      "castaway": "Mike",
+      "details_full_name": "Mike Pinsky"
+    },
+    {
+      "castaway_id": "US0769",
+      "full_name": "Ori Jean-Charles",
+      "castaway": "Ori",
+      "details_full_name": "Ori Jean-Charles"
+    },
+    {
+      "castaway_id": "US0770",
+      "full_name": "Patt Cannaday",
+      "castaway": "Patt",
+      "details_full_name": "Patt Cannaday"
+    },
+    {
+      "castaway_id": "US0771",
+      "full_name": "Rob Antonson",
+      "castaway": "Rob",
+      "details_full_name": "Rob Antonson"
+    },
+    {
+      "castaway_id": "US0772",
+      "full_name": "Sharonda Cox",
+      "castaway": "Sharonda",
+      "details_full_name": "Sharonda Cox"
+    }
+  ]
+}
