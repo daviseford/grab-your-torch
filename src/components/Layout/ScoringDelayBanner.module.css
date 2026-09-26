@@ -1,3 +1,55 @@
+/*
+ * Announcement band: bleeds to the shell edges directly under the header,
+ * on a warm-tinted navy plate in both schemes so it reads as part of the
+ * broadcast frame rather than an inline form notice. The copy sits in the
+ * same 1240px column as page content, with a readable measure.
+ */
 .root {
-  margin-bottom: var(--mantine-spacing-md);
+  margin: calc(-1 * var(--app-shell-padding))
+    calc(-1 * var(--app-shell-padding)) var(--app-shell-padding);
+  padding: var(--mantine-spacing-md) var(--app-shell-padding);
+  background: color-mix(
+    in srgb,
+    var(--mantine-color-ember-6) 6%,
+    var(--gyt-plate)
+  );
+  border-bottom: 2px solid var(--mantine-color-ember-6);
+  color: var(--mantine-color-dark-0);
+}
+
+.inner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--mantine-spacing-sm);
+  max-width: 1240px;
+  margin: 0 auto;
+}
+
+.icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--mantine-color-ember-4);
+}
+
+.copy {
+  min-width: 0;
+}
+
+.label {
+  margin: 0 0 4px;
+  font-family: var(--mantine-headings-font-family);
+  font-weight: 700;
+  font-size: 0.75rem;
+  line-height: 22px;
+  letter-spacing: var(--gyt-label-tracking);
+  text-transform: uppercase;
+  color: var(--mantine-color-ember-4);
+}
+
+.body {
+  margin: 0;
+  max-width: 68ch;
+  font-size: var(--mantine-font-size-sm);
+  line-height: 1.55;
+  text-wrap: pretty;
 }
