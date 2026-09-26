@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import season51Mapping from "../../../../scripts/castaway-id-remaps/season_51.json";
 import { SEASON_51_PLAYERS } from "../../../data/season_51";
-import type { PoolPick } from "../../../types";
+import type { CastawayId, PoolPick } from "../../../types";
 import { buildPoolCastDetails } from "../poolCastDetails";
 
 const roster: PoolPick[] = SEASON_51_PLAYERS.map((p) => ({
@@ -35,6 +36,43 @@ describe("buildPoolCastDetails", () => {
     expect(details.get(aaliyah.castaway_id)?.player.full_name).toBe(
       "Aaliyah Puglia",
     );
+  });
+
+  describe("on either side of the Season 51 cutover", () => {
+    const { mappings } = season51Mapping;
+
+    it("never shows a wrong portrait while the stored roster is provisional", () => {
+      const provisional: PoolPick[] = mappings.map((m) => ({
+        castaway_id: m.from as CastawayId,
+        full_name: m.from_name,
+      }));
+      const details = buildPoolCastDetails("season_51", provisional);
+      for (const m of mappings) {
+        const detail = details.get(m.from as CastawayId);
+        if (detail) expect(detail.player.full_name).toBe(m.from_name);
+      }
+      // Only the two castaways whose id and name did not change keep theirs.
+      expect([...details.keys()].sort()).toEqual(
+        mappings
+          .filter((m) => m.from === m.to && m.from_name === m.to_name)
+          .map((m) => m.from)
+          .sort(),
+      );
+    });
+
+    it("decorates every castaway once the stored roster is remapped", () => {
+      const remapped: PoolPick[] = mappings.map((m) => ({
+        castaway_id: m.to as CastawayId,
+        full_name: m.to_name,
+      }));
+      const details = buildPoolCastDetails("season_51", remapped);
+      expect(details.size).toBe(mappings.length);
+      for (const m of mappings) {
+        expect(details.get(m.to as CastawayId)?.player.full_name).toBe(
+          m.to_name,
+        );
+      }
+    });
   });
 
   it("is empty for a season without a bundled cast", () => {

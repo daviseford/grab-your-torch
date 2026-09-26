@@ -2,6 +2,10 @@ import * as fs from "fs";
 import * as path from "path";
 import { describe, expect, it } from "vitest";
 import {
+  SEASON_51_CASTAWAY_LOOKUP,
+  SEASON_51_PLAYERS,
+} from "../../src/data/season_51";
+import {
   applyCastawayIdRemap,
   buildCensus,
   type CastawayIdMappingFile,
@@ -87,6 +91,24 @@ describe("the committed Season 51 mapping (survivoR 7336413)", () => {
     expect(rederived.mappings).toEqual(mappings);
     expect(verifyMappingFile(committedFile, rederived)).toEqual([]);
     expect(committedFile.upstream.commit).toBe(upstreamFixture.commit);
+  });
+
+  it("is what the bundled season file now carries", () => {
+    const bundled: CommittedCastaway[] = Object.entries(
+      SEASON_51_CASTAWAY_LOOKUP,
+    ).map(([castaway_id, v]) => ({
+      castaway_id,
+      full_name: v.full_name,
+      castaway: v.castaway,
+    }));
+    expect(classifyCommittedCast(bundled, mappings)).toBe("remapped");
+    expect(
+      SEASON_51_PLAYERS.map((p) => [p.castaway_id, p.full_name]).sort(),
+    ).toEqual(mappings.map((m) => [m.to, m.to_name]).sort());
+    expect(SEASON_51_CASTAWAY_LOOKUP.US0756).toEqual({
+      full_name: "Angelica Loblack",
+      castaway: "Jelly",
+    });
   });
 
   it("is a permutation of one range, with 19 of 21 ids changing", () => {

@@ -49,7 +49,6 @@ import {
   runWrite,
   type StoreFactory,
 } from "../scripts/remap-castaway-ids";
-import { SEASON_51_CASTAWAY_LOOKUP } from "../src/data/season_51";
 
 const PROJECT_ID = "demo-survivor-fantasy-rules";
 const FIRESTORE_HOST = process.env.FIRESTORE_EMULATOR_HOST;
@@ -1250,36 +1249,43 @@ describe("guarded writes by other scripts", () => {
         data: { id: "pool_season_51", status: "closed" },
       },
     ];
-    // Before any cutover, the provisional bundle may provision.
-    await commitPoolProvision(
-      admin.firestore,
-      51,
-      writes,
-      SEASON_51_CASTAWAY_LOOKUP,
+    // Both bundles are built from the committed mapping, so this holds
+    // whichever one src/data/season_51 carries.
+    const provisionalBundle = Object.fromEntries(
+      mapping.mappings.map((m) => [
+        m.from,
+        { full_name: m.from_name, castaway: m.to_castaway },
+      ]),
     );
+    const remappedBundle = Object.fromEntries(
+      mapping.mappings.map((m) => [
+        m.to,
+        { full_name: m.to_name, castaway: m.to_castaway },
+      ]),
+    );
+    const provision = (bundle: typeof provisionalBundle) =>
+      commitPoolProvision(admin.firestore, 51, writes, bundle);
+
+    // Before any cutover, only the provisional bundle may provision.
+    await expect(provision(remappedBundle)).rejects.toThrow(
+      /production has not been remapped/,
+    );
+    await provision(provisionalBundle);
     expect(await fsDoc("pools/pool_season_51")).toEqual(writes[0].data);
     await seed();
     await beginLedger("in_progress");
-    await expect(
-      commitPoolProvision(
-        admin.firestore,
-        51,
-        writes,
-        SEASON_51_CASTAWAY_LOOKUP,
-      ),
-    ).rejects.toThrow(/in progress/);
+    await expect(provision(provisionalBundle)).rejects.toThrow(/in progress/);
+    await expect(provision(remappedBundle)).rejects.toThrow(/in progress/);
+    // Once finalized, only the remapped bundle may.
     await beginLedger("finalized");
-    await expect(
-      commitPoolProvision(
-        admin.firestore,
-        51,
-        writes,
-        SEASON_51_CASTAWAY_LOOKUP,
-      ),
-    ).rejects.toThrow(/bundled season file is provisional/);
+    await expect(provision(provisionalBundle)).rejects.toThrow(
+      /bundled season file is provisional/,
+    );
     expect(await fsDoc("pools/pool_season_51")).toEqual(
       firestoreSeed["pools/pool_season_51"],
     );
+    await provision(remappedBundle);
+    expect(await fsDoc("pools/pool_season_51")).toEqual(writes[0].data);
   });
 
   it("the ADP job: a summary planned before a cutover began is not written after", async () => {

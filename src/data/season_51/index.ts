@@ -1,8 +1,7 @@
-// Cast bootstrapped from the Survivor Wiki before survivoR published this
-// season. castaway_ids are PROVISIONAL: predicted from survivoR's numbering
-// convention (sequential after the last id, alphabetical by full_name).
-// scripts/sync-season.ts refuses to regenerate this file if survivoR's real
-// ids differ, so any mismatch surfaces as a failed sync, not a silent swap.
+// Cast bootstrapped from the Survivor Wiki, then moved to survivoR's ids and
+// names (doehm/survivoR@7336413) by
+// `yarn remap-castaway-ids 51 --rewrite-season-file`, mapping fe734ff53fbaf8a3.
+// See docs/castaway-id-mapping.md.
 import {
   CastawayLookup,
   Challenge,
@@ -17,15 +16,14 @@ import {
 const CastawayIds = [
   "US0752",
   "US0753",
-  "US0754",
   "US0755",
-  "US0756",
   "US0757",
   "US0758",
   "US0759",
   "US0760",
   "US0761",
   "US0762",
+  "US0756",
   "US0763",
   "US0764",
   "US0765",
@@ -36,6 +34,7 @@ const CastawayIds = [
   "US0770",
   "US0771",
   "US0772",
+  "US0754",
 ] as const;
 
 type CastawayIdType = (typeof CastawayIds)[number];
@@ -58,25 +57,25 @@ const buildPlayer = <T extends CastawayIdType>(
 export const SEASON_51_CASTAWAY_LOOKUP: CastawayLookup = {
   US0752: { full_name: "Aaliyah Puglia", castaway: "Aaliyah" },
   US0753: { full_name: "Alexis Levine", castaway: "Alexis" },
-  US0754: { full_name: "Ana Sani", castaway: "Ana" },
-  US0755: { full_name: "Brady Booker", castaway: "Brady" },
-  US0756: { full_name: "Carter Krull", castaway: "Carter" },
-  US0757: { full_name: "Cristian Chavez", castaway: "Cristian" },
-  US0758: { full_name: "Danny Kilby", castaway: "Danny" },
-  US0759: { full_name: "Devin Way", castaway: "Devin" },
-  US0760: { full_name: "Eric Macksoud", castaway: "Eric" },
-  US0761: { full_name: "Jelly Loblack", castaway: "Jelly" },
-  US0762: { full_name: "Jenna Doore", castaway: "Jenna" },
-  US0763: { full_name: "Kristin Flickinger", castaway: "Kristin" },
-  US0764: { full_name: "Lewis Kelly", castaway: "Lewis" },
-  US0765: { full_name: "Linnea Capobianco", castaway: "Linnea" },
-  US0766: { full_name: "Maggie Nestor", castaway: "Maggie" },
-  US0767: { full_name: "Mike Pinsky", castaway: "Mike" },
-  US0768: { full_name: "Ori Jean-Charles", castaway: "Ori" },
-  US0769: { full_name: "Patt Cannaday", castaway: "Patt" },
-  US0770: { full_name: "Rob Antonson", castaway: "Rob" },
-  US0771: { full_name: "Sharonda Cox", castaway: "Sharonda" },
-  US0772: { full_name: "Thien An Nguyen", castaway: "Thien" },
+  US0755: { full_name: "Ana Sani", castaway: "Ana" },
+  US0757: { full_name: "Brady Booker", castaway: "Brady" },
+  US0758: { full_name: "Carter Krull", castaway: "Carter" },
+  US0759: { full_name: "Cristian Chavez", castaway: "Cristian" },
+  US0760: { full_name: "Danny Kilby", castaway: "Danny" },
+  US0761: { full_name: "Devin Way", castaway: "Devin" },
+  US0762: { full_name: "Eric Macksoud", castaway: "Eric" },
+  US0756: { full_name: "Angelica Loblack", castaway: "Jelly" },
+  US0763: { full_name: "Jenna Doore", castaway: "Jenna" },
+  US0764: { full_name: "Kristin Flickinger", castaway: "Kristin" },
+  US0765: { full_name: "Lewis Kelly", castaway: "Lewis" },
+  US0766: { full_name: "Linnea Capobianco", castaway: "Linnea" },
+  US0767: { full_name: "Maggie Nestor", castaway: "Maggie" },
+  US0768: { full_name: "Mike Pinsky", castaway: "Mike" },
+  US0769: { full_name: "Ori Jean-Charles", castaway: "Ori" },
+  US0770: { full_name: "Patt Cannaday", castaway: "Patt" },
+  US0771: { full_name: "Rob Antonson", castaway: "Rob" },
+  US0772: { full_name: "Sharonda Cox", castaway: "Sharonda" },
+  US0754: { full_name: "Thien An Nguyen", castaway: "Thien An" },
 };
 
 export const SEASON_51_PLAYERS = [
@@ -101,7 +100,7 @@ export const SEASON_51_PLAYERS = [
     hometown: "Atlanta, Georgia",
   }),
   buildPlayer({
-    castaway_id: "US0754",
+    castaway_id: "US0755",
     full_name: "Ana Sani",
     img: "/images/season_51/Ana-Sani.jpg",
     description:
@@ -111,7 +110,7 @@ export const SEASON_51_PLAYERS = [
     hometown: "Toronto, Ontario",
   }),
   buildPlayer({
-    castaway_id: "US0755",
+    castaway_id: "US0757",
     full_name: "Brady Booker",
     img: "/images/season_51/Brady-Booker.jpg",
     description:
@@ -121,7 +120,7 @@ export const SEASON_51_PLAYERS = [
     hometown: "Knoxville, Tennessee",
   }),
   buildPlayer({
-    castaway_id: "US0756",
+    castaway_id: "US0758",
     full_name: "Carter Krull",
     img: "/images/season_51/Carter-Krull.jpg",
     description:
@@ -131,7 +130,7 @@ export const SEASON_51_PLAYERS = [
     hometown: "Sioux Falls, South Dakota",
   }),
   buildPlayer({
-    castaway_id: "US0757",
+    castaway_id: "US0759",
     full_name: "Cristian Chavez",
     img: "/images/season_51/Cristian-Chavez.jpg",
     description:
@@ -141,7 +140,7 @@ export const SEASON_51_PLAYERS = [
     hometown: "Salt Lake City, Utah",
   }),
   buildPlayer({
-    castaway_id: "US0758",
+    castaway_id: "US0760",
     full_name: "Danny Kilby",
     img: "/images/season_51/Danny-Kilby.jpg",
     description:
@@ -151,7 +150,7 @@ export const SEASON_51_PLAYERS = [
     hometown: "London, Ontario",
   }),
   buildPlayer({
-    castaway_id: "US0759",
+    castaway_id: "US0761",
     full_name: "Devin Way",
     img: "/images/season_51/Devin-Way.jpg",
     description:
@@ -161,7 +160,7 @@ export const SEASON_51_PLAYERS = [
     hometown: "Los Angeles, California",
   }),
   buildPlayer({
-    castaway_id: "US0760",
+    castaway_id: "US0762",
     full_name: "Eric Macksoud",
     img: "/images/season_51/Eric-Macksoud.jpg",
     description:
@@ -171,8 +170,8 @@ export const SEASON_51_PLAYERS = [
     hometown: "Windsor Locks, Connecticut",
   }),
   buildPlayer({
-    castaway_id: "US0761",
-    full_name: "Jelly Loblack",
+    castaway_id: "US0756",
+    full_name: "Angelica Loblack",
     img: "/images/season_51/Jelly-Loblack.jpg",
     description:
       "Age: 29 | Hometown: Bloomington, Indiana | Occupation: Sociology Professor",
@@ -182,7 +181,7 @@ export const SEASON_51_PLAYERS = [
     nickname: "Jelly",
   }),
   buildPlayer({
-    castaway_id: "US0762",
+    castaway_id: "US0763",
     full_name: "Jenna Doore",
     img: "/images/season_51/Jenna-Doore.jpg",
     description:
@@ -192,7 +191,7 @@ export const SEASON_51_PLAYERS = [
     hometown: "Toledo, Ohio",
   }),
   buildPlayer({
-    castaway_id: "US0763",
+    castaway_id: "US0764",
     full_name: "Kristin Flickinger",
     img: "/images/season_51/Kristin-Flickinger.jpg",
     description:
@@ -202,7 +201,7 @@ export const SEASON_51_PLAYERS = [
     hometown: "Santa Barbara, California",
   }),
   buildPlayer({
-    castaway_id: "US0764",
+    castaway_id: "US0765",
     full_name: "Lewis Kelly",
     img: "/images/season_51/Lewis-Kelly.jpg",
     description:
@@ -212,7 +211,7 @@ export const SEASON_51_PLAYERS = [
     hometown: "Corozal, Puerto Rico",
   }),
   buildPlayer({
-    castaway_id: "US0765",
+    castaway_id: "US0766",
     full_name: "Linnea Capobianco",
     img: "/images/season_51/Linnea-Capobianco.jpg",
     description:
@@ -222,7 +221,7 @@ export const SEASON_51_PLAYERS = [
     hometown: "Jersey City, New Jersey",
   }),
   buildPlayer({
-    castaway_id: "US0766",
+    castaway_id: "US0767",
     full_name: "Maggie Nestor",
     img: "/images/season_51/Maggie-Nestor.jpg",
     description:
@@ -232,7 +231,7 @@ export const SEASON_51_PLAYERS = [
     hometown: "Charles Town, West Virginia",
   }),
   buildPlayer({
-    castaway_id: "US0767",
+    castaway_id: "US0768",
     full_name: "Mike Pinsky",
     img: "/images/season_51/Mike-Pinsky.jpg",
     description:
@@ -243,7 +242,7 @@ export const SEASON_51_PLAYERS = [
     nickname: "Mike",
   }),
   buildPlayer({
-    castaway_id: "US0768",
+    castaway_id: "US0769",
     full_name: "Ori Jean-Charles",
     img: "/images/season_51/Ori-Jean-Charles.jpg",
     description:
@@ -253,7 +252,7 @@ export const SEASON_51_PLAYERS = [
     hometown: "Spring Valley, New York",
   }),
   buildPlayer({
-    castaway_id: "US0769",
+    castaway_id: "US0770",
     full_name: "Patt Cannaday",
     img: "/images/season_51/Patt-Cannaday.jpg",
     description:
@@ -264,7 +263,7 @@ export const SEASON_51_PLAYERS = [
     nickname: "Patt",
   }),
   buildPlayer({
-    castaway_id: "US0770",
+    castaway_id: "US0771",
     full_name: "Rob Antonson",
     img: "/images/season_51/Rob-Antonson.jpg",
     description:
@@ -274,7 +273,7 @@ export const SEASON_51_PLAYERS = [
     hometown: "Cumberland, Rhode Island",
   }),
   buildPlayer({
-    castaway_id: "US0771",
+    castaway_id: "US0772",
     full_name: "Sharonda Cox",
     img: "/images/season_51/Sharonda-Cox.jpg",
     description:
@@ -284,7 +283,7 @@ export const SEASON_51_PLAYERS = [
     hometown: "Richmond, Kentucky",
   }),
   buildPlayer({
-    castaway_id: "US0772",
+    castaway_id: "US0754",
     full_name: "Thien An Nguyen",
     img: "/images/season_51/Thien-An-Nguyen.jpg",
     description:
