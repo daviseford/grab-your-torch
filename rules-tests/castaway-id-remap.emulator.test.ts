@@ -13,12 +13,14 @@
 
 import { deleteApp, initializeApp } from "firebase-admin/app";
 import { getDatabase } from "firebase-admin/database";
-import { getFirestore } from "firebase-admin/firestore";
+import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { CastawayIdMappingFile } from "../scripts/lib/castaway-id-remap";
 import { buildCensus } from "../scripts/lib/castaway-id-remap";
+import { pushSeason } from "../scripts/lib/push-season-collections";
 import {
   readRemapLedgerStatus,
   seasonPushRefusal,
@@ -34,9 +36,12 @@ import {
   readProduction,
   type RemapContext,
   type RemapPlanFile,
+  runBackup,
   runFinalize,
+  runRestoreDrill,
   runRollback,
   runWrite,
+  type StoreFactory,
 } from "../scripts/remap-castaway-ids";
 
 const PROJECT_ID = "demo-survivor-fantasy-rules";
@@ -77,6 +82,7 @@ beforeAll(async () => {
   admin = {
     projectId: PROJECT_ID,
     databaseUrl: DATABASE_URL,
+    env: process.env,
     firestore: getFirestore(app),
     rtdb: getDatabase(app),
   };
@@ -88,9 +94,20 @@ beforeAll(async () => {
   };
 });
 
+const backupRoots: string[] = [];
 afterAll(async () => {
   await deleteApp(app);
+  for (const d of backupRoots) fs.rmSync(d, { recursive: true, force: true });
 });
+
+/** A verified local backup in a fresh private folder outside the repo. */
+async function backup(): Promise<string> {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "remap-emulator-"));
+  backupRoots.push(root);
+  const dir = path.join(root, "backup");
+  await runBackup(admin, ctx, dir, null);
+  return dir;
+}
 
 beforeEach(async () => {
   const res = await fetch(
@@ -261,12 +278,14 @@ const idsOf = (picks: unknown) =>
 
 /** Dry run, then write with the live draft acknowledged. */
 async function cutover(): Promise<RemapPlanFile> {
+  const backupDir = await backup();
   const plan = await dryRun(admin, ctx, "provisional");
   const outcome = await runWrite(admin, ctx, {
     plan,
     project: PROJECT_ID,
     ackLiveDrafts: ["drafts/draft_waiting"],
     maxPlanAgeHours: 1,
+    backupDir,
   });
   expect(outcome.refusals).toEqual([]);
   return plan;
@@ -279,6 +298,7 @@ async function cutover(): Promise<RemapPlanFile> {
 describe("beginning the cutover", () => {
   it("refuses an unacknowledged live draft, then switches the season first and marks every census document", async () => {
     await seed();
+    const backupDir = await backup();
     const plan = await dryRun(admin, ctx, "provisional");
     expect(plan.ledger_status).toBe("none");
     expect(plan.documents.problems).toEqual([]);
@@ -290,6 +310,7 @@ describe("beginning the cutover", () => {
       project: PROJECT_ID,
       ackLiveDrafts: [],
       maxPlanAgeHours: 1,
+      backupDir,
     });
     expect(refused.refusals).toHaveLength(1);
     expect(refused.refusals[0]).toMatch(/live/);
@@ -300,6 +321,7 @@ describe("beginning the cutover", () => {
       project: PROJECT_ID,
       ackLiveDrafts: ["drafts/draft_waiting"],
       maxPlanAgeHours: 1,
+      backupDir,
     });
     if (!("result" in outcome)) throw new Error(outcome.refusals.join("; "));
     expect(outcome.began).toBe(true);
@@ -699,6 +721,7 @@ describe("finalize and rollback", () => {
       project: PROJECT_ID,
       ackLiveDrafts: ["drafts/draft_waiting"],
       maxPlanAgeHours: 1,
+      backupDir: await backup(),
     });
     expect("began" in second && second.began).toBe(true);
     expect((await ledger()).status).toBe("in_progress");
@@ -856,5 +879,258 @@ describe("the Firebase store", () => {
       "1": { US0755: "a" },
       "2": { US0754: "b" },
     });
+  });
+});
+
+describe("the local backup", () => {
+  it("is required, must hold every current document, and must verify before the cutover can begin", async () => {
+    await seed();
+    const plan = await dryRun(admin, ctx, "provisional");
+    const base = {
+      plan,
+      project: PROJECT_ID,
+      ackLiveDrafts: ["drafts/draft_waiting"],
+      maxPlanAgeHours: 1,
+    };
+    expect((await runWrite(admin, ctx, base)).refusals).toEqual([
+      "beginning the cutover needs a verified local backup: --with-backup <dir> (see --backup)",
+    ]);
+
+    // A backup taken before a document was created cannot restore it.
+    const early = await backup();
+    await admin.rtdb.ref("drafts/draft_late").set({
+      id: "draft_late",
+      season_id: "season_51",
+      state: { started: false },
+    });
+    const late = await dryRun(admin, ctx, "provisional");
+    expect(
+      (await runWrite(admin, ctx, { ...base, plan: late, backupDir: early }))
+        .refusals,
+    ).toEqual([
+      "1 document(s) are not in the backup (created after it); take a new one",
+    ]);
+
+    // A backup that no longer matches its checksums does not count.
+    const tampered = await backup();
+    fs.appendFileSync(path.join(tampered, "firestore.json"), " ");
+    expect(
+      (await runWrite(admin, ctx, { ...base, plan: late, backupDir: tampered }))
+        .refusals,
+    ).toEqual(["backup: firestore.json does not match its checksum"]);
+    expect(await ledger()).toBeUndefined();
+  });
+
+  it("restores into the emulators and reads back identically (the drill)", async () => {
+    await seed({
+      "competitions/competition_league": {
+        ...firestoreSeed["competitions/competition_league"],
+        created_at: new Timestamp(1_790_000_000, 123_000_000),
+      },
+    });
+    const dir = await backup();
+    const before = await fsDoc("competitions/competition_league");
+    // Wipe both emulators, as a restore into a fresh copy would start from.
+    await fetch(
+      `http://${FIRESTORE_HOST}/emulator/v1/projects/${PROJECT_ID}/databases/(default)/documents`,
+      { method: "DELETE" },
+    );
+    await admin.rtdb.ref().set(null);
+    const drill = await runRestoreDrill(admin, dir);
+    expect(drill.mismatches).toEqual([]);
+    expect(drill.firestore).toBe(8);
+    expect(drill.rtdb).toBe(3);
+    const after = await fsDoc("competitions/competition_league");
+    expect(after.created_at).toBeInstanceOf(Timestamp);
+    expect(after).toEqual(before);
+    expect(idsOf((await rtNode("drafts/draft_league")).draft_picks)).toEqual(
+      idsOf(leaguePicks),
+    );
+    // The drill refuses anything that is not an emulator.
+    await expect(
+      runRestoreDrill(
+        { ...admin, env: {}, projectId: "survivor-fantasy-51c4b" },
+        dir,
+      ),
+    ).rejects.toThrow(/only the emulators/);
+  });
+});
+
+describe("failure injection", () => {
+  it("attempts nothing after a season document that did not apply", async () => {
+    await seed();
+    const backupDir = await backup();
+    const plan = await dryRun(admin, ctx, "provisional");
+    // Someone edits the season document between the checks and its write.
+    const racing: StoreFactory = (a, n, h) => {
+      const real = productionStore(a, n, h);
+      let first = true;
+      return {
+        async compareAndSet(change, expected, next, mark) {
+          if (first) {
+            first = false;
+            await admin.firestore
+              .doc("seasons/season_51")
+              .update({ players: [] });
+          }
+          return real.compareAndSet(change, expected, next, mark);
+        },
+      };
+    };
+    const outcome = await runWrite(admin, ctx, {
+      plan,
+      project: PROJECT_ID,
+      ackLiveDrafts: ["drafts/draft_waiting"],
+      maxPlanAgeHours: 1,
+      backupDir,
+      storeFor: racing,
+    });
+    if (!("result" in outcome)) throw new Error(outcome.refusals.join("; "));
+    expect(outcome.result.applied).toEqual([]);
+    expect(outcome.result.stale).toEqual(["seasons/season_51"]);
+    expect(outcome.result.skipped).toHaveLength(8);
+    expect(await fsDoc("competitions/competition_league")).toEqual(
+      firestoreSeed["competitions/competition_league"],
+    );
+    expect(
+      (await rtNode("drafts/draft_league")).castaway_id_remap,
+    ).toBeUndefined();
+    expect((await ledger()).applied).toEqual({});
+  });
+
+  it("stops a rollback before the season document when anything before it fails", async () => {
+    await seed();
+    const plan = await cutover();
+    // A pick lands in a remapped draft after the write.
+    await admin.rtdb
+      .ref("drafts/draft_league/draft_picks/5")
+      .set(newPick("US0760", 5, "uid1"));
+    const outcome = await runRollback(admin, ctx, {
+      plan,
+      project: PROJECT_ID,
+    });
+    if (!("result" in outcome)) throw new Error(outcome.refusals.join("; "));
+    expect(outcome.result.stale).toEqual(["drafts/draft_league"]);
+    expect(outcome.result.skipped).toEqual([
+      "pools/pool_season_51",
+      "seasons/season_51",
+    ]);
+    expect(outcome.rolledBack).toBe(false);
+    const season = await fsDoc("seasons/season_51");
+    expect(
+      (season.castawayLookup as Record<string, { full_name: string }>).US0756
+        .full_name,
+    ).toBe("Angelica Loblack");
+    expect((await ledger()).status).toBe("in_progress");
+
+    // Resolve the late pick, then rerun the same rollback: what was already
+    // restored counts as done, and the season goes back last.
+    await admin.rtdb.ref("drafts/draft_league/draft_picks/5").remove();
+    const rerun = await runRollback(admin, ctx, { plan, project: PROJECT_ID });
+    if (!("result" in rerun)) throw new Error(rerun.refusals.join("; "));
+    expect(rerun.result.stale).toEqual([]);
+    expect(rerun.result.skipped).toEqual([]);
+    expect(rerun.result.applied.at(-1)).toBe("seasons/season_51");
+    expect(rerun.result.already.length).toBeGreaterThan(0);
+    expect(rerun.rolledBack).toBe(true);
+    for (const [p, data] of Object.entries(firestoreSeed)) {
+      expect(await fsDoc(p)).toEqual(data);
+    }
+  });
+});
+
+describe("other write routes and resolution", () => {
+  it("refuses push-seasons mid-cutover, for the season document and its results alike", async () => {
+    await seed();
+    await cutover();
+    const before = await fsDoc("seasons/season_51");
+    const result = await pushSeason(
+      admin.firestore,
+      51,
+      new Set(["seasons", "events", "challenges"] as const),
+      false,
+    );
+    expect(result.pushed).toEqual([]);
+    expect(result.failed).toEqual([
+      "seasons/season_51",
+      "challenges/season_51",
+      "events/season_51",
+    ]);
+    expect(await fsDoc("seasons/season_51")).toEqual(before);
+    expect(await fsDoc("events/season_51")).toEqual({});
+  });
+
+  it("resolves born team assignments and an orphaned competition only with --accept-born, so finalize is not a dead end", async () => {
+    await seed();
+    await cutover();
+    await admin.firestore
+      .doc("team_assignments/season_51")
+      .set({ "1": { US0754: "team_a" } });
+    await admin.firestore.doc("competitions/competition_orphan").set({
+      id: "competition_orphan",
+      season_id: "season_51",
+      draft_id: "draft_cleaned_up",
+      draft_picks: [newPick("US0760", 1, "uid7")],
+      prop_bets: [],
+    });
+    const held = await dryRun(admin, ctx, "provisional");
+    expect(
+      held.documents.problems.map((p) => [p.path, p.reason]).sort(),
+    ).toEqual([
+      ["competitions/competition_orphan", "born_ambiguous"],
+      ["team_assignments/season_51", "born_ambiguous"],
+    ]);
+    expect(
+      (
+        await runFinalize(admin, ctx, {
+          project: PROJECT_ID,
+          localState: "remapped",
+        })
+      ).refusals.join("; "),
+    ).toMatch(/problem/);
+
+    const accepting = {
+      ...ctx,
+      acceptBorn: [
+        "competitions/competition_orphan",
+        "team_assignments/season_51",
+      ],
+    };
+    const plan = await dryRun(admin, accepting, "provisional");
+    expect(plan.documents.problems).toEqual([]);
+    const outcome = await runWrite(admin, accepting, {
+      plan,
+      project: PROJECT_ID,
+      ackLiveDrafts: [],
+      maxPlanAgeHours: 1,
+    });
+    if (!("result" in outcome)) throw new Error(outcome.refusals.join("; "));
+    expect(await fsDoc("team_assignments/season_51")).toEqual({
+      "1": { US0754: "team_a" },
+    });
+    expect(
+      await runFinalize(admin, ctx, {
+        project: PROJECT_ID,
+        localState: "remapped",
+      }),
+    ).toEqual({ refusals: [] });
+  });
+
+  it("stops before reading when only one emulator host is set", async () => {
+    await seed();
+    const crossed = {
+      ...admin,
+      env: { FIREBASE_DATABASE_EMULATOR_HOST: DATABASE_HOST },
+    };
+    await expect(dryRun(crossed, ctx, "provisional")).rejects.toThrow(
+      /only one emulator/,
+    );
+    await expect(
+      dryRun(
+        { ...admin, projectId: "survivor-fantasy-51c4b" },
+        ctx,
+        "provisional",
+      ),
+    ).rejects.toThrow(/unset them/);
   });
 });

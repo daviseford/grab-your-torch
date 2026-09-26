@@ -9,15 +9,7 @@ import * as path from "path";
 
 // Import to trigger shared Firebase Admin initialization
 import "./admin.js";
-import {
-  type CastawayIdMappingFile,
-  classifyCommittedCast,
-} from "./castaway-id-remap.js";
-import {
-  type BundledCastState,
-  readRemapLedgerStatus,
-  seasonPushRefusal,
-} from "./remap-ledger.js";
+import { seasonPushGate } from "./remap-ledger.js";
 import { buildSeasonDocument } from "./season-document.js";
 
 interface FirestoreDocument {
@@ -32,33 +24,6 @@ function getSeasonExport(
   suffix: string,
 ): unknown {
   return mod[`SEASON_${seasonNum}_${suffix}`];
-}
-
-/**
- * Which side of a committed castaway id mapping the bundled cast is on, or
- * null for a season that has no mapping.
- */
-export function bundledCastState(
-  seasonNum: number,
-  castawayLookup: unknown,
-): BundledCastState {
-  const file = path.resolve(
-    import.meta.dirname,
-    "..",
-    "castaway-id-remaps",
-    `season_${seasonNum}.json`,
-  );
-  if (!fs.existsSync(file)) return null;
-  const mapping = JSON.parse(
-    fs.readFileSync(file, "utf-8"),
-  ) as CastawayIdMappingFile;
-  const cast = Object.entries(
-    (castawayLookup ?? {}) as Record<
-      string,
-      { full_name: string; castaway: string }
-    >,
-  ).map(([castaway_id, v]) => ({ castaway_id, ...v }));
-  return classifyCommittedCast(cast, mapping.mappings);
 }
 
 function truncate(text: string, maxLength: number): string {
@@ -161,11 +126,7 @@ export async function pushSeasonToFirestore(
   const db = getFirestore();
   // Every push path (sync, push-seasons, new-season) comes through here, so
   // this is where a castaway id cutover holds them.
-  const refusal = seasonPushRefusal(
-    seasonKey,
-    await readRemapLedgerStatus(db, `season_${seasonNum}`),
-    bundledCastState(seasonNum, castawayLookup),
-  );
+  const refusal = await seasonPushGate(db, seasonNum, castawayLookup);
   if (refusal) {
     throw new Error(`Refusing to push ${seasonKey}: ${refusal}`);
   }

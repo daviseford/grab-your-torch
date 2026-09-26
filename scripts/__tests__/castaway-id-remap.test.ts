@@ -21,6 +21,7 @@ import {
 } from "../lib/castaway-id-remap";
 import {
   databaseUrlRefusal,
+  emulatorTargetRefusal,
   ledgerStatusOf,
   seasonPushRefusal,
 } from "../lib/remap-ledger";
@@ -754,15 +755,19 @@ describe("applyCastawayIdRemap and rollbackCastawayIdRemap", () => {
     expect(await mem.write()).toEqual({
       applied: all.map((d) => d.path),
       stale: [],
+      already: [],
+      skipped: [],
     });
     const replan = mem.replan();
     expect(replan.changes).toEqual([]);
     expect(replan.problems).toEqual([]);
     expect(replan.already_applied).toEqual(all.map((d) => d.path));
-    // Re-running the same plan is refused document by document.
+    // Re-running the same plan writes nothing: every document is done.
     expect(await applyCastawayIdRemap(plan.changes, mem.store)).toEqual({
       applied: [],
-      stale: all.map((d) => d.path),
+      stale: [],
+      already: all.map((d) => d.path),
+      skipped: [],
     });
   });
 
@@ -833,6 +838,8 @@ describe("applyCastawayIdRemap and rollbackCastawayIdRemap", () => {
     expect(await applyCastawayIdRemap(plan.changes, mem.store)).toEqual({
       applied: [],
       stale: [competition.path],
+      already: [],
+      skipped: [],
     });
     expect(mem.ledger.size).toBe(0);
   });
@@ -1031,7 +1038,7 @@ describe("the cutover census", () => {
         prop_bets: [{ user_uid: "uid9", values: { propbet_winner: "US0756" } }],
       },
     };
-    // And one whose draft is gone: held, alone.
+    // And one whose draft is gone: held for a person, alone.
     const orphan: RemapSourceDoc = {
       kind: "competition",
       path: "competitions/orphan",
@@ -1047,8 +1054,9 @@ describe("the cutover census", () => {
       [newComp.path, "born"],
     ]);
     expect(plan.problems).toMatchObject([
-      { path: orphan.path, reason: "parent_unresolved", scope: "document" },
+      { path: orphan.path, reason: "born_ambiguous", scope: "document" },
     ]);
+    expect(plan.problems[0].detail).toMatch(/is gone/);
     await applyCastawayIdRemap(plan.changes, mem.store);
     expect(mem.docs.get(newComp.path)!.draft_picks).toEqual(
       newComp.data.draft_picks,
@@ -1162,6 +1170,139 @@ describe("the cutover census", () => {
     expect(plan.problems).toMatchObject([
       { reason: "prop_bet_epoch_unknown", scope: "document" },
     ]);
+  });
+});
+
+describe("prerequisites and explicit resolution", () => {
+  const season: RemapSourceDoc = {
+    kind: "season",
+    path: "seasons/season_51",
+    data: {
+      players: [{ castaway_id: "US0754", full_name: "Ana Sani" }],
+      castawayLookup: { US0754: { full_name: "Ana Sani", castaway: "Ana" } },
+    },
+  };
+
+  it("attempts nothing after a season document that did not apply", async () => {
+    const all = [competition, trade, draft, season];
+    const mem = memoryStore(all);
+    const plan = planDocumentRemap(all, opts);
+    // The season document moved after the plan was made.
+    mem.docs.get(season.path)!.players = [];
+    const result = await applyCastawayIdRemap(plan.changes, mem.store);
+    expect(result).toEqual({
+      applied: [],
+      stale: [season.path],
+      already: [],
+      skipped: [competition.path, trade.path, draft.path],
+    });
+    expect(mem.docs.get(competition.path)).toEqual(competition.data);
+    expect(mem.ledger.size).toBe(0);
+  });
+
+  it("refuses a plan that does not lead with its prerequisites", async () => {
+    const all = [competition, season];
+    const mem = memoryStore(all);
+    const plan = planDocumentRemap(all, opts);
+    await expect(
+      applyCastawayIdRemap([...plan.changes].reverse(), mem.store),
+    ).rejects.toThrow(/first/);
+  });
+
+  it("does not roll the season back while anything before it failed to restore", async () => {
+    const all = [competition, trade, draft, season];
+    const mem = memoryStore(all);
+    const plan = planDocumentRemap(all, opts);
+    await applyCastawayIdRemap(plan.changes, mem.store);
+    // A pick lands in the draft after the write: its rollback is stale.
+    (mem.docs.get(draft.path)!.draft_picks as unknown[]).push(
+      newPick("US0760", 2),
+    );
+    const result = await rollbackCastawayIdRemap(plan.changes, mem.store);
+    expect(result.stale).toEqual([draft.path]);
+    expect(result.skipped).toEqual([season.path]);
+    expect(mem.ledger.get(season.path)).toBe(HASH);
+    expect(
+      (mem.docs.get(season.path)!.players as { castaway_id: string }[])[0]
+        .castaway_id,
+    ).toBe("US0755");
+
+    // Once the late pick is resolved, rerunning the same rollback finishes:
+    // documents already restored count as done, not stale.
+    (mem.docs.get(draft.path)!.draft_picks as unknown[]).pop();
+    const rerun = await rollbackCastawayIdRemap(plan.changes, mem.store);
+    expect(rerun.stale).toEqual([]);
+    expect(rerun.skipped).toEqual([]);
+    expect(rerun.applied).toEqual([draft.path, season.path]);
+    expect(rerun.already).toEqual([trade.path, competition.path]);
+    for (const d of all) expect(mem.docs.get(d.path)).toEqual(d.data);
+    expect(mem.ledger.size).toBe(0);
+  });
+
+  it("holds born team assignments for an explicit --accept-born, then marks them", async () => {
+    const mem = memoryStore([draft]);
+    await mem.write();
+    const teams: RemapSourceDoc = {
+      kind: "team_assignments",
+      path: "team_assignments/season_51",
+      data: { "1": { US0754: "a" } },
+    };
+    mem.add(teams);
+    expect(mem.replan().problems).toMatchObject([
+      { path: teams.path, reason: "born_ambiguous", scope: "document" },
+    ]);
+    expect(mem.replan().changes).toEqual([]);
+    mem.acceptBorn.add(teams.path);
+    const plan = mem.replan();
+    expect(plan.changes).toMatchObject([{ path: teams.path, mode: "born" }]);
+    await applyCastawayIdRemap(plan.changes, mem.store);
+    expect(mem.docs.get(teams.path)).toEqual(teams.data);
+    expect(mem.replan().problems).toEqual([]);
+  });
+
+  it("accepts an orphaned competition only with --accept-born, and never one on provisional names", async () => {
+    const mem = memoryStore([draft]);
+    await mem.write();
+    const orphan: RemapSourceDoc = {
+      kind: "competition",
+      path: "competitions/orphan",
+      data: { draft_id: "gone", draft_picks: [newPick("US0760", 1)] },
+    };
+    const stale: RemapSourceDoc = {
+      kind: "competition",
+      path: "competitions/stale_orphan",
+      data: { draft_id: "gone2", draft_picks: [pick("US0760", 1)] },
+    };
+    mem.add(orphan);
+    mem.add(stale);
+    mem.acceptBorn.add(orphan.path);
+    mem.acceptBorn.add(stale.path);
+    const plan = mem.replan();
+    expect(plan.changes).toMatchObject([{ path: orphan.path, mode: "born" }]);
+    expect(plan.problems).toMatchObject([
+      { path: stale.path, reason: "born_not_new" },
+    ]);
+  });
+});
+
+describe("the emulator target guard", () => {
+  it("wants both emulator hosts or neither, and emulators only for demo projects", () => {
+    const both = {
+      FIRESTORE_EMULATOR_HOST: "127.0.0.1:8080",
+      FIREBASE_DATABASE_EMULATOR_HOST: "127.0.0.1:9000",
+    };
+    expect(emulatorTargetRefusal({}, "survivor-fantasy-51c4b")).toBeNull();
+    expect(emulatorTargetRefusal(both, "demo-x")).toBeNull();
+    expect(emulatorTargetRefusal(both, "survivor-fantasy-51c4b")).toMatch(
+      /unset them/,
+    );
+    expect(
+      emulatorTargetRefusal(
+        { FIREBASE_DATABASE_EMULATOR_HOST: "127.0.0.1:9000" },
+        "survivor-fantasy-51c4b",
+      ),
+    ).toMatch(/only one emulator/);
+    expect(emulatorTargetRefusal({}, "demo-x")).toMatch(/no emulator/);
   });
 });
 

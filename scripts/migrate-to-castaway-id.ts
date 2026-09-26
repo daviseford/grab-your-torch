@@ -524,6 +524,23 @@ async function main(): Promise<void> {
   const db = getFirestore();
   const rtdb = getDatabase();
 
+  // This legacy migration rewrites season documents, competitions and drafts
+  // from the bundled cast. Once a season's castaway id remap has begun, that
+  // would overwrite remapped documents with whatever side the bundle is on.
+  const { readRemapLedgerStatus } = await import("./lib/remap-ledger.js");
+  for (const season of seasonConfigs) {
+    const status = await readRemapLedgerStatus(
+      db,
+      season.seasonKey as `season_${number}`,
+    );
+    if (status === "in_progress" || status === "finalized") {
+      console.error(
+        `Refusing to upload: ${season.seasonKey} has a castaway id remap (${status}); use yarn remap-castaway-ids instead.`,
+      );
+      process.exit(1);
+    }
+  }
+
   // Upload Firestore season docs
   for (const season of seasonConfigs) {
     const docPath = path.join(

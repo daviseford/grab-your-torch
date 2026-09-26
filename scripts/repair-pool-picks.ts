@@ -32,6 +32,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import type { CastawayId, Pool, PoolPick } from "../src/types";
+import { remapInProgressRefusal } from "./lib/remap-ledger.js";
 import {
   POOL_SNAPSHOT_DIR,
   POOL_SNAPSHOT_FILES,
@@ -550,6 +551,16 @@ async function main(): Promise<void> {
 
   const { getFirestore, FieldValue } = await import("firebase-admin/firestore");
   const db = getFirestore();
+  // Pool picks carry castaway ids: never rewrite them mid-cutover.
+  const seasonMatch = /^pool_(season_d+)$/.exec(poolId);
+  const held = seasonMatch
+    ? await remapInProgressRefusal(
+        db,
+        seasonMatch[1] as `season_${number}`,
+        "repair-pool-picks --write",
+      )
+    : null;
+  if (held) fail(held);
   const batch = db.batch();
 
   for (const repair of plan.repairs) {

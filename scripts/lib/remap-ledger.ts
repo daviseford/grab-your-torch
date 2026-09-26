@@ -4,16 +4,29 @@
  * `yarn remap-castaway-ids` records a season's cutover in
  * `admin_migrations/castaway_id_remap_season_N`. While that cutover is
  * `in_progress`, stored documents are a mix of provisional and survivoR ids,
- * so the jobs that write castaway ids for the season hold: the season push
- * (sync, push-seasons, new-season) and the ADP recompute. These checks are
- * code, not a runbook step, so a scheduled run cannot slip through during the
- * window. The abandoned-draft cleanup is kept structurally unable to touch
- * Firestore, so it cannot read this ledger; it writes no castaway field, and
- * docs/castaway-id-mapping.md covers it as an operational control.
+ * so the scripts that write castaway ids for the season hold: every season
+ * push route (sync, push-seasons, push-all-seasons, new-season,
+ * batch-new-season), the ADP recompute, pool pick repair, sample fixtures and
+ * the legacy name-to-id migration. These checks are code, not a runbook step,
+ * so a scheduled run cannot slip through during the window.
  *
- * Pure except `readRemapLedgerStatus`, which takes the smallest possible
- * Firestore surface so it can be tested against the emulator.
+ * The abandoned-draft cleanup is the exception. It is kept structurally unable
+ * to touch Firestore (so it can never reach a pool), so it cannot read this
+ * ledger. It never writes a castaway id, but it does delete whole unfinished
+ * drafts, and a census draft it deletes can no longer be rolled back, which
+ * stops a rollback before the season document. So the runbook disables its
+ * workflow for the whole window (docs/castaway-id-mapping.md).
+ *
+ * Pure except the readers, which take the smallest possible Firestore surface
+ * so they can be tested against the emulator.
  */
+
+import * as fs from "fs";
+import * as path from "path";
+import {
+  type CastawayIdMappingFile,
+  classifyCommittedCast,
+} from "./castaway-id-remap.js";
 
 export const REMAP_LEDGER_COLLECTION = "admin_migrations";
 
@@ -125,4 +138,93 @@ export const databaseUrlRefusal = (
   return instance === projectId || instance === `${projectId}-default-rtdb`
     ? null
     : `the Realtime Database URL ${url} does not belong to project ${projectId}`;
+};
+
+/**
+ * Which side of a committed castaway id mapping a bundled cast
+ * (`SEASON_N_CASTAWAY_LOOKUP`) is on, or null for a season with no mapping.
+ */
+export function bundledCastState(
+  seasonNum: number,
+  castawayLookup: unknown,
+): BundledCastState {
+  const file = path.resolve(
+    import.meta.dirname,
+    "..",
+    "castaway-id-remaps",
+    `season_${seasonNum}.json`,
+  );
+  if (!fs.existsSync(file)) return null;
+  const mapping = JSON.parse(
+    fs.readFileSync(file, "utf-8"),
+  ) as CastawayIdMappingFile;
+  const cast = Object.entries(
+    (castawayLookup ?? {}) as Record<
+      string,
+      { full_name: string; castaway: string }
+    >,
+  ).map(([castaway_id, v]) => ({ castaway_id, ...v }));
+  return classifyCommittedCast(cast, mapping.mappings);
+}
+
+/**
+ * The one check every route that pushes a bundled season (the season
+ * document or any of its result collections) must pass before writing:
+ * `pushSeasonToFirestore` (sync, push-all-seasons, new-season,
+ * batch-new-season) and `push-seasons`.
+ */
+export async function seasonPushGate(
+  firestore: LedgerReader,
+  seasonNum: number,
+  castawayLookup: unknown,
+): Promise<string | null> {
+  const seasonId = `season_${seasonNum}` as const;
+  return seasonPushRefusal(
+    seasonId,
+    await readRemapLedgerStatus(firestore, seasonId),
+    bundledCastState(seasonNum, castawayLookup),
+  );
+}
+
+/**
+ * For the other scripts that write castaway ids of a season (pool pick
+ * repair, sample and e2e fixtures): refuse while its cutover is in progress,
+ * when a document they wrote would be neither in the census nor on a known
+ * side.
+ */
+export async function remapInProgressRefusal(
+  firestore: LedgerReader,
+  seasonId: `season_${number}`,
+  job: string,
+): Promise<string | null> {
+  return (await readRemapLedgerStatus(firestore, seasonId)) === "in_progress"
+    ? `${job} would write castaway ids for ${seasonId} while its castaway id remap is in progress; finalize or roll it back first`
+    : null;
+}
+
+/**
+ * The Admin SDK sends Firestore and Realtime Database traffic to an emulator
+ * whenever `FIRESTORE_EMULATOR_HOST` or `FIREBASE_DATABASE_EMULATOR_HOST` is
+ * set, whatever project it was initialized with. A plan read with one of them
+ * set would describe the emulator while claiming the real project, and a write
+ * could land half in each. So: both or neither, and emulators only with a
+ * `demo-` project (which cannot exist in the cloud).
+ */
+export const emulatorTargetRefusal = (
+  env: Readonly<Record<string, string | undefined>>,
+  projectId: string | null | undefined,
+): string | null => {
+  const firestore = Boolean(env.FIRESTORE_EMULATOR_HOST);
+  const database = Boolean(env.FIREBASE_DATABASE_EMULATOR_HOST);
+  const demo = (projectId ?? "").startsWith("demo-");
+  if (firestore !== database) {
+    return `only one emulator is configured (${firestore ? "FIRESTORE_EMULATOR_HOST" : "FIREBASE_DATABASE_EMULATOR_HOST"}); set both or neither`;
+  }
+  if (firestore && !demo) {
+    return `emulator hosts are set, so ${projectId} would not be the project read or written; unset them`;
+  }
+  if (!firestore && demo) {
+    return `${projectId} is a demo project but no emulator is configured`;
+  }
+  return null;
 };

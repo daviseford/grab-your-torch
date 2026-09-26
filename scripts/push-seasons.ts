@@ -17,35 +17,14 @@ import { getFirestore } from "firebase-admin/firestore";
 import * as fs from "fs";
 import * as path from "path";
 import "./lib/admin.js";
-import { buildSeasonDocument } from "./lib/season-document.js";
+import {
+  type Collection,
+  getSeasonDataPath,
+  pushSeason,
+  VALID_COLLECTIONS,
+} from "./lib/push-season-collections.js";
 
 const PROJECT_ROOT = path.resolve(import.meta.dirname, "..");
-const VALID_COLLECTIONS = [
-  "seasons",
-  "challenges",
-  "eliminations",
-  "events",
-  "vote_history",
-] as const;
-type Collection = (typeof VALID_COLLECTIONS)[number];
-
-function getSeasonExport(
-  mod: Record<string, unknown>,
-  seasonNum: number,
-  suffix: string,
-): unknown {
-  return mod[`SEASON_${seasonNum}_${suffix}`];
-}
-
-function getSeasonDataPath(seasonNum: number): string {
-  return path.resolve(
-    PROJECT_ROOT,
-    "src",
-    "data",
-    `season_${seasonNum}`,
-    "index.ts",
-  );
-}
 
 function discoverSeasons(): number[] {
   const dataDir = path.join(PROJECT_ROOT, "src", "data");
@@ -55,110 +34,6 @@ function discoverSeasons(): number[] {
     .map((d) => Number(d.replace("season_", "")))
     .filter((n) => !isNaN(n) && fs.existsSync(getSeasonDataPath(n)))
     .sort((a, b) => a - b);
-}
-
-async function pushSeason(
-  seasonNum: number,
-  collections: Set<Collection>,
-  dryRun: boolean,
-): Promise<{ pushed: string[]; skipped: string[]; failed: string[] }> {
-  const seasonKey = `season_${seasonNum}`;
-  const seasonDataPath = getSeasonDataPath(seasonNum);
-
-  const mod = await import(
-    new URL(`file:///${seasonDataPath.replace(/\\/g, "/")}`).href
-  );
-
-  const players = getSeasonExport(mod, seasonNum, "PLAYERS");
-  const episodes = getSeasonExport(mod, seasonNum, "EPISODES");
-  const challenges = getSeasonExport(mod, seasonNum, "CHALLENGES");
-  const eliminations = getSeasonExport(mod, seasonNum, "ELIMINATIONS");
-  const events = getSeasonExport(mod, seasonNum, "EVENTS");
-  const voteHistory = getSeasonExport(mod, seasonNum, "VOTE_HISTORY");
-  const castawayLookup = getSeasonExport(mod, seasonNum, "CASTAWAY_LOOKUP");
-
-  const allDocs: { collection: Collection; data: Record<string, unknown> }[] = [
-    {
-      collection: "seasons",
-      data: buildSeasonDocument({
-        seasonNum,
-        seasonImg: "",
-        players: players || [],
-        episodes: episodes || [],
-        castawayLookup: castawayLookup || {},
-        challenges,
-        eliminations,
-        events,
-      }),
-    },
-    {
-      collection: "challenges",
-      data: (challenges || {}) as Record<string, unknown>,
-    },
-    {
-      collection: "eliminations",
-      data: (eliminations || {}) as Record<string, unknown>,
-    },
-    {
-      collection: "events",
-      data: (events || {}) as Record<string, unknown>,
-    },
-    {
-      collection: "vote_history",
-      data: (voteHistory || {}) as Record<string, unknown>,
-    },
-  ];
-
-  const seasonDoc = allDocs[0].data;
-  console.log(
-    `    revisions: data ${seasonDoc.data_revision}, scoring ${seasonDoc.scoring_revision}`,
-  );
-
-  const pushed: string[] = [];
-  const skipped: string[] = [];
-  const failed: string[] = [];
-
-  const db = dryRun ? null : getFirestore();
-
-  const selectedDocs = allDocs.filter((doc) => collections.has(doc.collection));
-
-  for (const doc of allDocs) {
-    const docPath = `${doc.collection}/${seasonKey}`;
-
-    if (!collections.has(doc.collection)) {
-      skipped.push(docPath);
-      continue;
-    }
-
-    if (dryRun) {
-      const entryCount = Object.keys(doc.data).length;
-      console.log(`    [DRY RUN] ${docPath} (${entryCount} entries)`);
-      pushed.push(docPath);
-      continue;
-    }
-  }
-
-  if (!dryRun && selectedDocs.length > 0) {
-    const batch = db!.batch();
-    for (const doc of selectedDocs) {
-      batch.set(db!.collection(doc.collection).doc(seasonKey), doc.data);
-    }
-
-    try {
-      await batch.commit();
-      pushed.push(
-        ...selectedDocs.map((doc) => `${doc.collection}/${seasonKey}`),
-      );
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error(`    [FAIL] season ${seasonNum}: ${msg}`);
-      failed.push(
-        ...selectedDocs.map((doc) => `${doc.collection}/${seasonKey}`),
-      );
-    }
-  }
-
-  return { pushed, skipped, failed };
 }
 
 async function main(): Promise<void> {
@@ -216,7 +91,12 @@ async function main(): Promise<void> {
     }
 
     console.log(`  Season ${seasonNum}:`);
-    const result = await pushSeason(seasonNum, collections, dryRun);
+    const result = await pushSeason(
+      dryRun ? null : getFirestore(),
+      seasonNum,
+      collections,
+      dryRun,
+    );
     totalPushed += result.pushed.length;
     totalFailed += result.failed.length;
 

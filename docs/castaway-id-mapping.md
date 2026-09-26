@@ -135,15 +135,16 @@ ledger the path of every document that exists when it begins, and for each
 RTDB draft, whose prop bets were already in. Only census documents are ever
 remapped. Anything else was created later and is **born**:
 
-| Born document       | Classified by                                                                                                                               | Outcome                                                                         |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Draft (RTDB)        | Every pick's name reads survivoR's, and each prop bet with a changed id is backed by that user's own pick on survivoR's ids                 | marked `born`, never remapped                                                   |
-| Draft, no picks yet | Nothing to read                                                                                                                             | left unmarked (`born_pending`) and read again next run                          |
-| Draft, still live   | Not accepted automatically                                                                                                                  | left unmarked (`born_pending`)                                                  |
-| Competition         | Its draft is marked or born, and its picks and castaway prop bets equal the draft's                                                         | marked `born`                                                                   |
-| Trade               | Its competition is marked or born, and its ids fit who held what (base picks plus accepted trades) as survivoR's ids and not as provisional | marked `born`; if it fits both readings, `born_ambiguous` (see `--accept-born`) |
-| Pool entry          | Names, as for a draft                                                                                                                       | marked `born` (the pool is frozen, so none are expected)                        |
-| Anything else       | Nothing to classify it by                                                                                                                   | problem                                                                         |
+| Born document                 | Classified by                                                                                                                               | Outcome                                                                         |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Draft (RTDB)                  | Every pick's name reads survivoR's, and each prop bet with a changed id is backed by that user's own pick on survivoR's ids                 | marked `born`, never remapped                                                   |
+| Draft, no picks yet           | Nothing to read                                                                                                                             | left unmarked (`born_pending`) and read again next run                          |
+| Draft, still live             | Not accepted automatically                                                                                                                  | left unmarked (`born_pending`)                                                  |
+| Competition                   | Its draft is marked or born, and its picks and castaway prop bets equal the draft's                                                         | marked `born`; if its draft was deleted, `born_ambiguous`                       |
+| Trade                         | Its competition is marked or born, and its ids fit who held what (base picks plus accepted trades) as survivoR's ids and not as provisional | marked `born`; if it fits both readings, `born_ambiguous` (see `--accept-born`) |
+| Pool entry                    | Names, as for a draft                                                                                                                       | marked `born` (the pool is frozen, so none are expected)                        |
+| Team assignments, ADP summary | Nothing to classify it by                                                                                                                   | `born_ambiguous`: held until `--accept-born`                                    |
+| Season document, pool config  | Must exist before the cutover                                                                                                               | global problem                                                                  |
 
 A born document whose names read provisional (a client still on the old
 season document) is reported `born_not_new` and never remapped
@@ -182,9 +183,21 @@ against the emulators in `rules-tests/castaway-id-remap.emulator.test.ts`
   leaves each document either rewritten and marked, or untouched and
   unmarked. After an RTDB commit the tool reads the committed node back and
   checks both the fields and the mark.
-- **Season document first.** The season document is written first and the
-  pool config second, so clients switch to survivoR's ids before anything
-  else moves. Rollback restores the season document last.
+- **Season document first, enforced.** The season document is written first
+  and the pool config second, so clients switch to survivoR's ids before
+  anything else moves. If either does not apply, nothing after it is
+  attempted, so picks are never remapped while clients still read the old
+  season document. A plan that does not lead with them is refused. Rollback
+  restores them last, and not at all if any document rolled back before
+  them did not restore.
+- **Reruns are safe.** A document that already holds a plan's target state
+  and mark counts as done (`already`), not stale. So after resolving whatever
+  stopped a write or a rollback, rerunning the same plan finishes the job.
+- **Aimed at one place.** The Admin SDK sends traffic to an emulator whenever
+  `FIRESTORE_EMULATOR_HOST` or `FIREBASE_DATABASE_EMULATOR_HOST` is set,
+  whatever project it was initialized with. Every flow refuses before reading
+  unless both are set with a `demo-` project, or neither is set with a real
+  one.
 - **Compare-and-set.** A document is written only if every castaway-bearing
   field still equals the plan's `before` (deep equality, key order ignored).
   That includes fields that do not change. A document that moved on is
@@ -214,10 +227,15 @@ against the emulators in `rules-tests/castaway-id-remap.emulator.test.ts`
   - there is no global problem, and the first write (the one that begins the cutover) has no problem at all;
   - every live draft the plan writes is acknowledged with `--ack-live-draft drafts/<id>`.
 - **`--accept-born <path>`.** The only way to mark a `born_ambiguous`
-  document. Use it after confirming with the users involved that it was made
-  on survivoR's ids. Pass it to the dry run and the write alike.
-- **Backup.** The plan file holds `before` and `after` for every
-  castaway-bearing field it touches.
+  document: a trade that fits both readings, a competition whose draft was
+  deleted, or new team assignments or an ADP summary. Use it after confirming
+  with the people involved that it was made on survivoR's ids. Pass it to the
+  dry run and the write alike. It is never implied, and it never applies to a
+  document whose names read provisional (`born_not_new`): fix that one by
+  hand, or delete it, and it classifies on the next run.
+- **Backups.** The first write requires a verified local backup of every
+  document it can touch (see Backup). The plan file also holds `before` and
+  `after` for every castaway-bearing field it touches.
 
 ### Cutover states
 
@@ -228,12 +246,20 @@ against the emulators in `rules-tests/castaway-id-remap.emulator.test.ts`
 | `finalized`   | Every census document marked, bundle rewritten | remapped bundle only    | `all_drafts` runs; `pre_premiere` frozen | forward repairs only                   |
 | `rolled_back` | Every mark cleared inside the window           | provisional bundle only | `all_drafts` runs; `pre_premiere` frozen | a new first write records a new census |
 
-The sync, `push-seasons` and `new-season` all push through
-`scripts/lib/firebase-push.ts`, which checks the ledger before writing. The
-ADP job checks it for each season. These are code checks, so a scheduled run
-cannot slip through during the window. The #279 decision (publishing Season
-51 results) is still held only by the disabled sync workflow. Once the
-cutover is finalized, pushing a remapped bundle is allowed again.
+Every other script that writes Season 51 castaway ids checks the ledger in
+code, so a scheduled or hand-run job cannot slip through during the window:
+
+- the season push routes: the sync, `push-all-seasons`, `new-season` and
+  `batch-new-season` through `scripts/lib/firebase-push.ts`, and
+  `push-seasons` through `scripts/lib/push-season-collections.ts` (it writes
+  result collections directly, so it has its own call to the same gate);
+- the ADP job;
+- `repair-pool-picks --write` and `seed-competition`, which refuse while a
+  cutover is in progress;
+- the legacy `migrate-to-castaway-id --upload`, which refuses once any
+  cutover has begun or finished. The #279 decision (publishing Season
+  51 results) is still held only by the disabled sync workflow. Once the
+  cutover is finalized, pushing a remapped bundle is allowed again.
 
 ### Live drafts
 
@@ -264,71 +290,207 @@ the remap permutes both ADP documents in place, and `recompute-castaway-adp`
 skips `pre_premiere` for any season whose remap ledger exists. `all_drafts`
 is held while the cutover is in progress and refreshes as before afterwards.
 
+## Backup: mandatory, and the first production access
+
+Before anything else touches production, including the read-only dry run,
+the cutover owner takes a **local** backup of every document the remap can
+touch, verifies it independently, and restores it into the emulators. The
+first `--write` refuses without it.
+
+### Local export, not a cloud-managed snapshot
+
+- **Cloud-managed exports stay in Google Cloud.** Examples are
+  `gcloud firestore export gs://<bucket>` (a managed export into a Cloud
+  Storage bucket, restored with `gcloud firestore import`, whole collections
+  at a time) and the Realtime Database's automated daily backups on the Blaze
+  plan. Both need a bucket and IAM, and neither is a copy on this machine.
+  Either may be taken as well, but neither replaces the local backup.
+- **`yarn remap-castaway-ids 51 --backup` is the local export.** It reads the
+  documents with the Admin SDK and writes them to a folder on this machine.
+
+### What it holds
+
+The backup covers the same scope the remap reads:
+
+- every Season 51 competition and trade;
+- every Season 51 RTDB draft;
+- the pool config and every entry;
+- `seasons/season_51` and `team_assignments/season_51`;
+- the four results documents and both ADP summaries;
+- the remap ledger, if one exists.
+
+Each document is backed up whole, not just its castaway fields.
+
+- `firestore.json`: Firestore documents by path. Timestamps are type-tagged
+  so a restore writes them back as timestamps. Any other non-JSON Firestore
+  type (a reference, a geopoint, bytes) refuses the backup rather than being
+  flattened.
+- `rtdb.json`: RTDB drafts by path.
+- `manifest.json`: the project, database URL, season, mapping hash, time,
+  tool commit, counts per collection, each file's size and sha256, and each
+  document's sha256.
+
+The tool reads every file back from disk and checks it against the manifest
+before it reports success.
+
+Limits:
+
+- It is not a point-in-time snapshot. Documents are read one after another,
+  so a live draft can change between reads. The write therefore also checks
+  that the backup holds every document it finds, and the plan file keeps the
+  exact `before` of every field it changes.
+- Firestore keeps timestamps to the microsecond, and so does the backup.
+- An integer-valued double is restored as an integer.
+
+### Where it goes, and who may see it
+
+- **Location.** An absolute, new, empty folder outside any git work tree
+  (the tool refuses anything else), under your user profile, for example
+  `%USERPROFILE%\grab-your-torch-private\s51-cutover\<UTC time>`.
+- **Access.**
+  - On Windows, restrict the folder to yourself with
+    `icacls "<dir>" /inheritance:r /grant:r "$($env:USERNAME):(OI)(CI)F"`.
+  - On macOS or Linux the tool writes the folder `0700` and the files `0600`.
+- **Personal data.** The backup holds users' uids, display names, picks and
+  prop bets. Never commit it, copy it to a synced or cloud folder, attach it
+  to a ticket or chat, or print its contents. The tool prints counts and
+  hashes only.
+- **Retention.** Keep it until 30 days after `--finalize`, and until #279
+  (publishing Season 51 results) has been decided and verified. Then delete
+  the folder.
+
+### Exact sequence (PowerShell, from the main checkout)
+
+```powershell
+# 0. Aim at production only: no emulator variables in this shell.
+Remove-Item env:FIRESTORE_EMULATOR_HOST, env:FIREBASE_DATABASE_EMULATOR_HOST -ErrorAction SilentlyContinue
+
+# 1. A new private folder name (the tool creates the folder).
+$stamp = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
+$env:BACKUP_DIR = Join-Path $env:USERPROFILE "grab-your-torch-private\s51-cutover\$stamp"
+
+# 2. Local export. This is the first production access, and it is read-only.
+yarn remap-castaway-ids 51 --backup $env:BACKUP_DIR --project survivor-fantasy-51c4b
+icacls "$env:BACKUP_DIR" /inheritance:r /grant:r "$($env:USERNAME):(OI)(CI)F"
+
+# 3. Independent read-back against the manifest (local only, no network).
+yarn remap-castaway-ids 51 --verify-backup $env:BACKUP_DIR
+
+# 4. Restoration drill: throwaway emulators, then every document read back.
+#    Needs Java on PATH.
+node_modules/.bin/firebase emulators:exec --only firestore,database --project demo-remap-drill "yarn remap-castaway-ids 51 --restore-drill $env:BACKUP_DIR"
+```
+
+Record these in the cutover log, but never the data:
+
+- the counts and the manifest sha256 that step 2 prints;
+- that step 3 printed "Backup verified";
+- that step 4 printed "Restore drill passed".
+
+**Any failure stops the cutover.** Each case refuses with a message:
+
+- a refused folder;
+- a checksum or count mismatch;
+- a drill mismatch;
+- an emulator variable set in the production shell;
+- a foreign project or database.
+
+Do not continue. Fix the cause and take a new backup into a new folder. The
+tool never reuses a non-empty folder.
+
+**Freshness.** The write accepts the backup only if it is under 6 hours old
+(`--max-plan-age-hours`) and holds every document the write's fresh read
+finds. If a document was created since the backup (a new draft, say), the
+write refuses: take a new backup and dry-run again.
+
+### Restoring production
+
+Only the emulator drill is automated, deliberately. The backup's restore
+code refuses any target that is not an emulator of a `demo-` project.
+
+- **Inside the cutover window,** recovery is `--rollback`, which restores the
+  plan's exact `before` values (see Recovery).
+- **Otherwise,** restoring production documents from the backup is a
+  separate operation that Davis must authorize explicitly. It is done per
+  document, against the manifest hashes.
+
 ## Go/no-go before the write
 
-The write needs Davis's explicit go-ahead. Every item must be a yes:
+The cutover needs Davis's explicit go-ahead, after independent review, and a
+cutover owner re-briefed by Hermes. Every item must be a yes:
 
-1. **Names.** "Angelica Loblack" is confirmed as Jelly's displayed full name
+1. **Backup.** The local backup is taken, verified and drilled (above). This
+   is the first production access; nothing before it touches production.
+2. **Names.** "Angelica Loblack" is confirmed as Jelly's displayed full name
    (see Names), or a display override has been added first.
-2. **Mapping.** A fresh dry run reports `Mapping fe734ff53fbaf8a3 ... verified`
-   and `Realtime Database: belongs to the project`.
-3. **Clean plan.** The plan reports 0 problems and `Cutover: none`. Every
-   live draft it lists is finished, confirmed abandoned, or knowingly
-   acknowledged.
-4. **Follow-up PR ready.** The rewritten season file PR is green and not
-   merged (runbook step 4).
-5. **Sync held.** `Sync survivoR data` is disabled (below). The code checks
-   hold it during the cutover, but only the disabled workflow holds #279
-   afterwards.
-6. **Snapshot taken.** `yarn tsx scripts/snapshot-firestore.ts`.
-7. **Quiet time.** Nobody is known to be mid-draft.
+3. **Mapping.** A fresh dry run, taken after the backup, reports
+   `Mapping fe734ff53fbaf8a3 ... verified` and
+   `Realtime Database: belongs to the project`.
+4. **Clean plan.** The plan reports 0 problems and `Cutover: none`.
+5. **Live drafts: wait rather than acknowledge.** The 2026-09-26 inventory
+   found four finished drafts waiting on prop bets and one started with no
+   picks. The recommended course is to wait until each waiting draft has all
+   its prop bets in (it then stops being live) or is confirmed abandoned.
+   Acknowledging one with `--ack-live-draft` accepts that a prop bet
+   submitted during the write is held as `prop_bet_epoch_unknown` and needs a
+   person. A stale browser tab can also still submit old ids after the
+   switch; see Residual risks.
+6. **Follow-up PR ready.** The rewritten season file PR is green and not
+   merged.
+7. **Sync and cleanup held.** Both workflows are disabled (below).
+8. **Quiet time.** Nobody is known to be mid-draft, and nobody is editing
+   Season 51 on the Admin page.
 
 ## Controls around the cutover
 
 1. **Hold the sync workflow** until #279 is decided:
-   `gh workflow disable "Sync survivoR data" -R daviseford/grab-your-torch`,
-   then confirm with `gh workflow list -R daviseford/grab-your-torch --all`.
-2. **ADP refreshes** are held in code while the cutover is in progress, so no
-   variable change is needed.
-3. **Draft cleanup.** The weekly `Cleanup abandoned drafts` job deletes
-   unfinished drafts older than seven days and backfills `created_at`. It
-   deliberately cannot touch Firestore (so it can never reach a pool), which
-   means it cannot read the ledger. Neither of its writes touches a castaway
-   field, so it cannot mix ids, and the remap reports a deleted census draft
-   as stale rather than failing. But a draft it deletes during the window
-   cannot be rolled back. For a clean rollback, disable it during the window
-   with `gh workflow disable "Cleanup abandoned drafts" -R daviseford/grab-your-torch`,
-   and re-enable it after `--finalize`.
-4. **During the write** the pool page shows text cards instead of portraits
-   for castaways whose id moved. It shows a portrait only when the bundled
-   name matches the roster, so this lasts until the follow-up PR merges.
+   `gh workflow disable "Sync survivoR data" -R daviseford/grab-your-torch`.
+   Confirm with `gh workflow list -R daviseford/grab-your-torch --all`.
+2. **Hold the draft cleanup for the whole window:**
+   `gh workflow disable "Cleanup abandoned drafts" -R daviseford/grab-your-torch`,
+   re-enabled after `--finalize`. The cleanup deliberately cannot touch
+   Firestore (so it can never reach a pool), so it cannot read the ledger. It
+   never writes a castaway id, but it deletes whole unfinished drafts, and:
+   - a census draft it deletes can no longer be rolled back, which stops a
+     rollback before the season document;
+   - a competition whose draft it deleted needs `--accept-born`.
+3. **ADP refreshes** are held in code while the cutover is in progress.
+4. **No Admin page edits** to Season 51 during the window. The Admin page
+   writes episodes and results from whichever season document the browser
+   holds.
+5. **During the write** the pool page shows text cards instead of portraits
+   for castaways whose id moved, until the follow-up PR merges.
 
 ## Runbook (needs Davis's explicit go-ahead; writes production)
 
-1. Go/no-go (above), then apply the controls.
-2. Dry run: `yarn remap-castaway-ids 51`. Review the plan file under
+1. Prepare the follow-up code PR locally, with no production access:
+   `yarn remap-castaway-ids 51 --rewrite-season-file`, then `yarn format`.
+   CI must be green. Do not merge yet.
+2. **Backup, verify, drill** (see Backup). This is the first production
+   access.
+3. Dry run: `yarn remap-castaway-ids 51`. Review the plan file under
    `data/migration-output/castaway-id-remap/`.
-3. Snapshot: `yarn tsx scripts/snapshot-firestore.ts`.
-4. Prepare the follow-up code PR: `yarn remap-castaway-ids 51 --rewrite-season-file`,
-   then `yarn format`. It changes only ids, names and short names, adds no
-   episodes, and keeps every image. CI must be green. Do not merge yet.
-5. Begin the cutover: `yarn remap-castaway-ids 51 --write --plan <file> --project survivor-fantasy-51c4b`,
-   plus `--ack-live-draft` for each live draft you accept. This records the
-   census, switches `seasons/season_51` first, then remaps every other
-   document. The cast users see switches here.
-6. Merge the follow-up PR straight away, so the bundled portraits and the
-   Admin page catch up.
-7. Converge: dry-run again from main.
-   - Write each change it plans, the same way as step 5.
-   - Resolve each problem by hand as described above, or with
-     `--accept-born` for a `born_ambiguous` document.
-   - Repeat until the dry run plans 0 changes and reports 0 problems.
-8. Validate: `yarn repair-pool-picks 51` is clean. Spot-check a draft board,
-   a trade, and the pool entry page.
-9. Finalize from main, so the bundle reads `remapped`:
+4. Go/no-go, then the controls.
+5. Begin the cutover:
+   `yarn remap-castaway-ids 51 --write --plan <file> --project survivor-fantasy-51c4b --with-backup $env:BACKUP_DIR`.
+   Add `--ack-live-draft` only for a live draft knowingly accepted.
+   - The write refuses unless the backup verifies, is recent and holds every
+     current document.
+   - It then records the census, switches `seasons/season_51` first, and
+     remaps every other document.
+   - If the season document does not apply, nothing else is attempted:
+     dry-run again and rerun.
+6. Merge the follow-up PR straight away.
+7. Converge: dry-run again from main. Repeat until the plan has 0 changes and
+   0 problems:
+   - write each change it plans;
+   - resolve each problem by hand, or with `--accept-born` for a
+     `born_ambiguous` document after checking with the people involved.
+8. Validate: `yarn repair-pool-picks 51` (dry run) is clean. Spot-check a
+   draft board, a trade, and the pool entry page.
+9. Finalize from main:
    `yarn remap-castaway-ids 51 --finalize --project survivor-fantasy-51c4b`.
-   It refuses while any census document is unmarked, any change is planned,
-   any problem is open, or the bundle is not on survivoR's ids. Then run
+   Then run
    `yarn recompute-castaway-adp 51 --cohort all_drafts --write --project survivor-fantasy-51c4b`
    and re-enable the draft cleanup. Leave the sync disabled until #279 is
    decided.
@@ -337,30 +499,34 @@ The write needs Davis's explicit go-ahead. Every item must be a yes:
 
 **Rollback works only inside the cutover window.** `--rollback` refuses
 once the cutover is finalized. It also refuses as soon as any document
-exists that was not in the census. Such a document was created on
-survivoR's ids, and rolling the season back underneath it would strand it on
-the wrong side. Inside the window:
+exists that was not in the census. Inside the window:
 
-1. Keep the sync disabled.
+1. Keep the sync and the cleanup disabled.
 2. If the follow-up PR merged, revert it on main so the bundle is
    provisional again.
 3. Roll back every applied plan, newest first:
    `yarn remap-castaway-ids 51 --rollback --plan <file> --project survivor-fantasy-51c4b`.
-   This restores each document where the plan's `after` is still in place,
-   with the season document last, and clears the marks. A document reported
-   as no longer holding the plan's values changed after the write. Inspect it
-   against the plan file before touching it.
-4. When nothing is marked, the ledger becomes `rolled_back`. A dry run then
-   plans the full cutover again, and a later first write records a new
-   census. The ledger document stays, and it keeps the ADP `pre_premiere`
-   summary frozen.
+   - It restores each document where the plan's `after` is still in place.
+     The pool config and season document come last, and are left alone if
+     anything before them did not restore. Clients never switch back while
+     some documents still hold survivoR's ids.
+   - A document reported stale changed after the write: compare it with the
+     plan file and the backup, and restore it by hand.
+   - Then rerun the same command. Documents already restored count as done.
+4. When nothing is marked, the ledger becomes `rolled_back`, and a later
+   first write records a new census (with a new backup).
 
-**Otherwise, recover forward.** The next write repairs a stale pick by name.
-A duplicate, an unplaceable prop bet or a provisional born document is held
-and reported. A person fixes it by hand against the plan file and the
-snapshot. Nothing is ever remapped a second time, because every rewritten
-document is marked and born documents are never remapped. There is
-deliberately no automatic way back once users have built on survivoR's ids.
+**Otherwise, recover forward.**
+
+- The next write repairs a stale pick by name.
+- A duplicate, an unplaceable prop bet, or a born document on provisional
+  names is held and reported. A person fixes it by hand against the plan
+  file and the backup.
+- A `born_ambiguous` document waits for `--accept-born`.
+- Nothing is ever remapped a second time.
+
+There is deliberately no automatic way back once users have built on
+survivoR's ids.
 
 ## Guard
 
@@ -371,16 +537,24 @@ else, which it used to report as a harmless rename.
 
 ## Residual risks
 
-- **Stale clients after finalize.** A client holding an old copy of the
-  season document could still write provisional ids. Any later run catches
-  picks by name. It catches a nameless write (a prop bet, or a trade that
-  fits both readings) only when the tool runs, and only as a problem, never
-  as a silent remap.
+- **Stale browser tabs.** A tab that holds an old copy of the season
+  document (offline, or never refreshed) can write provisional ids after the
+  switch.
+  - Any later run catches picks by name.
+  - It catches a nameless write (a prop bet, or a trade that fits both
+    readings) only when the tool runs, and only as a problem, never as a
+    silent remap.
+  - Waiting for the four drafts that are waiting on prop bets, rather than
+    acknowledging them, removes the largest known exposure.
 - **Prop bets during the cutover** in an acknowledged live draft. They are
   reported, never guessed, but they need a person.
 - **The #279 gate.** Once the cutover is finalized, re-enabling the sync
-  workflow publishes Season 51 results. The code checks hold the sync only
+  workflow publishes Season 51 results. The code checks hold the push only
   during the cutover.
+- **Client writes are not gated.** The Admin page and users' browsers cannot
+  read the ledger. The controls above (a quiet time, no Admin edits) and the
+  census cover them.
 - **Not one transaction.** Each document is atomic with its mark, but the
-  cutover as a whole is not. The census, the freshness check, stale
-  detection, repair and window-only rollback exist because of that.
+  cutover as a whole is not. The census, the backup, the freshness check,
+  stale detection, the prerequisite stops, repair and window-only rollback
+  exist because of that.

@@ -1029,16 +1029,11 @@ export function planDocumentRemap(
   ) => {
     const d = doc.data;
     const guard = transform(doc.kind, d, false);
-    if (
-      doc.kind === "season" ||
-      doc.kind === "pool_config" ||
-      doc.kind === "team_assignments" ||
-      doc.kind === "castaway_adp"
-    ) {
+    if (doc.kind === "season" || doc.kind === "pool_config") {
       return problem(
         doc,
         "born_not_new",
-        "created after the cutover began, with no names or parent to classify it by",
+        "created after the cutover began; the season document and pool config must exist before it",
       );
     }
     if (sides.includes("old")) {
@@ -1062,6 +1057,15 @@ export function planDocumentRemap(
       bornNew.add(doc.path);
       change(doc, "born", guard, 0);
     };
+
+    // Nothing in these can say which ids they use. Only a person who knows
+    // who wrote them can, so they wait for an explicit --accept-born rather
+    // than dead-ending --finalize.
+    if (doc.kind === "team_assignments" || doc.kind === "castaway_adp") {
+      return accept(
+        "created after the cutover began, with no names or parent to classify it by; confirm who wrote it and on which ids, then --accept-born",
+      );
+    }
 
     if (doc.kind === "trade") {
       const parent = doc.path.split("/trades/")[0];
@@ -1133,7 +1137,12 @@ export function planDocumentRemap(
     if (doc.kind === "competition") {
       const parent = `drafts/${String(d.draft_id)}`;
       if (!byPath.has(parent)) {
-        return problem(doc, "parent_unresolved", `its draft ${parent} is gone`);
+        // Deleted (for instance by the abandoned-draft cleanup), so its
+        // prop bets cannot be checked against it. Its names already read
+        // survivoR's; a person confirms the rest.
+        return accept(
+          `its draft ${parent} is gone, so its prop bets cannot be checked; confirm with its members, then --accept-born`,
+        );
       }
       if (!isNewEpoch(parent)) {
         return problem(
@@ -1344,9 +1353,11 @@ export function planDocumentRemap(
  * The applied-mark transition a write makes, atomically with its fields:
  * `set` marks the document applied (it must not be marked yet), `keep`
  * requires the existing mark (repairs), `clear` requires and removes it
- * (rollback).
+ * (rollback), `absent` requires there is none and leaves it so. With
+ * `expected` equal to `next`, `keep` and `absent` write nothing: they probe
+ * whether a document already holds a state.
  */
-export type RemapMark = "set" | "keep" | "clear";
+export type RemapMark = "set" | "keep" | "clear" | "absent";
 
 /**
  * The storage the remap writes through. `compareAndSet` must be atomic per
@@ -1368,12 +1379,46 @@ export type RemapApplyResult = {
   applied: string[];
   /** Documents that changed after the plan was made; re-plan and retry. */
   stale: string[];
+  /**
+   * Documents that already held the target state (and mark), so a rerun of
+   * the same plan treats them as done rather than stale.
+   */
+  already: string[];
+  /**
+   * Documents not attempted because a prerequisite failed: nothing moves
+   * after a season document or pool config that did not apply, and neither is
+   * rolled back while anything rolled back before it failed.
+   */
+  skipped: string[];
 };
 
 /**
- * Apply planned changes one document at a time, in plan order (the season
- * document first, so clients switch to survivoR's ids before anything else
- * moves). A document that moved on since the plan is skipped as stale rather
+ * Kinds every other document depends on: clients read castaway ids from the
+ * season document, and pool entries from the pool config.
+ */
+const isPrerequisite = (c: Pick<RemapDocChange, "kind">) =>
+  c.kind === "season" || c.kind === "pool_config";
+
+/** Prerequisites must lead a plan; anything else is a tampered plan. */
+const assertPrerequisitesFirst = (changes: readonly RemapDocChange[]) => {
+  const firstOther = changes.findIndex((c) => !isPrerequisite(c));
+  if (
+    firstOther !== -1 &&
+    changes.slice(firstOther).some((c) => isPrerequisite(c))
+  ) {
+    throw new Error(
+      "The plan does not put the season document and pool config first",
+    );
+  }
+};
+
+/**
+ * Apply planned changes one document at a time, in plan order: the season
+ * document first, then the pool config, so clients switch to survivoR's ids
+ * before anything else moves. If either of those does not apply (stale, or
+ * refused), nothing after it is attempted: remapping picks while clients
+ * still read the old season document would invite unplaceable prop bets.
+ * Any other document that moved on since the plan is skipped as stale rather
  * than overwritten; a fresh dry run plans it again. Because the mark is
  * written in the same transaction as the fields, an interrupted run leaves
  * every document either fully remapped and marked, or untouched and unmarked.
@@ -1382,37 +1427,77 @@ export async function applyCastawayIdRemap(
   changes: readonly RemapDocChange[],
   store: RemapStore,
 ): Promise<RemapApplyResult> {
-  const result: RemapApplyResult = { applied: [], stale: [] };
-  for (const change of changes) {
+  assertPrerequisitesFirst(changes);
+  const result: RemapApplyResult = {
+    applied: [],
+    stale: [],
+    already: [],
+    skipped: [],
+  };
+  for (const [i, change] of changes.entries()) {
     const ok = await store.compareAndSet(
       change,
       change.before,
       change.after,
       change.mode === "repair" ? "keep" : "set",
     );
-    (ok ? result.applied : result.stale).push(change.path);
+    // Not applied: done already (a rerun of this plan), or truly stale.
+    const done =
+      !ok &&
+      (await store.compareAndSet(change, change.after, change.after, "keep"));
+    (ok ? result.applied : done ? result.already : result.stale).push(
+      change.path,
+    );
+    if (!ok && !done && isPrerequisite(change)) {
+      result.skipped.push(...changes.slice(i + 1).map((c) => c.path));
+      break;
+    }
   }
   return result;
 }
 
 /**
- * Undo one plan's changes, in reverse order (the season document last), only
- * where each document still holds that plan's `after`. Roll plans back newest
- * first.
+ * Undo one plan's changes, in reverse order, only where each document still
+ * holds that plan's `after`. The season document and pool config come last,
+ * and are not touched at all if anything rolled back before them did not
+ * restore: switching clients back to provisional ids while some documents
+ * still hold survivoR's would mix the two. Roll plans back newest first.
  */
 export async function rollbackCastawayIdRemap(
   changes: readonly RemapDocChange[],
   store: RemapStore,
 ): Promise<RemapApplyResult> {
-  const result: RemapApplyResult = { applied: [], stale: [] };
-  for (const change of [...changes].reverse()) {
+  assertPrerequisitesFirst(changes);
+  const result: RemapApplyResult = {
+    applied: [],
+    stale: [],
+    already: [],
+    skipped: [],
+  };
+  const reversed = [...changes].reverse();
+  for (const [i, change] of reversed.entries()) {
+    if (isPrerequisite(change) && result.stale.length > 0) {
+      result.skipped.push(...reversed.slice(i).map((c) => c.path));
+      break;
+    }
     const ok = await store.compareAndSet(
       change,
       change.after,
       change.before,
       change.mode === "repair" ? "keep" : "clear",
     );
-    (ok ? result.applied : result.stale).push(change.path);
+    // Not restored: restored already (a rerun after a stop), or truly stale.
+    const done =
+      !ok &&
+      (await store.compareAndSet(
+        change,
+        change.before,
+        change.before,
+        change.mode === "repair" ? "keep" : "absent",
+      ));
+    (ok ? result.applied : done ? result.already : result.stale).push(
+      change.path,
+    );
   }
   return result;
 }

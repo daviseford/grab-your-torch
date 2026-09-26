@@ -37,11 +37,21 @@
  *   --rewrite-season-file  Local only: rewrite src/data/season_N/index.ts
  *                       to survivoR's ids and names from the committed mapping,
  *                       adding no episode data. For the follow-up code PR.
+ *   --backup <dir>      Read every document the remap can touch, whole, into
+ *                       a private local folder outside any repository, with a
+ *                       manifest of counts and sha256 checksums, and read it
+ *                       back. The first --write requires one (--with-backup).
+ *   --verify-backup <dir>  Local only: check a backup against its manifest.
+ *   --restore-drill <dir>  Emulators only: restore a backup into the Firestore
+ *                       and Database emulators and read every document back.
  *
  * Usage:
  *   yarn remap-castaway-ids 51 --generate-mapping [--upstream <sha>]
  *   yarn remap-castaway-ids 51 [--accept-born <path> ...]
- *   yarn remap-castaway-ids 51 --write --plan <file> --project survivor-fantasy-51c4b [--ack-live-draft drafts/<id> ...] [--accept-born <path> ...]
+ *   yarn remap-castaway-ids 51 --backup <absolute dir> --project survivor-fantasy-51c4b
+ *   yarn remap-castaway-ids 51 --verify-backup <dir>
+ *   firebase emulators:exec --only firestore,database --project demo-remap-drill "yarn remap-castaway-ids 51 --restore-drill <dir>"
+ *   yarn remap-castaway-ids 51 --write --plan <file> --project survivor-fantasy-51c4b --with-backup <dir> [--ack-live-draft drafts/<id> ...] [--accept-born <path> ...]
  *   yarn remap-castaway-ids 51 --finalize --project survivor-fantasy-51c4b
  *   yarn remap-castaway-ids 51 --rollback --plan <file> --project survivor-fantasy-51c4b
  *   yarn remap-castaway-ids 51 --rewrite-season-file
@@ -83,7 +93,17 @@ import {
   verifyMappingFile,
 } from "./lib/castaway-id-remap.js";
 import {
+  backupRefusals,
+  type BackupScope,
+  type BackupSource,
+  createBackup,
+  restoreBackupToEmulator,
+  type RestoreTarget,
+  verifyBackup,
+} from "./lib/remap-backup.js";
+import {
   databaseUrlRefusal,
+  emulatorTargetRefusal,
   ledgerStatusOf,
   REMAP_LEDGER_COLLECTION,
   remapLedgerDocId,
@@ -251,6 +271,11 @@ export type Admin = {
   projectId: string | null;
   /** The Realtime Database instance the Admin SDK talks to. */
   databaseUrl: string | null;
+  /**
+   * The environment the Admin SDK was configured from: emulator host
+   * variables silently redirect it, whatever the project.
+   */
+  env: Readonly<Record<string, string | undefined>>;
   firestore: import("firebase-admin/firestore").Firestore;
   rtdb: import("firebase-admin/database").Database;
 };
@@ -262,6 +287,7 @@ async function loadAdmin(): Promise<Admin> {
   return {
     projectId: adminApp.options.projectId ?? null,
     databaseUrl: adminApp.options.databaseURL ?? null,
+    env: process.env,
     firestore: getFirestore(),
     rtdb: getDatabase(),
   };
@@ -446,14 +472,20 @@ export const markAllows = (
   mark: RemapMark,
   current: string | undefined,
   hash: string,
-): boolean => (mark === "set" ? current === undefined : current === hash);
+): boolean =>
+  mark === "set" || mark === "absent"
+    ? current === undefined
+    : current === hash;
 
 /** Whether a committed document carries the mark `mark` should leave. */
 export const markHolds = (
   mark: RemapMark,
   stored: string | undefined,
   hash: string,
-): boolean => (mark === "clear" ? stored === undefined : stored === hash);
+): boolean =>
+  mark === "clear" || mark === "absent"
+    ? stored === undefined
+    : stored === hash;
 
 const markerHash = (node: Record<string, unknown>): string | undefined => {
   const marker = node[RTDB_REMAP_MARKER] as { mapping_hash?: unknown };
@@ -547,7 +579,7 @@ export function productionStore(
             ...rest,
           );
         }
-        if (mark !== "keep") {
+        if (mark === "set" || mark === "clear") {
           tx.update(
             ledgerRef,
             new FieldPath("applied", change.path),
@@ -567,6 +599,103 @@ export function productionStore(
   };
 }
 
+export type StoreFactory = (
+  admin: Admin,
+  seasonNum: number,
+  hash: string,
+) => RemapStore;
+
+/* ------------------------------------------------------------------ *
+ * Local backup adapters
+ * ------------------------------------------------------------------ */
+
+export function backupSourceOf(admin: Admin): BackupSource & RestoreTarget {
+  return {
+    projectId: admin.projectId,
+    databaseUrl: admin.databaseUrl,
+    env: admin.env,
+    async readFirestore(paths) {
+      const out = new Map<string, unknown | null>();
+      for (let i = 0; i < paths.length; i += 100) {
+        const chunk = paths.slice(i, i + 100);
+        if (chunk.length === 0) continue;
+        const snaps = await admin.firestore.getAll(
+          ...chunk.map((p) => admin.firestore.doc(p)),
+        );
+        snaps.forEach((snap, j) =>
+          out.set(chunk[j], snap.exists ? snap.data() : null),
+        );
+      }
+      return out;
+    },
+    async readRtdb(paths) {
+      const out = new Map<string, unknown | null>();
+      for (const p of paths) {
+        out.set(p, (await admin.rtdb.ref(p).once("value")).val());
+      }
+      return out;
+    },
+    async writeFirestore(docs) {
+      for (const [p, d] of docs) {
+        await admin.firestore.doc(p).set(d as Record<string, unknown>);
+      }
+    },
+    async writeRtdb(nodes) {
+      for (const [p, n] of nodes) await admin.rtdb.ref(p).set(n);
+    },
+    makeTimestamp: (seconds, nanoseconds) => {
+      throw new Error(`no timestamp factory (${seconds}, ${nanoseconds})`);
+    },
+  };
+}
+
+/** Every Firestore document and RTDB draft the remap reads, plus the ledger. */
+export async function backupScope(
+  admin: Admin,
+  seasonNum: number,
+): Promise<BackupScope> {
+  const target = emulatorTargetRefusal(admin.env, admin.projectId);
+  if (target) throw new Error(`Refusing to run: ${target}`);
+  const read = await readProduction(firebaseReader(admin), seasonNum);
+  return {
+    firestore: [
+      ...read.docs.filter((d) => d.kind !== "rtdb_draft").map((d) => d.path),
+      `${REMAP_LEDGER_COLLECTION}/${remapLedgerDocId(seasonNum)}`,
+    ],
+    rtdb: read.docs.filter((d) => d.kind === "rtdb_draft").map((d) => d.path),
+  };
+}
+
+export async function runBackup(
+  admin: Admin,
+  ctx: Pick<RemapContext, "seasonNum" | "mapping">,
+  outDir: string,
+  toolCommit: string | null,
+) {
+  return createBackup(
+    backupSourceOf(admin),
+    await backupScope(admin, ctx.seasonNum),
+    outDir,
+    {
+      seasonNum: ctx.seasonNum,
+      mappingHash: ctx.mapping.mapping_hash,
+      toolCommit,
+    },
+  );
+}
+
+export async function runRestoreDrill(admin: Admin, dir: string) {
+  const { Timestamp } = await import("firebase-admin/firestore");
+  return restoreBackupToEmulator(
+    {
+      ...backupSourceOf(admin),
+      makeTimestamp: (seconds, nanoseconds) =>
+        new Timestamp(seconds, nanoseconds),
+    },
+    dir,
+  );
+}
+
 /* ------------------------------------------------------------------ *
  * Flows (exported so the emulator tests run exactly what the CLI runs)
  * ------------------------------------------------------------------ */
@@ -582,6 +711,10 @@ export async function planFromProduction(
   admin: Admin,
   ctx: RemapContext,
 ): Promise<{ read: ProductionRead; documents: RemapDocumentPlan }> {
+  // Every flow reads through here first, so a run aimed at one place while
+  // the SDK talks to another stops before reading or writing anything.
+  const target = emulatorTargetRefusal(admin.env, admin.projectId);
+  if (target) throw new Error(`Refusing to run: ${target}`);
   const read = await readProduction(firebaseReader(admin), ctx.seasonNum);
   if (
     read.ledgerHash !== null &&
@@ -774,10 +907,15 @@ export async function runWrite(
     project: string;
     ackLiveDrafts: readonly string[];
     maxPlanAgeHours: number;
+    /** A verified local backup; required to begin the cutover. */
+    backupDir?: string | null;
     now?: Date;
+    /** Tests inject failures here; the CLI always uses productionStore. */
+    storeFor?: StoreFactory;
   },
 ): Promise<WriteOutcome> {
   const hash = ctx.mapping.mapping_hash;
+  const now = input.now ?? new Date();
   const fresh = await planFromProduction(admin, ctx);
   const refusals = writeRefusals({
     plan: input.plan,
@@ -788,17 +926,40 @@ export async function runWrite(
     mappingHash: hash,
     ledgerHash: fresh.read.ledgerHash,
     ledgerStatus: fresh.read.ledgerStatus,
-    now: input.now ?? new Date(),
+    now,
     maxPlanAgeHours: input.maxPlanAgeHours,
     fresh: fresh.documents,
     ackLiveDrafts: input.ackLiveDrafts,
     acceptBorn: ctx.acceptBorn,
   });
-  if (refusals.length > 0) return { refusals };
 
   const began =
     fresh.read.ledgerStatus === "none" ||
     fresh.read.ledgerStatus === "rolled_back";
+  if (began) {
+    // Nothing may be written before a verified local backup holds every
+    // document this write can touch.
+    if (!input.backupDir) {
+      refusals.push(
+        "beginning the cutover needs a verified local backup: --with-backup <dir> (see --backup)",
+      );
+    } else {
+      refusals.push(
+        ...backupRefusals({
+          check: verifyBackup(input.backupDir),
+          project: input.project,
+          databaseUrl: admin.databaseUrl,
+          seasonNum: ctx.seasonNum,
+          mappingHash: hash,
+          now,
+          maxAgeHours: input.maxPlanAgeHours,
+          freshPaths: fresh.read.docs.map((d) => d.path),
+        }),
+      );
+    }
+  }
+  if (refusals.length > 0) return { refusals };
+
   if (began) {
     // Begin the cutover: the census is every document the fresh read saw.
     // Anything created from here on is classified, never remapped, and the
@@ -836,7 +997,7 @@ export async function runWrite(
 
   const result = await applyCastawayIdRemap(
     input.plan.documents.changes,
-    productionStore(admin, ctx.seasonNum, hash),
+    (input.storeFor ?? productionStore)(admin, ctx.seasonNum, hash),
   );
   const after = await planFromProduction(admin, ctx);
   return { refusals: [], result, began, after: after.documents };
@@ -920,7 +1081,7 @@ export type RollbackOutcome =
 export async function runRollback(
   admin: Admin,
   ctx: RemapContext,
-  input: { plan: RemapPlanFile; project: string },
+  input: { plan: RemapPlanFile; project: string; storeFor?: StoreFactory },
 ): Promise<RollbackOutcome> {
   const hash = ctx.mapping.mapping_hash;
   const { read } = await planFromProduction(admin, ctx);
@@ -950,7 +1111,7 @@ export async function runRollback(
 
   const result = await rollbackCastawayIdRemap(
     input.plan.documents.changes,
-    productionStore(admin, ctx.seasonNum, hash),
+    (input.storeFor ?? productionStore)(admin, ctx.seasonNum, hash),
   );
 
   // Once nothing is marked, the season is provisional again.
@@ -999,6 +1160,14 @@ export type Args = {
   ackLiveDrafts: string[];
   acceptBorn: string[];
   maxPlanAgeHours: number;
+  /** Create a local backup in this folder (reads production, writes files). */
+  backup: string | null;
+  /** Check a local backup against its manifest (no Firebase access). */
+  verifyBackup: string | null;
+  /** Restore a local backup into the emulators and verify it (drill). */
+  restoreDrill: string | null;
+  /** The verified local backup a write that begins the cutover requires. */
+  withBackup: string | null;
 };
 
 export function parseArgs(argv: readonly string[]): Args {
@@ -1015,6 +1184,10 @@ export function parseArgs(argv: readonly string[]): Args {
     ackLiveDrafts: [],
     acceptBorn: [],
     maxPlanAgeHours: 6,
+    backup: null,
+    verifyBackup: null,
+    restoreDrill: null,
+    withBackup: null,
   };
   const value = (i: number, flag: string) => {
     const v = argv[i];
@@ -1035,7 +1208,11 @@ export function parseArgs(argv: readonly string[]): Args {
     else if (arg === "--project") parsed.project = value(++i, arg);
     else if (arg === "--ack-live-draft") {
       parsed.ackLiveDrafts.push(value(++i, arg));
-    } else if (arg === "--accept-born") {
+    } else if (arg === "--backup") parsed.backup = value(++i, arg);
+    else if (arg === "--verify-backup") parsed.verifyBackup = value(++i, arg);
+    else if (arg === "--restore-drill") parsed.restoreDrill = value(++i, arg);
+    else if (arg === "--with-backup") parsed.withBackup = value(++i, arg);
+    else if (arg === "--accept-born") {
       parsed.acceptBorn.push(value(++i, arg));
     } else if (arg === "--max-plan-age-hours") {
       parsed.maxPlanAgeHours = Number(value(++i, arg));
@@ -1054,10 +1231,13 @@ export function parseArgs(argv: readonly string[]): Args {
     parsed.finalize,
     parsed.generateMapping,
     parsed.rewriteSeasonFile,
+    parsed.backup !== null,
+    parsed.verifyBackup !== null,
+    parsed.restoreDrill !== null,
   ].filter(Boolean).length;
   if (modes > 1) {
     throw new Error(
-      "--write, --rollback, --finalize, --generate-mapping and --rewrite-season-file are exclusive",
+      "--write, --rollback, --finalize, --generate-mapping, --rewrite-season-file, --backup, --verify-backup and --restore-drill are exclusive",
     );
   }
   if ((parsed.write || parsed.rollback) && (!parsed.plan || !parsed.project)) {
@@ -1065,8 +1245,11 @@ export function parseArgs(argv: readonly string[]): Args {
       "--write and --rollback need --plan <file> and --project <id>",
     );
   }
-  if (parsed.finalize && !parsed.project) {
-    throw new Error("--finalize needs --project <id>");
+  if ((parsed.finalize || parsed.backup) && !parsed.project) {
+    throw new Error("--finalize and --backup need --project <id>");
+  }
+  if (parsed.withBackup !== null && !parsed.write) {
+    throw new Error("--with-backup goes with --write");
   }
   return parsed;
 }
@@ -1119,6 +1302,59 @@ async function main(): Promise<void> {
     return fail(
       "no season given. Usage: yarn remap-castaway-ids <season> [--generate-mapping|--rewrite-season-file|--write|--finalize|--rollback] ...",
     );
+  }
+
+  if (args.verifyBackup) {
+    // Local only: no Firebase, no network.
+    const check = verifyBackup(args.verifyBackup);
+    if (check.errors.length > 0 || !check.manifest) {
+      return fail(`the backup does not verify: ${check.errors.join("; ")}`);
+    }
+    const m = check.manifest;
+    console.log(
+      `Backup verified: ${m.project_id}, season ${m.season_num}, taken ${m.created_at}, ` +
+        `${m.counts.firestore} Firestore documents and ${m.counts.rtdb} RTDB drafts, checksums match.`,
+    );
+    return;
+  }
+
+  if (args.restoreDrill) {
+    // Emulators only: the Admin app is built for the emulators' demo project,
+    // never from the service account key.
+    const projectId = process.env.GCLOUD_PROJECT ?? "";
+    const target = emulatorTargetRefusal(process.env, projectId);
+    if (target || !process.env.FIRESTORE_EMULATOR_HOST) {
+      return fail(
+        `the restore drill runs only inside firebase emulators:exec with a demo- project${target ? ` (${target})` : ""}`,
+      );
+    }
+    const { initializeApp } = await import("firebase-admin/app");
+    const { getFirestore } = await import("firebase-admin/firestore");
+    const { getDatabase } = await import("firebase-admin/database");
+    const databaseUrl = `http://${process.env.FIREBASE_DATABASE_EMULATOR_HOST}?ns=${projectId}-default-rtdb`;
+    const app = initializeApp(
+      { projectId, databaseURL: databaseUrl },
+      "restore-drill",
+    );
+    const drill = await runRestoreDrill(
+      {
+        projectId,
+        databaseUrl,
+        env: process.env,
+        firestore: getFirestore(app),
+        rtdb: getDatabase(app),
+      },
+      args.restoreDrill,
+    );
+    if (drill.mismatches.length > 0) {
+      return fail(
+        `${drill.mismatches.length} document(s) did not read back identically`,
+      );
+    }
+    console.log(
+      `Restore drill passed: ${drill.firestore} Firestore documents and ${drill.rtdb} RTDB drafts restored into the emulators and read back identically.`,
+    );
+    return;
   }
 
   if (args.generateMapping) {
@@ -1186,6 +1422,41 @@ async function main(): Promise<void> {
   };
 
   const admin = await loadAdmin();
+
+  if (args.backup) {
+    if (admin.projectId !== args.project) {
+      return fail(
+        `--project ${args.project} is not the service account's project ${admin.projectId}`,
+      );
+    }
+    let toolCommit: string | null = null;
+    try {
+      const { execSync } = await import("child_process");
+      toolCommit = execSync("git rev-parse HEAD", { cwd: PROJECT_ROOT })
+        .toString()
+        .trim();
+    } catch {
+      toolCommit = null;
+    }
+    const { manifest, manifestSha256 } = await runBackup(
+      admin,
+      ctx,
+      args.backup,
+      toolCommit,
+    );
+    console.log(
+      `Backup written and read back: ${manifest.counts.firestore} Firestore documents, ` +
+        `${manifest.counts.rtdb} RTDB drafts, manifest sha256 ${manifestSha256}.`,
+    );
+    console.log(
+      `Folder: ${args.backup}. It holds users' data: keep it private, never commit or share it.`,
+    );
+    console.log(
+      "Next: --verify-backup, then the restore drill in the emulators.",
+    );
+    return;
+  }
+
   const readPlan = () =>
     JSON.parse(fs.readFileSync(args.plan!, "utf-8")) as RemapPlanFile;
 
@@ -1223,6 +1494,7 @@ async function main(): Promise<void> {
       project: args.project!,
       ackLiveDrafts: args.ackLiveDrafts,
       maxPlanAgeHours: args.maxPlanAgeHours,
+      backupDir: args.withBackup,
     });
     if (!("result" in outcome)) return fail(outcome.refusals.join("; "));
     if (outcome.began) console.log("Cutover begun: census recorded.");
