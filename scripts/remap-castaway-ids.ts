@@ -93,10 +93,12 @@ import {
   verifyMappingFile,
 } from "./lib/castaway-id-remap.js";
 import {
+  backupLocationRefusal,
   backupRefusals,
   type BackupScope,
   type BackupSource,
   createBackup,
+  liveDocumentHashes,
   restoreBackupToEmulator,
   type RestoreTarget,
   verifyBackup,
@@ -947,13 +949,16 @@ export async function runWrite(
       refusals.push(
         ...backupRefusals({
           check: verifyBackup(input.backupDir),
+          dir: input.backupDir,
           project: input.project,
           databaseUrl: admin.databaseUrl,
           seasonNum: ctx.seasonNum,
           mappingHash: hash,
           now,
-          maxAgeHours: input.maxPlanAgeHours,
-          freshPaths: fresh.read.docs.map((d) => d.path),
+          liveHashes: await liveDocumentHashes(
+            backupSourceOf(admin),
+            await backupScope(admin, ctx.seasonNum),
+          ),
         }),
       );
     }
@@ -1306,6 +1311,8 @@ async function main(): Promise<void> {
 
   if (args.verifyBackup) {
     // Local only: no Firebase, no network.
+    const location = backupLocationRefusal(args.verifyBackup);
+    if (location) return fail(location);
     const check = verifyBackup(args.verifyBackup);
     if (check.errors.length > 0 || !check.manifest) {
       return fail(`the backup does not verify: ${check.errors.join("; ")}`);

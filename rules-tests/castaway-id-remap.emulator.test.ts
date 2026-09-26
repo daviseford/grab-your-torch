@@ -22,6 +22,12 @@ import type { CastawayIdMappingFile } from "../scripts/lib/castaway-id-remap";
 import { buildCensus } from "../scripts/lib/castaway-id-remap";
 import { pushSeason } from "../scripts/lib/push-season-collections";
 import {
+  commitPoolProvision,
+  commitPoolRepairs,
+  guardedSeasonWrite,
+  unchangedSince,
+} from "../scripts/lib/remap-guarded-writes";
+import {
   readRemapLedgerStatus,
   seasonPushRefusal,
 } from "../scripts/lib/remap-ledger";
@@ -43,6 +49,7 @@ import {
   runWrite,
   type StoreFactory,
 } from "../scripts/remap-castaway-ids";
+import { SEASON_51_CASTAWAY_LOOKUP } from "../src/data/season_51";
 
 const PROJECT_ID = "demo-survivor-fantasy-rules";
 const FIRESTORE_HOST = process.env.FIRESTORE_EMULATOR_HOST;
@@ -1132,5 +1139,164 @@ describe("other write routes and resolution", () => {
         "provisional",
       ),
     ).rejects.toThrow(/unset them/);
+  });
+});
+
+describe("backup binding at the write", () => {
+  it("refuses a backup whose documents' content moved on, even with the same paths", async () => {
+    await seed();
+    const backupDir = await backup();
+    // Same document set, one field changed after the backup.
+    await admin.firestore
+      .doc("pools/pool_season_51/entries/uidA")
+      .update({ handle: "alpha-renamed" });
+    const plan = await dryRun(admin, ctx, "provisional");
+    expect(
+      (
+        await runWrite(admin, ctx, {
+          plan,
+          project: PROJECT_ID,
+          ackLiveDrafts: ["drafts/draft_waiting"],
+          maxPlanAgeHours: 1,
+          backupDir,
+        })
+      ).refusals,
+    ).toEqual(["1 document(s) changed since the backup; take a new one"]);
+    expect(await ledger()).toBeUndefined();
+  });
+
+  it("refuses a verified backup that sits inside a git work tree", async () => {
+    await seed();
+    const good = await backup();
+    const inRepo = path.join(
+      import.meta.dirname,
+      "..",
+      "data",
+      `backup-location-test-${process.pid}`,
+    );
+    fs.cpSync(good, inRepo, { recursive: true });
+    try {
+      const plan = await dryRun(admin, ctx, "provisional");
+      const outcome = await runWrite(admin, ctx, {
+        plan,
+        project: PROJECT_ID,
+        ackLiveDrafts: ["drafts/draft_waiting"],
+        maxPlanAgeHours: 1,
+        backupDir: inRepo,
+      });
+      expect(outcome.refusals.join("; ")).toMatch(/inside the git work tree/);
+      expect(await ledger()).toBeUndefined();
+    } finally {
+      fs.rmSync(inRepo, { recursive: true, force: true });
+    }
+  });
+
+  it("restores nothing when the season document no longer holds what the write left", async () => {
+    await seed();
+    const plan = await cutover();
+    await admin.firestore.doc("seasons/season_51").update({ players: [] });
+    const outcome = await runRollback(admin, ctx, {
+      plan,
+      project: PROJECT_ID,
+    });
+    if (!("result" in outcome)) throw new Error(outcome.refusals.join("; "));
+    expect(outcome.result.applied).toEqual([]);
+    expect(outcome.result.stale).toEqual(["seasons/season_51"]);
+    expect(
+      idsOf((await fsDoc("competitions/competition_league")).draft_picks),
+    ).toEqual(["US0755", "US0754", "US0758", "US0756"]);
+  });
+});
+
+describe("guarded writes by other scripts", () => {
+  const beginLedger = (status: string) =>
+    admin.firestore.doc("admin_migrations/castaway_id_remap_season_51").set({
+      mapping_hash: mapping.mapping_hash,
+      status,
+      census: {},
+      applied: {},
+    });
+
+  it("repair-pool-picks: refuses an unparseable pool, holds during a cutover, writes otherwise", async () => {
+    await seed();
+    const repairs = [
+      {
+        entry_id: "uidA",
+        picks: [{ castaway_id: "US0752", full_name: "Aaliyah Puglia" }],
+      },
+    ];
+    await expect(
+      commitPoolRepairs(admin.firestore, "pool_s51", repairs, "t"),
+    ).rejects.toThrow(/cannot tell which season/);
+    await beginLedger("in_progress");
+    await expect(
+      commitPoolRepairs(admin.firestore, "pool_season_51", repairs, "t"),
+    ).rejects.toThrow(/in progress/);
+    expect(await fsDoc("pools/pool_season_51/entries/uidA")).toEqual(
+      firestoreSeed["pools/pool_season_51/entries/uidA"],
+    );
+    await beginLedger("finalized");
+    await commitPoolRepairs(admin.firestore, "pool_season_51", repairs, "t");
+    expect((await fsDoc("pools/pool_season_51/entries/uidA")).picks).toEqual(
+      repairs[0].picks,
+    );
+  });
+
+  it("create-pool: follows the season push rule for its roster, in the write's transaction", async () => {
+    await seed();
+    const writes = [
+      {
+        path: "pools/pool_season_51",
+        data: { id: "pool_season_51", status: "closed" },
+      },
+    ];
+    // Before any cutover, the provisional bundle may provision.
+    await commitPoolProvision(
+      admin.firestore,
+      51,
+      writes,
+      SEASON_51_CASTAWAY_LOOKUP,
+    );
+    expect(await fsDoc("pools/pool_season_51")).toEqual(writes[0].data);
+    await seed();
+    await beginLedger("in_progress");
+    await expect(
+      commitPoolProvision(
+        admin.firestore,
+        51,
+        writes,
+        SEASON_51_CASTAWAY_LOOKUP,
+      ),
+    ).rejects.toThrow(/in progress/);
+    await beginLedger("finalized");
+    await expect(
+      commitPoolProvision(
+        admin.firestore,
+        51,
+        writes,
+        SEASON_51_CASTAWAY_LOOKUP,
+      ),
+    ).rejects.toThrow(/bundled season file is provisional/);
+    expect(await fsDoc("pools/pool_season_51")).toEqual(
+      firestoreSeed["pools/pool_season_51"],
+    );
+  });
+
+  it("the ADP job: a summary planned before a cutover began is not written after", async () => {
+    await seed();
+    // Planned with no ledger; the cutover begins while the job computes.
+    await beginLedger("in_progress");
+    const docRef = admin.firestore.doc("castaway_adp/season_51_all_drafts");
+    await expect(
+      guardedSeasonWrite(
+        admin.firestore,
+        "season_51",
+        unchangedSince("season_51", "recompute-castaway-adp", "none"),
+        (tx) => tx.set(docRef, { season_id: "season_51", castaways: {} }),
+      ),
+    ).rejects.toThrow(/rerun/);
+    expect(await fsDoc("castaway_adp/season_51_all_drafts")).toEqual(
+      firestoreSeed["castaway_adp/season_51_all_drafts"],
+    );
   });
 });

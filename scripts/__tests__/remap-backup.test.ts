@@ -4,12 +4,14 @@ import * as os from "os";
 import * as path from "path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  BACKUP_MAX_AGE_HOURS,
   backupDirRefusal,
   backupRefusals,
   type BackupSource,
   createBackup,
   decodeFirestoreValue,
   encodeFirestoreValue,
+  liveDocumentHashes,
   verifyBackup,
 } from "../lib/remap-backup";
 
@@ -131,33 +133,54 @@ describe("createBackup and verifyBackup", () => {
 });
 
 describe("backupRefusals", () => {
-  it("binds the backup to the target, season, mapping, age and every current document", async () => {
+  it("binds the backup to the target, season, mapping, a fixed age, a private place and the content of every current document", async () => {
     const dir = freshDir();
     const now = new Date("2026-09-26T12:00:00.000Z");
     await createBackup(source(), scope, dir, { ...meta, now });
+    const live = await liveDocumentHashes(source(), scope);
+    expect([...live.keys()].sort()).toEqual([
+      "competitions/a",
+      "drafts/d",
+      "seasons/season_51",
+    ]);
     const base = {
       check: verifyBackup(dir),
+      dir,
       project: "survivor-fantasy-51c4b",
       databaseUrl: "https://survivor-fantasy-51c4b-default-rtdb.firebaseio.com",
       seasonNum: 51,
       mappingHash: "h",
       now: new Date("2026-09-26T13:00:00.000Z"),
-      maxAgeHours: 6,
-      freshPaths: ["competitions/a", "drafts/d"],
+      liveHashes: live,
     };
     expect(backupRefusals(base)).toEqual([]);
     expect(backupRefusals({ ...base, project: "x" })).toHaveLength(1);
     expect(backupRefusals({ ...base, mappingHash: "other" })).toHaveLength(1);
+    // The age limit is fixed, whatever --max-plan-age-hours says.
+    expect(BACKUP_MAX_AGE_HOURS).toBe(2);
     expect(
-      backupRefusals({ ...base, now: new Date("2026-09-27T13:00:00.000Z") }),
-    ).toEqual(["the backup is 25.0h old; take a new one"]);
+      backupRefusals({ ...base, now: new Date("2026-09-26T14:30:00.000Z") }),
+    ).toEqual(["the backup is 2.5h old (at most 2h); take a new one"]);
+    // A document created since the backup.
     expect(
       backupRefusals({
         ...base,
-        freshPaths: [...base.freshPaths, "competitions/new"],
+        liveHashes: new Map([...live, ["competitions/new", "x"]]),
       }),
     ).toEqual([
       "1 document(s) are not in the backup (created after it); take a new one",
     ]);
+    // Same paths, but one document's content moved on.
+    const drifted = new Map(live);
+    drifted.set("drafts/d", "0".repeat(64));
+    expect(backupRefusals({ ...base, liveHashes: drifted })).toEqual([
+      "1 document(s) changed since the backup; take a new one",
+    ]);
+    // A copy inside a git work tree is refused when used, not only when made.
+    expect(
+      backupRefusals({ ...base, dir: path.resolve(import.meta.dirname) }).join(
+        "; ",
+      ),
+    ).toMatch(/inside the git work tree/);
   });
 });

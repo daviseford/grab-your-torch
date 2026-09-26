@@ -187,9 +187,11 @@ against the emulators in `rules-tests/castaway-id-remap.emulator.test.ts`
   and the pool config second, so clients switch to survivoR's ids before
   anything else moves. If either does not apply, nothing after it is
   attempted, so picks are never remapped while clients still read the old
-  season document. A plan that does not lead with them is refused. Rollback
-  restores them last, and not at all if any document rolled back before
-  them did not restore.
+  season document. A plan that does not lead with them is refused. Before
+  touching anything, a write or rollback first checks that both still hold
+  one side of their change (untouched, or already done). If either has
+  moved, nothing is written. Rollback restores them last, and not at all if
+  any document rolled back before them did not restore.
 - **Reruns are safe.** A document that already holds a plan's target state
   and mark counts as done (`already`), not stale. So after resolving whatever
   stopped a write or a rollback, rerunning the same plan finishes the job.
@@ -254,8 +256,14 @@ code, so a scheduled or hand-run job cannot slip through during the window:
   `push-seasons` through `scripts/lib/push-season-collections.ts` (it writes
   result collections directly, so it has its own call to the same gate);
 - the ADP job;
-- `repair-pool-picks --write` and `seed-competition`, which refuse while a
-  cutover is in progress;
+- `create-pool --write` (with or without `--overwrite`), whose roster
+  follows the season push rule, and `repair-pool-picks --write`, which
+  refuses a pool id it cannot parse and holds during a cutover. Both check
+  the ledger in the same Firestore transaction as their writes;
+- the ADP job, whose writes each re-read the ledger in their own transaction
+  and refuse if the cutover state moved since the job planned (for instance
+  a cutover began while it computed);
+- `seed-competition`, which refuses while a cutover is in progress;
 - the legacy `migrate-to-castaway-id --upload`, which refuses once any
   cutover has begun or finished. The #279 decision (publishing Season
   51 results) is still held only by the disabled sync workflow. Once the
@@ -398,10 +406,20 @@ Record these in the cutover log, but never the data:
 Do not continue. Fix the cause and take a new backup into a new folder. The
 tool never reuses a non-empty folder.
 
-**Freshness.** The write accepts the backup only if it is under 6 hours old
-(`--max-plan-age-hours`) and holds every document the write's fresh read
-finds. If a document was created since the backup (a new draft, say), the
-write refuses: take a new backup and dry-run again.
+**Freshness is bound to content.** The write accepts the backup only if all
+of these hold:
+
+- It is at most 2 hours old. This limit is fixed and does not follow
+  `--max-plan-age-hours`.
+- It still sits in a private folder outside any git work tree. That is
+  checked again at the write, not only when the backup was made.
+- For every document in scope, the canonical sha256 of the document as it
+  is at the moment of the write equals the one in the manifest.
+
+So a document created, or merely edited, since the backup refuses the write:
+take a new backup and dry-run again. The remaining gap is the few seconds
+between that check and the census, and any write in it is caught by the
+per-document compare-and-set.
 
 ### Restoring production
 
@@ -437,7 +455,8 @@ cutover owner re-briefed by Hermes. Every item must be a yes:
    switch; see Residual risks.
 6. **Follow-up PR ready.** The rewritten season file PR is green and not
    merged.
-7. **Sync and cleanup held.** Both workflows are disabled (below).
+7. **Sync, cleanup and ADP held, and proven so.** All three are disabled,
+   and the checks in the controls show it, before the backup is taken.
 8. **Quiet time.** Nobody is known to be mid-draft, and nobody is editing
    Season 51 on the Admin page.
 
@@ -454,7 +473,18 @@ cutover owner re-briefed by Hermes. Every item must be a yes:
    - a census draft it deletes can no longer be rolled back, which stops a
      rollback before the season document;
    - a competition whose draft it deleted needs `--accept-born`.
-3. **ADP refreshes** are held in code while the cutover is in progress.
+3. **Hold the ADP refresh for the whole window**, even though its writes also
+   check the ledger in a transaction:
+   `gh variable set CASTAWAY_ADP_REFRESH --body disabled -R daviseford/grab-your-torch`.
+   Prove all three holds before the backup, and record the output:
+   - `gh workflow list -R daviseford/grab-your-torch --all` shows `Sync survivoR data` and `Cleanup abandoned drafts` as `disabled_manually`;
+   - `gh variable get CASTAWAY_ADP_REFRESH -R daviseford/grab-your-torch` prints `disabled`;
+   - `gh run list -R daviseford/grab-your-torch --status in_progress` shows none of the three running.
+
+   Restore the ADP refresh (`--body enabled`) and the cleanup only after
+   `--finalize` and validation. The sync stays disabled until #279 is
+   decided.
+
 4. **No Admin page edits** to Season 51 during the window. The Admin page
    writes episodes and results from whichever season document the browser
    holds.
@@ -466,16 +496,18 @@ cutover owner re-briefed by Hermes. Every item must be a yes:
 1. Prepare the follow-up code PR locally, with no production access:
    `yarn remap-castaway-ids 51 --rewrite-season-file`, then `yarn format`.
    CI must be green. Do not merge yet.
-2. **Backup, verify, drill** (see Backup). This is the first production
-   access.
-3. Dry run: `yarn remap-castaway-ids 51`. Review the plan file under
+2. Apply the controls (sync, cleanup and ADP held) and prove them with the
+   commands in Controls. These touch GitHub settings, not Firebase.
+3. **Backup, verify, drill** (see Backup). This is the first production
+   (Firebase) access.
+4. Dry run: `yarn remap-castaway-ids 51`. Review the plan file under
    `data/migration-output/castaway-id-remap/`.
-4. Go/no-go, then the controls.
-5. Begin the cutover:
+5. Go/no-go, then begin the cutover within 2 hours of the backup:
    `yarn remap-castaway-ids 51 --write --plan <file> --project survivor-fantasy-51c4b --with-backup $env:BACKUP_DIR`.
    Add `--ack-live-draft` only for a live draft knowingly accepted.
-   - The write refuses unless the backup verifies, is recent and holds every
-     current document.
+   - The write refuses unless the backup verifies, still sits in a private
+     folder, is at most 2 hours old, and matches the content of every current
+     document. Anything created or edited since means a new backup.
    - It then records the census, switches `seasons/season_51` first, and
      remaps every other document.
    - If the season document does not apply, nothing else is attempted:
@@ -492,8 +524,9 @@ cutover owner re-briefed by Hermes. Every item must be a yes:
    `yarn remap-castaway-ids 51 --finalize --project survivor-fantasy-51c4b`.
    Then run
    `yarn recompute-castaway-adp 51 --cohort all_drafts --write --project survivor-fantasy-51c4b`
-   and re-enable the draft cleanup. Leave the sync disabled until #279 is
-   decided.
+   Then restore the ADP refresh variable to `enabled` and re-enable the draft
+   cleanup, and confirm both with the commands in the controls. Leave the sync
+   disabled until #279 is decided.
 
 ## Recovery
 

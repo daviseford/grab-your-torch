@@ -32,6 +32,7 @@ import type {
   Season,
 } from "../src/types";
 import { getSeasonAirStatus } from "../src/utils/seasonAirStatus";
+import { commitPoolProvision } from "./lib/remap-guarded-writes.js";
 
 /* ------------------------------------------------------------------ *
  * The freeze instant (KTD9)
@@ -335,6 +336,13 @@ const loadSeasonPlayers = async (seasonNum: number): Promise<RosterInput[]> => {
   return players;
 };
 
+const loadSeasonLookup = async (seasonNum: number): Promise<unknown> => {
+  const mod: Record<string, unknown> = await import(
+    `../src/data/season_${seasonNum}/index.js`
+  );
+  return mod[`SEASON_${seasonNum}_CASTAWAY_LOOKUP`];
+};
+
 const describeWrites = (writes: PoolWrite[], freezeAt: Date): void => {
   const pool = writes.find((w) => w.kind === "pool")!.data;
 
@@ -435,11 +443,14 @@ async function main(): Promise<void> {
   });
   describeWrites(writes, freezeAt);
 
-  const batch = db.batch();
-  for (const item of writes) {
-    batch.set(db.doc(item.path), item.data);
-  }
-  await batch.commit();
+  // The roster carries castaway ids: the same rule as a season push, checked
+  // in the same transaction as the writes.
+  await commitPoolProvision(
+    db,
+    seasonNum,
+    writes,
+    await loadSeasonLookup(seasonNum),
+  );
 
   console.log(`Created ${writes.map((w) => w.path).join(" and ")}.`);
   console.log(

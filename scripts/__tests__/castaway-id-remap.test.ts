@@ -20,6 +20,11 @@ import {
   verifyMappingFile,
 } from "../lib/castaway-id-remap";
 import {
+  notDuringCutover,
+  seasonIdFromPoolId,
+  unchangedSince,
+} from "../lib/remap-guarded-writes";
+import {
   databaseUrlRefusal,
   emulatorTargetRefusal,
   ledgerStatusOf,
@@ -1282,6 +1287,74 @@ describe("prerequisites and explicit resolution", () => {
     expect(plan.problems).toMatchObject([
       { path: stale.path, reason: "born_not_new" },
     ]);
+  });
+});
+
+describe("pre-flight of the prerequisites", () => {
+  const season: RemapSourceDoc = {
+    kind: "season",
+    path: "seasons/season_51",
+    data: {
+      players: [{ castaway_id: "US0754", full_name: "Ana Sani" }],
+      castawayLookup: { US0754: { full_name: "Ana Sani", castaway: "Ana" } },
+    },
+  };
+  const pool: RemapSourceDoc = {
+    kind: "pool_config",
+    path: "pools/pool_season_51",
+    data: {
+      roster: [{ castaway_id: "US0754", full_name: "Ana Sani" }],
+      prop_bet_answers: ["US0754"],
+    },
+  };
+
+  it("applies nothing, not even the season document, when the pool config cannot move", async () => {
+    const all = [competition, season, pool];
+    const mem = memoryStore(all);
+    const plan = planDocumentRemap(all, opts);
+    mem.docs.get(pool.path)!.roster = [];
+    const result = await applyCastawayIdRemap(plan.changes, mem.store);
+    expect(result.applied).toEqual([]);
+    expect(result.stale).toEqual([pool.path]);
+    expect(result.skipped).toEqual([season.path, competition.path]);
+    expect(mem.docs.get(season.path)).toEqual(season.data);
+    expect(mem.ledger.size).toBe(0);
+  });
+
+  it("restores nothing when the season document no longer holds the plan's after", async () => {
+    const all = [competition, season, pool];
+    const mem = memoryStore(all);
+    const plan = planDocumentRemap(all, opts);
+    await applyCastawayIdRemap(plan.changes, mem.store);
+    mem.docs.get(season.path)!.players = [];
+    const result = await rollbackCastawayIdRemap(plan.changes, mem.store);
+    expect(result.applied).toEqual([]);
+    expect(result.stale).toEqual([season.path]);
+    expect(mem.ledger.get(competition.path)).toBe(HASH);
+  });
+});
+
+describe("guarded writes", () => {
+  it("reads a season from a pool id, and nothing from anything else", () => {
+    expect(seasonIdFromPoolId("pool_season_51")).toBe("season_51");
+    expect(seasonIdFromPoolId("pool_season_7")).toBe("season_7");
+    expect(seasonIdFromPoolId("pool_season_d")).toBeNull();
+    expect(seasonIdFromPoolId("pool_s51")).toBeNull();
+    expect(seasonIdFromPoolId("season_51")).toBeNull();
+  });
+
+  it("holds during a cutover, and for a long job whose state moved", () => {
+    const during = notDuringCutover("season_51", "job");
+    expect(during("none")).toBeNull();
+    expect(during("finalized")).toBeNull();
+    expect(during("in_progress")).toMatch(/in progress/);
+    const moved = unchangedSince("season_51", "job", "none");
+    expect(moved("none")).toBeNull();
+    expect(moved("in_progress")).toMatch(/rerun/);
+    expect(moved("finalized")).toMatch(/rerun/);
+    expect(
+      unchangedSince("season_51", "job", "in_progress")("in_progress"),
+    ).toMatch(/rerun/);
   });
 });
 

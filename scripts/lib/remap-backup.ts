@@ -156,11 +156,25 @@ export const enclosingGitTree = (dir: string): string | null => {
 };
 
 /** Why `dir` must not receive a backup, or null. */
-export const backupDirRefusal = (dir: string): string | null => {
+/**
+ * Why a backup folder is not somewhere private: relative, or inside a git
+ * work tree (where it could be committed). Checked when a backup is written
+ * and again whenever one is used.
+ */
+export const backupLocationRefusal = (dir: string): string | null => {
   if (!path.isAbsolute(dir)) return `${dir} is not an absolute path`;
   const tree = enclosingGitTree(dir);
-  if (tree)
-    return `${dir} is inside the git work tree ${tree}; use a private folder outside any repository`;
+  return tree
+    ? `${dir} is inside the git work tree ${tree}; use a private folder outside any repository`
+    : null;
+};
+
+/** How old a backup may be when the cutover begins, whatever else is set. */
+export const BACKUP_MAX_AGE_HOURS = 2;
+
+export const backupDirRefusal = (dir: string): string | null => {
+  const location = backupLocationRefusal(dir);
+  if (location) return location;
   if (fs.existsSync(dir) && fs.readdirSync(dir).length > 0) {
     return `${dir} is not empty; each backup gets a new folder`;
   }
@@ -368,18 +382,29 @@ export function verifyBackup(dir: string): BackupCheck {
  */
 export function backupRefusals(input: {
   check: BackupCheck;
+  dir: string;
   project: string;
   databaseUrl: string | null;
   seasonNum: number;
   mappingHash: string;
   now: Date;
-  maxAgeHours: number;
-  freshPaths: readonly string[];
+  /**
+   * The canonical hash of every document in the backup's scope as it is now
+   * (see `liveDocumentHashes`). Each must equal the backup's.
+   */
+  liveHashes: ReadonlyMap<string, string>;
 }): string[] {
   const { check } = input;
+  const location = backupLocationRefusal(input.dir);
   const m = check.manifest;
-  if (!m) return [`the backup is unreadable: ${check.errors.join("; ")}`];
+  if (!m) {
+    return [
+      ...(location ? [location] : []),
+      `the backup is unreadable: ${check.errors.join("; ")}`,
+    ];
+  }
   const out = check.errors.map((e) => `backup: ${e}`);
+  if (location) out.push(location);
   if (m.project_id !== input.project)
     out.push(`the backup is of ${m.project_id}, not ${input.project}`);
   if (m.database_url !== input.databaseUrl)
@@ -389,15 +414,44 @@ export function backupRefusals(input: {
   if (m.mapping_hash !== input.mappingHash)
     out.push("the backup was taken under another mapping");
   const age = (input.now.getTime() - Date.parse(m.created_at)) / 3.6e6;
-  if (!(age >= 0 && age <= input.maxAgeHours)) {
-    out.push(`the backup is ${age.toFixed(1)}h old; take a new one`);
+  if (!(age >= 0 && age <= BACKUP_MAX_AGE_HOURS)) {
+    out.push(
+      `the backup is ${age.toFixed(1)}h old (at most ${BACKUP_MAX_AGE_HOURS}h); take a new one`,
+    );
   }
-  const held = new Set(Object.keys(m.doc_hashes));
-  const missing = input.freshPaths.filter((p) => !held.has(p));
+  // Every document as it is now must be exactly what the backup holds, so a
+  // restore brings back the state the cutover started from.
+  const missing = [...input.liveHashes.keys()].filter(
+    (p) => !(p in m.doc_hashes),
+  );
+  const changed = [...input.liveHashes].filter(
+    ([p, h]) => p in m.doc_hashes && m.doc_hashes[p] !== h,
+  );
   if (missing.length > 0) {
     out.push(
       `${missing.length} document(s) are not in the backup (created after it); take a new one`,
     );
+  }
+  if (changed.length > 0) {
+    out.push(
+      `${changed.length} document(s) changed since the backup; take a new one`,
+    );
+  }
+  return out;
+}
+
+/** The canonical hash of every document in `scope` that exists now. */
+export async function liveDocumentHashes(
+  source: Pick<BackupSource, "readFirestore" | "readRtdb">,
+  scope: BackupScope,
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  for (const [p, d] of await source.readFirestore(scope.firestore)) {
+    if (d != null)
+      out.set(p, sha256(canonicalJson(encodeFirestoreValue(d, p))));
+  }
+  for (const [p, n] of await source.readRtdb(scope.rtdb)) {
+    if (n != null) out.set(p, sha256(canonicalJson(n)));
   }
   return out;
 }
@@ -421,6 +475,8 @@ export async function restoreBackupToEmulator(
   target: RestoreTarget,
   dir: string,
 ): Promise<{ firestore: number; rtdb: number; mismatches: string[] }> {
+  const location = backupLocationRefusal(dir);
+  if (location) throw new Error(`Refusing to restore: ${location}`);
   const aim = emulatorTargetRefusal(target.env, target.projectId);
   if (aim || !target.env.FIRESTORE_EMULATOR_HOST) {
     throw new Error(

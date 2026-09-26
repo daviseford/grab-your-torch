@@ -1399,6 +1399,39 @@ export type RemapApplyResult = {
 const isPrerequisite = (c: Pick<RemapDocChange, "kind">) =>
   c.kind === "season" || c.kind === "pool_config";
 
+/** Whether a document holds `fields` and the mark state of that side. */
+const holds = (
+  store: RemapStore,
+  change: RemapDocChange,
+  fields: Record<string, unknown>,
+  side: "before" | "after",
+) =>
+  store.compareAndSet(
+    change,
+    fields,
+    fields,
+    side === "after" || change.mode === "repair" ? "keep" : "absent",
+  );
+
+/**
+ * Before a write or rollback touches anything, every prerequisite in the
+ * plan must hold either side of its change (untouched, or already done).
+ * Otherwise one of them would fail partway, after other documents had moved,
+ * and clients would read one id set while documents hold the other.
+ */
+async function prerequisitesMovable(
+  changes: readonly RemapDocChange[],
+  store: RemapStore,
+): Promise<RemapDocChange | null> {
+  for (const change of changes.filter(isPrerequisite)) {
+    const ok =
+      (await holds(store, change, change.before, "before")) ||
+      (await holds(store, change, change.after, "after"));
+    if (!ok) return change;
+  }
+  return null;
+}
+
 /** Prerequisites must lead a plan; anything else is a tampered plan. */
 const assertPrerequisitesFirst = (changes: readonly RemapDocChange[]) => {
   const firstOther = changes.findIndex((c) => !isPrerequisite(c));
@@ -1434,6 +1467,14 @@ export async function applyCastawayIdRemap(
     already: [],
     skipped: [],
   };
+  const blocked = await prerequisitesMovable(changes, store);
+  if (blocked) {
+    result.stale.push(blocked.path);
+    result.skipped.push(
+      ...changes.map((c) => c.path).filter((p) => p !== blocked.path),
+    );
+    return result;
+  }
   for (const [i, change] of changes.entries()) {
     const ok = await store.compareAndSet(
       change,
@@ -1475,6 +1516,14 @@ export async function rollbackCastawayIdRemap(
     skipped: [],
   };
   const reversed = [...changes].reverse();
+  const blocked = await prerequisitesMovable(changes, store);
+  if (blocked) {
+    result.stale.push(blocked.path);
+    result.skipped.push(
+      ...reversed.map((c) => c.path).filter((p) => p !== blocked.path),
+    );
+    return result;
+  }
   for (const [i, change] of reversed.entries()) {
     if (isPrerequisite(change) && result.stale.length > 0) {
       result.skipped.push(...reversed.slice(i).map((c) => c.path));

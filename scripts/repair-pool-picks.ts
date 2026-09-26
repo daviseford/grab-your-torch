@@ -32,7 +32,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import type { CastawayId, Pool, PoolPick } from "../src/types";
-import { remapInProgressRefusal } from "./lib/remap-ledger.js";
+import { commitPoolRepairs } from "./lib/remap-guarded-writes.js";
 import {
   POOL_SNAPSHOT_DIR,
   POOL_SNAPSHOT_FILES,
@@ -550,26 +550,14 @@ async function main(): Promise<void> {
   }
 
   const { getFirestore, FieldValue } = await import("firebase-admin/firestore");
-  const db = getFirestore();
-  // Pool picks carry castaway ids: never rewrite them mid-cutover.
-  const seasonMatch = /^pool_(season_d+)$/.exec(poolId);
-  const held = seasonMatch
-    ? await remapInProgressRefusal(
-        db,
-        seasonMatch[1] as `season_${number}`,
-        "repair-pool-picks --write",
-      )
-    : null;
-  if (held) fail(held);
-  const batch = db.batch();
-
-  for (const repair of plan.repairs) {
-    batch.update(db.doc(`pools/${poolId}/entries/${repair.entry_id}`), {
-      picks: repair.picks,
-      updated_at: FieldValue.serverTimestamp(),
-    });
-  }
-  await batch.commit();
+  // Pool picks carry castaway ids: never rewrite them mid-cutover. The check
+  // runs in the same transaction as the writes.
+  await commitPoolRepairs(
+    getFirestore(),
+    poolId,
+    plan.repairs,
+    FieldValue.serverTimestamp(),
+  );
 
   console.log(
     `Repaired ${count(plan.repairs.length, "entry", "entries")} in pools/${poolId}.`,

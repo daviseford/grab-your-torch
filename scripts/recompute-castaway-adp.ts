@@ -49,6 +49,7 @@ import {
   castawayAdpDocId,
   planCastawayAdp,
 } from "../src/utils/castawayAdp";
+import { guardedSeasonWrite, unchangedSince } from "./lib/remap-guarded-writes";
 import {
   readRemapLedgerStatus,
   remapLedgerPath,
@@ -536,8 +537,21 @@ async function main(): Promise<void> {
   console.log("");
   const lines = await publishPlans(results, {
     read: async (docId) => (await collection.doc(docId).get()).data(),
+    // The job reads the ledger, then computes for a while. Each write re-reads
+    // it in the same transaction and refuses if the cutover state moved since
+    // (for instance a cutover began), so a stale summary never lands mid-cutover.
     write: async (docId, summary) => {
-      await collection.doc(docId).set(summary);
+      const seasonId = summary.season_id as Season["id"];
+      await guardedSeasonWrite(
+        firestore!,
+        seasonId,
+        unchangedSince(
+          seasonId,
+          "recompute-castaway-adp",
+          remapStatus.get(seasonId) ?? "none",
+        ),
+        (tx) => tx.set(collection.doc(docId), summary),
+      );
     },
   });
   for (const line of lines) console.log(line);
