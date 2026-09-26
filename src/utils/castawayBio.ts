@@ -5,9 +5,20 @@ import type { Player } from "../types";
 const details: Record<string, { name: string; gender: string }> =
   demographics.players;
 
+/**
+ * survivoR's name for a castaway whose curated bio is keyed by the name the
+ * app used before the Season 51 id remap (docs/castaway-id-mapping.md).
+ */
+const SEASON_51_BIO_ALIASES: Record<string, string> = {
+  "Angelica Loblack": "Jelly Loblack",
+};
+
 export function getCastawayBio(player: Player): CastawayBio {
   const curated =
-    player.season_num === 51 ? SEASON_51_BIOS[player.full_name] : undefined;
+    player.season_num === 51
+      ? (SEASON_51_BIOS[player.full_name] ??
+        SEASON_51_BIOS[SEASON_51_BIO_ALIASES[player.full_name] ?? ""])
+      : undefined;
   const demographic = details[player.castaway_id];
   // Historical IDs survive name changes. Season 51 IDs remain provisional.
   const gender =

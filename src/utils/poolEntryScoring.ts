@@ -149,8 +149,7 @@ export type PoolEntryScores =
   /**
    * Nothing has been scored yet. This is the NORMAL state of a pool between
    * provisioning and the premiere, and season 51 is in it today: its season
-   * document is not in Firestore, its episode list is empty and every result
-   * collection is empty. It renders as scoring not having started, never as a
+   * document's episode list is empty and every result collection is empty. It renders as scoring not having started, never as a
    * table of zeros, which is the same distinction KTD8 draws for the public
    * leaderboard: stale is not missing, and missing is not zero.
    */

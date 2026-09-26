@@ -9,6 +9,7 @@ import * as path from "path";
 
 // Import to trigger shared Firebase Admin initialization
 import "./admin.js";
+import { seasonPushGate } from "./remap-ledger.js";
 import { buildSeasonDocument } from "./season-document.js";
 
 interface FirestoreDocument {
@@ -123,6 +124,12 @@ export async function pushSeasonToFirestore(
   }
 
   const db = getFirestore();
+  // Every push path (sync, push-seasons, new-season) comes through here, so
+  // this is where a castaway id cutover holds them.
+  const refusal = await seasonPushGate(db, seasonNum, castawayLookup);
+  if (refusal) {
+    throw new Error(`Refusing to push ${seasonKey}: ${refusal}`);
+  }
   console.log(`\nUploading season ${seasonNum} data to Firestore...\n`);
 
   const batch = db.batch();

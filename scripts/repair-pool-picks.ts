@@ -1,19 +1,21 @@
 /**
  * Audit and repair stored pool picks against the pool configuration roster.
  *
- * Season 51's castaway ids (US0752 to US0772) are provisional predictions
- * made before survivoR published, so a remap is certain rather than
- * hypothetical. A remap is a manual code edit and it does not migrate entry
- * documents: the config roster is updated first, and every already-stored
- * entry then disagrees with it. Security rules validate a pick as a whole
+ * Season 51's castaway ids (US0752 to US0772) were provisional predictions,
+ * and survivoR published different ones. `yarn remap-castaway-ids` moves the
+ * roster and the entries together; this script is the independent check
+ * afterwards. A roster edited on its own would leave every already-stored
+ * entry disagreeing with it. Security rules validate a pick as a whole
  * `{castaway_id, full_name}` pair deep-equal to a roster element, so a
  * *client* can never submit a mismatched pair. Every mismatch this script
  * finds was therefore created by a later roster edit, which is exactly the
  * case R23 stores the name for.
  *
  * The pool config roster is authoritative for pool picks, and stays so. The
- * season document is not consulted here: Season 51 is deliberately not in
- * Firestore, so the config roster is the only cast source there is (KTD3).
+ * season document is not consulted here: the config roster is the pool's
+ * cast source (KTD3). For the Season 51 id remap, which moves the roster,
+ * the entries and the season document together, see
+ * `yarn remap-castaway-ids` and docs/castaway-id-mapping.md.
  * Repairs rewrite entries by name against the config; the season document
  * never rewrites a pick directly.
  *
@@ -30,6 +32,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import type { CastawayId, Pool, PoolPick } from "../src/types";
+import { commitPoolRepairs } from "./lib/remap-guarded-writes.js";
 import {
   POOL_SNAPSHOT_DIR,
   POOL_SNAPSHOT_FILES,
@@ -547,16 +550,14 @@ async function main(): Promise<void> {
   }
 
   const { getFirestore, FieldValue } = await import("firebase-admin/firestore");
-  const db = getFirestore();
-  const batch = db.batch();
-
-  for (const repair of plan.repairs) {
-    batch.update(db.doc(`pools/${poolId}/entries/${repair.entry_id}`), {
-      picks: repair.picks,
-      updated_at: FieldValue.serverTimestamp(),
-    });
-  }
-  await batch.commit();
+  // Pool picks carry castaway ids: never rewrite them mid-cutover. The check
+  // runs in the same transaction as the writes.
+  await commitPoolRepairs(
+    getFirestore(),
+    poolId,
+    plan.repairs,
+    FieldValue.serverTimestamp(),
+  );
 
   console.log(
     `Repaired ${count(plan.repairs.length, "entry", "entries")} in pools/${poolId}.`,

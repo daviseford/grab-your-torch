@@ -7,7 +7,11 @@ import * as path from "path";
 config({ override: true });
 
 const PROJECT_ROOT = path.resolve(import.meta.dirname, "..", "..");
-const keyPath = path.join(PROJECT_ROOT, "firebase-private-key.json");
+// FIREBASE_PRIVATE_KEY_PATH lets a git worktree use the main checkout's key
+// without copying it.
+const keyPath =
+  process.env.FIREBASE_PRIVATE_KEY_PATH ??
+  path.join(PROJECT_ROOT, "firebase-private-key.json");
 
 if (!fs.existsSync(keyPath)) {
   console.error(

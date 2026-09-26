@@ -30,6 +30,7 @@
     "e2e:auth-flows": "firebase emulators:exec --only auth,firestore,database --project demo-auth-flows \"playwright test --config playwright.auth-flows.config.ts\"",
     "seed-competition": "tsx scripts/seed-competition.ts",
     "create-pool": "tsx scripts/create-pool.ts",
+    "remap-castaway-ids": "tsx scripts/remap-castaway-ids.ts",
     "repair-pool-picks": "tsx scripts/repair-pool-picks.ts",
     "recompute-pool-standings": "tsx scripts/recompute-pool-standings.ts",
     "recompute-castaway-adp": "tsx scripts/recompute-castaway-adp.ts",

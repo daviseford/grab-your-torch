@@ -100,6 +100,27 @@ describe("validateSeasonData castaway identity guard", () => {
     ]);
   });
 
+  it("fails when an aliased castaway's id is reassigned to another committed castaway", () => {
+    // survivoR published "Jelly Loblack" as "Angelica Loblack" under a new id,
+    // and gave Jelly's provisional id to Devin Way.
+    const result = validateSeasonData(
+      playerData([
+        player("US0756", "Angelica Loblack"),
+        player("US0761", "Devin Way"),
+      ]),
+      emptyResults,
+      undefined,
+      [
+        { castawayId: "US0759", fullName: "Devin Way" },
+        { castawayId: "US0761", fullName: "Jelly Loblack" },
+      ],
+    );
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain(
+      'Castaway US0761 (Jelly Loblack) now names "Devin Way", who is committed as US0759',
+    );
+  });
+
   it("is skipped when there is no committed cast", () => {
     const result = validateSeasonData(
       playerData([player("US0752", "Aaliyah Puglia")]),

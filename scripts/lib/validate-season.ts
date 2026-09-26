@@ -68,6 +68,9 @@ export function validateSeasonData(
     const newIdByName = new Map(
       playerData.players.map((p) => [p.localName, p.castawayId]),
     );
+    const committedIdByName = new Map(
+      existingCastaways.map((c) => [c.fullName, c.castawayId]),
+    );
     for (const existing of existingCastaways) {
       const newName = newNameById.get(existing.castawayId);
       const newId = newIdByName.get(existing.fullName);
@@ -76,9 +79,20 @@ export function validateSeasonData(
           `Castaway ${existing.castawayId} (${existing.fullName}) is in the committed file but missing from the new data`,
         );
       } else if (newName !== existing.fullName) {
+        const newNameCommittedId = committedIdByName.get(newName);
         if (newId !== undefined && newId !== existing.castawayId) {
           errors.push(
             `Castaway "${existing.fullName}" changed id from ${existing.castawayId} to ${newId}`,
+          );
+        } else if (
+          newNameCommittedId !== undefined &&
+          newNameCommittedId !== existing.castawayId
+        ) {
+          // The committed name is gone (an alias, e.g. "Jelly Loblack" coming
+          // back as "Angelica Loblack"), and its id now belongs to a different
+          // committed castaway. That is a reassignment, not a rename.
+          errors.push(
+            `Castaway ${existing.castawayId} (${existing.fullName}) now names "${newName}", who is committed as ${newNameCommittedId}`,
           );
         } else {
           warnings.push(

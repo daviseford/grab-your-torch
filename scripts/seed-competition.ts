@@ -24,6 +24,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import * as fs from "fs";
 import * as path from "path";
 import { adminAuth } from "./lib/admin.js";
+import { remapInProgressRefusal } from "./lib/remap-ledger.js";
 
 const PROJECT_ROOT = path.resolve(import.meta.dirname, "..");
 const STATE_DIR = path.join(PROJECT_ROOT, "data", "sample-competitions");
@@ -285,6 +286,8 @@ async function seed(args: Args): Promise<void> {
   const runId = randomBytes(4).toString("hex");
   const competitionId = `competition_sample_${runId}` as const;
   const seasonId = `season_${args.season}` as const;
+  const held = await remapInProgressRefusal(db, seasonId, "seed-competition");
+  if (held) throw new Error(held);
 
   const { players, eliminations, episodes } = await loadSeason(args.season);
 

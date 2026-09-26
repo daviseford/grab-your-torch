@@ -1,0 +1,179 @@
+{
+  "season_num": 51,
+  "upstream": {
+    "repo": "doehm/survivoR",
+    "commit": "7336413e39c34c31231b9fa17281a47f731837e0",
+    "tables": ["dev/json/castaways.json", "dev/json/castaway_details.json"]
+  },
+  "mapping_hash": "fe734ff53fbaf8a3",
+  "mappings": [
+    {
+      "from": "US0752",
+      "to": "US0752",
+      "from_name": "Aaliyah Puglia",
+      "to_name": "Aaliyah Puglia",
+      "to_castaway": "Aaliyah",
+      "matched_by": "full_name"
+    },
+    {
+      "from": "US0753",
+      "to": "US0753",
+      "from_name": "Alexis Levine",
+      "to_name": "Alexis Levine",
+      "to_castaway": "Alexis",
+      "matched_by": "full_name"
+    },
+    {
+      "from": "US0754",
+      "to": "US0755",
+      "from_name": "Ana Sani",
+      "to_name": "Ana Sani",
+      "to_castaway": "Ana",
+      "matched_by": "full_name"
+    },
+    {
+      "from": "US0755",
+      "to": "US0757",
+      "from_name": "Brady Booker",
+      "to_name": "Brady Booker",
+      "to_castaway": "Brady",
+      "matched_by": "full_name"
+    },
+    {
+      "from": "US0756",
+      "to": "US0758",
+      "from_name": "Carter Krull",
+      "to_name": "Carter Krull",
+      "to_castaway": "Carter",
+      "matched_by": "full_name"
+    },
+    {
+      "from": "US0757",
+      "to": "US0759",
+      "from_name": "Cristian Chavez",
+      "to_name": "Cristian Chavez",
+      "to_castaway": "Cristian",
+      "matched_by": "full_name"
+    },
+    {
+      "from": "US0758",
+      "to": "US0760",
+      "from_name": "Danny Kilby",
+      "to_name": "Danny Kilby",
+      "to_castaway": "Danny",
+      "matched_by": "full_name"
+    },
+    {
+      "from": "US0759",
+      "to": "US0761",
+      "from_name": "Devin Way",
+      "to_name": "Devin Way",
+      "to_castaway": "Devin",
+      "matched_by": "full_name"
+    },
+    {
+      "from": "US0760",
+      "to": "US0762",
+      "from_name": "Eric Macksoud",
+      "to_name": "Eric Macksoud",
+      "to_castaway": "Eric",
+      "matched_by": "full_name"
+    },
+    {
+      "from": "US0761",
+      "to": "US0756",
+      "from_name": "Jelly Loblack",
+      "to_name": "Angelica Loblack",
+      "to_castaway": "Jelly",
+      "matched_by": "short_name_and_surname"
+    },
+    {
+      "from": "US0762",
+      "to": "US0763",
+      "from_name": "Jenna Doore",
+      "to_name": "Jenna Doore",
+      "to_castaway": "Jenna",
+      "matched_by": "full_name"
+    },
+    {
+      "from": "US0763",
+      "to": "US0764",
+      "from_name": "Kristin Flickinger",
+      "to_name": "Kristin Flickinger",
+      "to_castaway": "Kristin",
+      "matched_by": "full_name"
+    },
+    {
+      "from": "US0764",
+      "to": "US0765",
+      "from_name": "Lewis Kelly",
+      "to_name": "Lewis Kelly",
+      "to_castaway": "Lewis",
+      "matched_by": "full_name"
+    },
+    {
+      "from": "US0765",
+      "to": "US0766",
+      "from_name": "Linnea Capobianco",
+      "to_name": "Linnea Capobianco",
+      "to_castaway": "Linnea",
+      "matched_by": "full_name"
+    },
+    {
+      "from": "US0766",
+      "to": "US0767",
+      "from_name": "Maggie Nestor",
+      "to_name": "Maggie Nestor",
+      "to_castaway": "Maggie",
+      "matched_by": "full_name"
+    },
+    {
+      "from": "US0767",
+      "to": "US0768",
+      "from_name": "Mike Pinsky",
+      "to_name": "Mike Pinsky",
+      "to_castaway": "Mike",
+      "matched_by": "full_name"
+    },
+    {
+      "from": "US0768",
+      "to": "US0769",
+      "from_name": "Ori Jean-Charles",
+      "to_name": "Ori Jean-Charles",
+      "to_castaway": "Ori",
+      "matched_by": "full_name"
+    },
+    {
+      "from": "US0769",
+      "to": "US0770",
+      "from_name": "Patt Cannaday",
+      "to_name": "Patt Cannaday",
+      "to_castaway": "Patt",
+      "matched_by": "full_name"
+    },
+    {
+      "from": "US0770",
+      "to": "US0771",
+      "from_name": "Rob Antonson",
+      "to_name": "Rob Antonson",
+      "to_castaway": "Rob",
+      "matched_by": "full_name"
+    },
+    {
+      "from": "US0771",
+      "to": "US0772",
+      "from_name": "Sharonda Cox",
+      "to_name": "Sharonda Cox",
+      "to_castaway": "Sharonda",
+      "matched_by": "full_name"
+    },
+    {
+      "from": "US0772",
+      "to": "US0754",
+      "from_name": "Thien An Nguyen",
+      "to_name": "Thien An Nguyen",
+      "to_castaway": "Thien An",
+      "matched_by": "full_name"
+    }
+  ]
+}
