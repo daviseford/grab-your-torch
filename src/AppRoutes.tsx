@@ -23,6 +23,7 @@ import { Home } from "./components/Home/Home";
 import { useBugContextNode } from "./components/Layout/bugContext";
 import { BugContextProvider } from "./components/Layout/BugContextProvider";
 import { RouteLoading } from "./components/Layout/RouteLoading";
+import { ScoringDelayBanner } from "./components/Layout/ScoringDelayBanner";
 import { Navbar } from "./components/Navbar";
 import { NotFound } from "./components/NotFound";
 import { RouteErrorBoundary } from "./components/RouteErrorBoundary/RouteErrorBoundary";
@@ -202,6 +203,7 @@ export const AppRoutes = () => {
               </AppShell.Header>
 
               <AppShell.Main id="main-content" className={classes.main}>
+                <ScoringDelayBanner />
                 <RouteErrorBoundary>
                   <Suspense fallback={<RouteLoading />}>
                     <Routes>
