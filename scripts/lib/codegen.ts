@@ -151,7 +151,8 @@ function escapeString(s: string): string {
   return `'${s.replace(/'/g, "\\'")}'`;
 }
 
-interface MergedPlayer {
+/** One castaway as written to the cast block of a season file. */
+export interface MergedPlayer {
   castawayId: string;
   fullName: string;
   castawayShortName: string;
@@ -162,6 +163,8 @@ interface MergedPlayer {
   previousSeasons?: number[];
   description?: string;
   nickname?: string;
+  gender?: string;
+  bio?: string;
 }
 
 function formatPlayerCall(
@@ -198,19 +201,24 @@ function formatPlayerCall(
   if (player.nickname) {
     lines.push(`    nickname: ${escapeString(player.nickname)},`);
   }
+  if (player.gender) {
+    lines.push(`    gender: ${escapeString(player.gender)},`);
+  }
+  if (player.bio) {
+    lines.push(`    bio: ${escapeString(player.bio)},`);
+  }
 
   return `  buildPlayer({\n${lines.join("\n")}\n  })`;
 }
 
 /**
- * Generate the player section of a season data file.
+ * Merge scraped castaways with the images of an existing file into the
+ * castaways the cast block is written from.
  */
-export function generatePlayerSection(
-  seasonNum: number,
+export function mergeScrapedPlayers(
   scrapedPlayers: ScrapedPlayer[],
   existingPlayers: ExistingPlayerData[],
-  imgConstant: { constLine: string; prefix: string } | null,
-): string {
+): MergedPlayer[] {
   // Build a map of existing players for img lookup
   const existingMap = new Map(existingPlayers.map((p) => [p.name, p]));
 
@@ -248,7 +256,34 @@ export function generatePlayerSection(
     });
   }
 
-  // Build the output
+  return mergedPlayers;
+}
+
+/**
+ * Generate the player section of a season data file.
+ */
+export function generatePlayerSection(
+  seasonNum: number,
+  scrapedPlayers: ScrapedPlayer[],
+  existingPlayers: ExistingPlayerData[],
+  imgConstant: { constLine: string; prefix: string } | null,
+): string {
+  return renderPlayerSection(
+    seasonNum,
+    mergeScrapedPlayers(scrapedPlayers, existingPlayers),
+    imgConstant,
+  );
+}
+
+/**
+ * Render the player section (CastawayIds, types, buildPlayer, lookup and
+ * SEASON_XX_PLAYERS) for castaways that are already merged.
+ */
+export function renderPlayerSection(
+  seasonNum: number,
+  mergedPlayers: MergedPlayer[],
+  imgConstant: { constLine: string; prefix: string } | null,
+): string {
   const lines: string[] = [];
 
   // Castaway IDs array
@@ -655,27 +690,32 @@ export function generateFullSeasonFile(
   resultsData: ScrapeResultsOutput,
   seasonNum: number,
   existingFilePath?: string,
+  options: {
+    /**
+     * Castaways to write as they are, instead of merging `playerData` with
+     * the images of `existingFilePath`. The sync passes the committed cast
+     * here so curated fields survive (see curated-cast.ts).
+     */
+    cast?: MergedPlayer[];
+    imgConstant?: { prefix: string; constLine: string } | null;
+  } = {},
 ): string {
   // Preserve existing player img fields if the file already exists
   let existingPlayers: ExistingPlayerData[] = [];
-  let imgConstant: { prefix: string; constLine: string } | null = null;
+  let imgConstant: { prefix: string; constLine: string } | null =
+    options.imgConstant ?? null;
   if (existingFilePath && fs.existsSync(existingFilePath)) {
     const existingContent = fs.readFileSync(existingFilePath, "utf-8");
     existingPlayers = extractExistingPlayers(existingContent);
     imgConstant = detectImgConstant(existingContent);
   }
 
-  const playerSection = generatePlayerSection(
-    seasonNum,
-    playerData.players,
-    existingPlayers,
-    imgConstant,
-  );
+  const cast =
+    options.cast ?? mergeScrapedPlayers(playerData.players, existingPlayers);
+  const playerSection = renderPlayerSection(seasonNum, cast, imgConstant);
 
-  // Extract castaway IDs for cross-referencing in gameplay sections
-  const castawayIds = playerData.players
-    .filter((p) => p.castawayId)
-    .map((p) => p.castawayId);
+  // Castaway IDs for cross-referencing in gameplay sections
+  const castawayIds = cast.map((p) => p.castawayId);
 
   const episodeSection = generateEpisodeSection(
     resultsData.episodes,

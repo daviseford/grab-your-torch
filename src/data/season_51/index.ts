@@ -3,8 +3,11 @@
 // `yarn remap-castaway-ids 51 --rewrite-season-file`, mapping fe734ff53fbaf8a3.
 // See docs/castaway-id-mapping.md.
 //
-// Episode, challenge, elimination, event and vote history exports below are
-// the unedited transformer output for doehm/survivoR@7336413 (through episode 1).
+// The cast block is curated. The daily survivoR sync (scripts/sync-season.ts)
+// keeps every committed cast field and only fills fields a castaway lacks; see
+// scripts/lib/curated-cast.ts. The episode, challenge, elimination, event and
+// vote history exports are regenerated from survivoR on every sync, so edit
+// survivoR's data or the transformer rather than these exports.
 import {
   CastawayLookup,
   Challenge,
@@ -294,6 +297,7 @@ export const SEASON_51_PLAYERS = [
     age: 24,
     profession: "Medical Student",
     hometown: "Fort Worth, Texas",
+    nickname: "Thien An",
   }),
 ] satisfies Player<CastawayIdType, SeasonNumber>[];
 

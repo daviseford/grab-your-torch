@@ -12,10 +12,9 @@ import * as fs from "fs";
 import * as path from "path";
 import {
   extractExistingCastawayLookup,
-  extractExistingPlayers,
-  generateFullSeasonFile,
   registerSeason,
 } from "./lib/codegen.js";
+import { regenerateSeasonFile } from "./lib/curated-cast.js";
 import { pushSeasonToFirestore } from "./lib/firebase-push.js";
 import { fetchSeasonData, fetchTable } from "./lib/survivor-client.js";
 import {
@@ -134,30 +133,23 @@ async function main(): Promise<void> {
     ? fs.readFileSync(seasonFilePath, "utf-8")
     : undefined;
 
-  // Preserve existing player images from the current file
-  if (existingContent) {
-    const existingPlayers = extractExistingPlayers(existingContent);
-    const imgMap = new Map(
-      existingPlayers.filter((p) => p.img).map((p) => [p.name, p.img]),
-    );
-
-    if (imgMap.size > 0) {
-      console.log(`  Preserving ${imgMap.size} existing player images.`);
-      for (const player of playerData.players) {
-        const existingImg = imgMap.get(player.localName);
-        if (!player.imageUrl && existingImg) {
-          player.imageUrl = existingImg;
-        }
-      }
-    }
-  }
-
+  // Keep the committed cast (images, professions, bios, nicknames and any
+  // hand correction) and regenerate only the results; see lib/curated-cast.ts.
   console.log("  Generating season file...");
-  const generatedContent = generateFullSeasonFile(
+  const { content: generatedContent, keptDifferences } = regenerateSeasonFile(
+    existingContent,
     playerData,
     resultsData,
     seasonNum,
   );
+  if (keptDifferences.length > 0) {
+    console.log(
+      `  Kept ${keptDifferences.length} committed cast values survivoR disagrees with:`,
+    );
+    for (const note of keptDifferences) {
+      console.log(`    - ${note}`);
+    }
+  }
 
   if (!isNewSeason && existingContent !== undefined) {
     if (existingContent === generatedContent) {
@@ -261,7 +253,7 @@ async function main(): Promise<void> {
       events: resultsData.events.length,
       voteHistory: resultsData.voteHistory.length,
     },
-    warnings: validation.warnings,
+    warnings: [...validation.warnings, ...keptDifferences],
   };
   writeResult(RESULT_PATH, result);
 

@@ -61,6 +61,8 @@ A GitHub Action (`.github/workflows/sync-survivor-data.yml`) runs daily at 14:00
 3. Creates or updates a PR with the changes
 4. Pushes updated data to Firestore
 
+The sync regenerates only the results exports (episodes, challenges, eliminations, events and vote history). It keeps every field of a castaway already in the committed file, such as images, professions, bios, nicknames and hand-corrected ages or hometowns, and fills from survivoR only the fields a castaway lacks. When survivoR disagrees with a committed value, the committed value stays and the sync logs the difference and adds it to the `warnings` in `sync-result.json`. New castaways are written from survivoR. If the cast block has a field or value the sync cannot carry over, the sync fails rather than drop it. The rules live in `scripts/lib/curated-cast.ts`.
+
 This means active seasons are kept in sync automatically — no manual updates needed during a season's airing. See [CI Auto-Sync Pipeline — How It Works, How to Test It, and Lessons Learned](solutions/workflow-issues/ci-auto-sync-pipeline-validation-and-formatting-fix.md) for architecture details, testing strategies, and known gotchas.
 
 ## What Gets Generated
@@ -81,6 +83,8 @@ To regenerate a season with updated survivoR data:
 ```bash
 yarn new-season <N> --force
 ```
+
+Unlike the daily sync, this rebuilds the cast from survivoR and the wiki, so hand edits to the cast (professions, nicknames, corrected ages or hometowns) are replaced. Review the cast diff before committing.
 
 ## Data Gaps
 
