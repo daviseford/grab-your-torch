@@ -14,17 +14,25 @@ export type PoolEntryForRanking = {
 };
 
 /**
- * One row of the public leaderboard. Carries handle, total points and rank
- * (R17); no castaway names, no elimination state, no per-castaway breakdown.
+ * One row of the public leaderboard. Carries handle, rank and three point
+ * figures; no castaway names, no elimination state, no per-castaway breakdown,
+ * and nothing about which prop bets paid out.
  */
 export type PoolStandingRow = {
   uid: string;
   handle: string;
   rank: number;
-  /** Sum of the entrant's picks across every scored episode. */
+  /** `castaway_points + prop_bet_points`. What the leaderboard ranks on. */
   total_points: number;
-  /** Tiebreak only. Never folded into `total_points` (R13). */
+  /** Sum of the entrant's picks across every scored episode. */
+  castaway_points: number;
+  /**
+   * Points from prop bets that have definitively settled in the entrant's
+   * favour. Already counted in `total_points`; never add it again.
+   */
   prop_bet_points: number;
+  /** How many entrants share this total, this one included. */
+  tie_count: number;
 };
 
 const sumPicks = (
@@ -45,17 +53,22 @@ const sumPicks = (
  * The single ranking implementation, shared by the recompute job (Node) and
  * the client, so both agree by construction rather than by assertion (KTD11).
  *
- * Ordering: total points descending, then prop bet points descending as the
- * tiebreak (R13), then uid ascending. The uid tiebreak makes the order total,
- * so two runs over the same inputs emit the same rows in the same order
- * whatever order the entries arrived in (R14). Comparison is by code unit,
- * not locale, so Node and the browser cannot disagree.
+ * Total: castaway points plus awarded prop bet points. Prop bet points arrive
+ * already computed and count only definitively correct bets, so a pending bet
+ * adds nothing. This function never scores anything itself.
  *
- * Ranks are shared: entrants level on both points and prop bets get the same
- * rank, and the next distinct entrant's rank skips accordingly.
+ * Ordering: total descending, then prop bet points descending, then uid
+ * ascending. The last two only order rows inside a tie; they never change a
+ * rank. The uid makes the order total, so two runs over the same inputs emit
+ * the same rows in the same order whatever order the entries arrived in
+ * (R14). Comparison is by code unit, not locale, so Node and the browser
+ * cannot disagree.
  *
- * Prop bet points are passed in, already computed. This function never scores
- * anything itself.
+ * Ranks are dense and follow the total: entrants on the same total share a
+ * rank, and the next total takes the next number (1, 2, 2, 3). The leaderboard
+ * shows that tie as "T-2" on every row (`groupPoolStandingsRows`). Each row
+ * also carries `tie_count`, counted over the whole field, so a tie that runs
+ * past the summary document is still labelled on the summary's last row.
  *
  * Pure: no React, no Firebase, no browser globals, and no ownership or
  * trade helpers.
@@ -65,12 +78,17 @@ export const rankPoolEntries = (
   pointsByCastaway: SeasonPointsByCastaway,
   propBetPointsByUid: Record<string, number>,
 ): PoolStandingRow[] => {
-  const scored = entries.map((entry) => ({
-    uid: entry.uid,
-    handle: entry.handle,
-    total_points: sumPicks(entry, pointsByCastaway),
-    prop_bet_points: propBetPointsByUid[entry.uid] || 0,
-  }));
+  const scored = entries.map((entry) => {
+    const castawayPoints = sumPicks(entry, pointsByCastaway);
+    const propBetPoints = propBetPointsByUid[entry.uid] || 0;
+    return {
+      uid: entry.uid,
+      handle: entry.handle,
+      total_points: castawayPoints + propBetPoints,
+      castaway_points: castawayPoints,
+      prop_bet_points: propBetPoints,
+    };
+  });
 
   scored.sort((a, b) => {
     if (a.total_points !== b.total_points) {
@@ -83,18 +101,17 @@ export const rankPoolEntries = (
     return a.uid < b.uid ? -1 : 1;
   });
 
+  const tieCounts = new Map<number, number>();
+  for (const row of scored) {
+    tieCounts.set(row.total_points, (tieCounts.get(row.total_points) ?? 0) + 1);
+  }
+
   let rank = 0;
   return scored.map((row, index) => {
     const previous = scored[index - 1];
-    const tiedWithPrevious =
-      previous !== undefined &&
-      previous.total_points === row.total_points &&
-      previous.prop_bet_points === row.prop_bet_points;
-
-    if (!tiedWithPrevious) {
-      rank = index + 1;
+    if (previous === undefined || previous.total_points !== row.total_points) {
+      rank += 1;
     }
-
-    return { ...row, rank };
+    return { ...row, rank, tie_count: tieCounts.get(row.total_points) ?? 1 };
   });
 };

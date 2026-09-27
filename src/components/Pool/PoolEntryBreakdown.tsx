@@ -69,7 +69,7 @@ export const PoolEntryBreakdown = ({
     <div className={classes.root}>
       <header className={classes.header}>
         <h3 className={classes.label}>
-          Your points through episode {lastEpisode.order}
+          Your castaway points through episode {lastEpisode.order}
         </h3>
         <p className={classes.total}>
           {formatPoints(scores.total)}{" "}
@@ -159,11 +159,6 @@ export const PoolEntryBreakdown = ({
           </tfoot>
         </table>
       </div>
-
-      <p className={classes.note}>
-        This is yours alone. The public leaderboard shows handles, totals and
-        positions only.
-      </p>
     </div>
   );
 };

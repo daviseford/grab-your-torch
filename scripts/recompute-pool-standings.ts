@@ -432,7 +432,8 @@ async function main(): Promise<void> {
     for (const row of plan.episodes.at(-1)!.summary.rows.slice(0, 10)) {
       console.log(
         `  ${String(row.rank).padStart(3)}. ${row.handle.padEnd(24)} ` +
-          `${row.total} (prop bets ${row.prop_bet_points})`,
+          `${row.total} (castaways ${row.castaway_points}, ` +
+          `prop bets ${row.prop_bet_points})`,
       );
     }
     console.log("");

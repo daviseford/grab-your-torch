@@ -12,8 +12,11 @@ import classes from "./PoolLeaderboard.module.css";
 /**
  * The public leaderboard (U8).
  *
- * Handles, totals and ranks. Nothing else (R17): no castaway, no elimination
- * state, no per-castaway breakdown. That bound is applied upstream by
+ * Handles, ranks, and three point figures: the total, and the castaway points
+ * and awarded prop bet points it is made of. The two breakdown columns are
+ * already inside the total and are never added to it. Nothing else: no
+ * castaway, no elimination state, no per-castaway breakdown, and no bet name,
+ * answer or pending bet behind the prop bet number. That bound is applied upstream by
  * `projectPoolStandingsRows`, which is why this component receives a
  * `PoolStandingsView` rather than raw documents. There is no prop through
  * which a castaway name could arrive.
@@ -29,12 +32,9 @@ import classes from "./PoolLeaderboard.module.css";
  *  - the standings, with their as-of stamp;
  *  - the standings plus a note, when the stamp says they are behind.
  *
- * SHARED RANKS ARE THE ORDINARY CASE (KD4). Prop bets break ties and they
- * award points only when definitively correct, so most of the field shares
- * rank one in the first weeks. A column of identical numbers reads as a
- * rendering fault, so a run of tied entrants shows its position once and the
- * rest of the run is marked as tied, with the position still announced to a
- * screen reader on every row.
+ * SHARED RANKS ARE THE ORDINARY CASE (KD4). Entrants on the same total share
+ * a position, every row of a tie shows it as "T-5", and positions are dense:
+ * the total after a tie is 6. The rules live on `groupPoolStandingsRows`.
  *
  * NOT UNIT TESTED, deliberately: this repo has no React Testing Library and no
  * `.test.tsx` files. Everything it decides is a pure function tested in
@@ -97,6 +97,15 @@ export const PoolLeaderboard = ({
   const grouped = compact ? allGrouped.slice(0, 5) : allGrouped;
   const shown = grouped.length;
   const hidden = Math.max(view.totalRows - shown, 0);
+  // The compact homepage preview keeps to the total. Elsewhere the breakdown
+  // shows once a row has one; an empty column would read as everyone scoring
+  // nothing.
+  const showBreakdown =
+    !compact &&
+    grouped.some(
+      ({ row }) =>
+        row.castawayPoints !== undefined || row.propBetPoints !== undefined,
+    );
 
   return (
     <section
@@ -122,7 +131,11 @@ export const PoolLeaderboard = ({
       <div className={classes.tableWrap}>
         <table className={classes.table}>
           <caption className={classes.caption}>
-            {asOf.label}. Handles, total points and position.
+            {`${asOf.label}. ${
+              showBreakdown
+                ? "Handles, position, total points, and the castaway points and prop bet points that make up each total."
+                : "Handles, total points and position."
+            }`}
           </caption>
           <thead>
             <tr>
@@ -131,37 +144,80 @@ export const PoolLeaderboard = ({
               </th>
               <th scope="col">Handle</th>
               <th scope="col" className={classes.pointsCol}>
-                Points
+                {showBreakdown ? "Total" : "Points"}
               </th>
+              {showBreakdown && (
+                <>
+                  <th
+                    scope="col"
+                    className={`${classes.pointsCol} ${classes.breakdownCol}`}
+                  >
+                    <span className={classes.labelFull}>Castaways</span>
+                    <span className={classes.labelShort} aria-hidden="true">
+                      Cast
+                    </span>
+                    <span className={classes.labelShortSr}>Castaways</span>
+                  </th>
+                  <th
+                    scope="col"
+                    className={`${classes.pointsCol} ${classes.breakdownCol}`}
+                  >
+                    <span className={classes.labelFull}>Prop bets</span>
+                    <span className={classes.labelShort} aria-hidden="true">
+                      Props
+                    </span>
+                    <span className={classes.labelShortSr}>Prop bets</span>
+                  </th>
+                </>
+              )}
             </tr>
           </thead>
           <tbody>
-            {grouped.map(({ row, showRank, tiedCount }, index) => (
-              <tr
-                // Handles are not unique and rows carry no id, so position in
-                // the published order is the only stable key there is. That
-                // order is deterministic by construction (R14).
-                key={`${index}-${row.handle}`}
-                className={showRank ? classes.groupStart : classes.tiedRow}
-              >
-                <td className={classes.rankCol}>
-                  {showRank ? (
-                    <span className={classes.rank}>{row.rank}</span>
-                  ) : (
-                    <span className={classes.tiedMark} aria-hidden="true" />
-                  )}
-                  {tiedCount > 1 && (
-                    <span className={classes.srOnly}>
-                      {` Rank ${row.rank}, tied with ${tiedCount - 1} ${
-                        tiedCount === 2 ? "other entrant" : "other entrants"
-                      }.`}
+            {grouped.map(
+              ({ row, showRank, tiedCount, position, label }, index) => (
+                <tr
+                  // Handles are not unique and rows carry no id, so position in
+                  // the published order is the only stable key there is. That
+                  // order is deterministic by construction (R14).
+                  key={`${index}-${row.handle}`}
+                  className={showRank ? classes.groupStart : classes.tiedRow}
+                >
+                  <td className={classes.rankCol}>
+                    <span
+                      className={classes.rank}
+                      aria-hidden={tiedCount > 1 ? "true" : undefined}
+                    >
+                      {label}
                     </span>
+                    {tiedCount > 1 && (
+                      <span className={classes.srOnly}>
+                        {`Rank ${position}, tied with ${tiedCount - 1} ${
+                          tiedCount === 2 ? "other entrant" : "other entrants"
+                        }.`}
+                      </span>
+                    )}
+                  </td>
+                  <td className={classes.handle}>{row.handle}</td>
+                  <td className={`${classes.pointsCol} ${classes.totalCell}`}>
+                    {row.total}
+                  </td>
+                  {showBreakdown && (
+                    <>
+                      <td
+                        className={`${classes.pointsCol} ${classes.breakdownCol}`}
+                      >
+                        {row.castawayPoints ?? "—"}
+                      </td>
+                      <td
+                        className={`${classes.pointsCol} ${classes.breakdownCol}`}
+                      >
+                        {row.propBetPoints ?? "—"}
+                      </td>
+                    </>
                   )}
-                </td>
-                <td className={classes.handle}>{row.handle}</td>
-                <td className={classes.pointsCol}>{row.total}</td>
-              </tr>
-            ))}
+                </tr>
+              ),
+            )}
           </tbody>
         </table>
       </div>

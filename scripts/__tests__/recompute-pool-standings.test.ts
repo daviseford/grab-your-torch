@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { PropBetQuestionKeys } from "../../src/data/propbets";
+import {
+  PropBetQuestionKeys,
+  PropBetsQuestions,
+} from "../../src/data/propbets";
 import { SCORING_REVISION } from "../../src/data/scoringRevision.generated";
 import type {
   CastawayId,
@@ -353,7 +356,7 @@ describe("planRecompute scoring", () => {
  * ------------------------------------------------------------------ */
 
 describe("prop bets", () => {
-  it("breaks a tie without changing the total", () => {
+  it("adds awarded prop bet points to the published total and ranks on it", () => {
     const plan = planRecompute(
       input({
         entries: [
@@ -365,12 +368,121 @@ describe("prop bets", () => {
       }),
     );
 
+    const firstVote = PropBetsQuestions.propbet_first_vote.point_value;
     const rows = plan.episodes.at(-1)!.summary.rows;
-    expect(rows.map((r) => r.handle)).toEqual(["zulu", "alpha"]);
-    expect(rows.map((r) => r.total)).toEqual([10, 10]);
-    expect(rows[0].prop_bet_points).toBeGreaterThan(0);
-    expect(rows[0].rank).toBe(1);
-    expect(rows[1].rank).toBe(2);
+    expect(
+      rows.map((r) => [
+        r.handle,
+        r.total,
+        r.castaway_points,
+        r.prop_bet_points,
+        r.rank,
+      ]),
+    ).toEqual([
+      ["zulu", 10 + firstVote, 10, firstVote, 1],
+      ["alpha", 10, 10, 0, 2],
+    ]);
+  });
+
+  it("publishes a bet's points from the episode it settles in", () => {
+    // Dev is the first boot in episode 1, so a correct first-vote answer
+    // settles immediately and every standings document carries it.
+    const plan = planRecompute(
+      input({
+        entries: [
+          entry("uid_a", "alpha", [ADA, BEN], {
+            propbet_first_vote: DEV.castaway_id,
+          }),
+        ],
+      }),
+    );
+
+    const firstVote = PropBetsQuestions.propbet_first_vote.point_value;
+    // alpha's castaway points read 3, 7, 10 (see HAND_DATA).
+    expect(
+      plan.episodes.map((ep) => {
+        const { total, castaway_points, prop_bet_points } = ep.summary.rows[0];
+        return [total, castaway_points, prop_bet_points];
+      }),
+    ).toEqual([
+      [3 + firstVote, 3, firstVote],
+      [7 + firstVote, 7, firstVote],
+      [10 + firstVote, 10, firstVote],
+    ]);
+  });
+
+  it("publishes nothing for a bet that has not settled or settled against the entrant", () => {
+    // No winner yet, Ada is not the first boot, and no medevac has happened,
+    // so none of these can award anything, and "leading" is not settled.
+    const plan = planRecompute(
+      input({
+        entries: [
+          entry("uid_a", "alpha", [ADA, BEN], {
+            propbet_winner: ADA.castaway_id,
+            propbet_ftc: ADA.castaway_id,
+            propbet_immunities: ADA.castaway_id,
+            propbet_first_vote: ADA.castaway_id,
+            propbet_medical_evac: "Yes",
+          }),
+        ],
+      }),
+    );
+
+    expect(
+      plan.episodes.map((ep) => {
+        const { total, castaway_points, prop_bet_points } = ep.summary.rows[0];
+        return [total, castaway_points, prop_bet_points];
+      }),
+    ).toEqual([
+      [3, 3, 0],
+      [7, 7, 0],
+      [10, 10, 0],
+    ]);
+  });
+
+  it("publishes an entrant's prop bet points as one number and nothing about the bets", () => {
+    const plan = planRecompute(
+      input({
+        entries: [
+          entry("uid_a", "alpha", [ADA, BEN], {
+            propbet_first_vote: DEV.castaway_id,
+            propbet_winner: ADA.castaway_id,
+          }),
+        ],
+      }),
+    );
+
+    const published = plan.episodes.at(-1)!.summary.rows[0];
+    expect(Object.keys(published).sort()).toEqual([
+      "castaway_points",
+      "handle",
+      "prop_bet_points",
+      "rank",
+      "tie_count",
+      "total",
+    ]);
+    const serialized = JSON.stringify(plan.episodes);
+    for (const leak of ["propbet_", "first_vote", "winner", "status"]) {
+      expect(serialized).not.toContain(leak);
+    }
+  });
+
+  it("counts a tie over the whole field, past the end of the summary", () => {
+    // 51 identical entries: the summary holds 50 of them and the 51st lives
+    // on a page, so only the published count tells the summary it is a tie.
+    const plan = planRecompute(
+      input({
+        entries: Array.from({ length: 51 }, (_, i) =>
+          entry(`uid_${String(i).padStart(2, "0")}`, `e${i}`, [ADA, BEN]),
+        ),
+      }),
+    );
+
+    const { summary, pages } = plan.episodes.at(-1)!;
+    expect(summary.rows).toHaveLength(50);
+    expect(pages.flatMap((page) => page.rows)).toHaveLength(51);
+    expect(summary.rows.every((row) => row.tie_count === 51)).toBe(true);
+    expect(summary.rows.every((row) => row.rank === 1)).toBe(true);
   });
 
   it("drops answer values the rules cannot validate", () => {

@@ -591,9 +591,30 @@ export type PoolEntry = {
  */
 export type PoolStandingsRow = {
   handle: string;
+  /** `castaway_points + prop_bet_points`. The number the leaderboard ranks on. */
   total: number;
+  /**
+   * Points from the entrant's picks. Absent on documents published before
+   * totals included prop bets, where `total` alone held these points.
+   */
+  castaway_points?: number;
+  /**
+   * Awarded prop bet points: settled, correct bets only. Already counted in
+   * `total` whenever `castaway_points` is present.
+   */
   prop_bet_points: number;
-  /** Entrants who stay tied share a rank, and the next rank skips (KD4). */
+  /**
+   * How many entrants across the whole field share this `total`, this one
+   * included. Lets a reader holding only the summary label a tie that
+   * continues onto an overflow page. Absent on legacy documents.
+   */
+  tie_count?: number;
+  /**
+   * Dense, by `total`: equal totals share a rank and the next total takes the
+   * next number. Documents published before totals included prop bets used a
+   * skipping rank that broke ties on prop bets; the leaderboard never reads
+   * this field, it numbers rows from `total` itself.
+   */
   rank: number;
 };
 

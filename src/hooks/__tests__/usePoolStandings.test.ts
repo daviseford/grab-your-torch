@@ -80,6 +80,7 @@ const stamp = (
   ...overrides,
 });
 
+/** A row in the current published shape: `total` includes prop bets. */
 const row = (
   handle: string,
   total: number,
@@ -88,6 +89,7 @@ const row = (
 ): PoolStandingsRow => ({
   handle,
   total,
+  castaway_points: total - propBetPoints,
   prop_bet_points: propBetPoints,
   rank,
 });
@@ -428,8 +430,20 @@ describe("resolvePoolStandingsView", () => {
     if (view.kind !== "ready") return;
     expect(view.freshness).toBe("fresh");
     expect(view.rows).toEqual([
-      { handle: "wanda", total: 42, rank: 1 },
-      { handle: "pete", total: 30, rank: 2 },
+      {
+        handle: "wanda",
+        total: 42,
+        rank: 1,
+        castawayPoints: 42,
+        propBetPoints: 0,
+      },
+      {
+        handle: "pete",
+        total: 30,
+        rank: 2,
+        castawayPoints: 30,
+        propBetPoints: 0,
+      },
     ]);
   });
 
@@ -448,7 +462,15 @@ describe("resolvePoolStandingsView", () => {
     expect(view.kind).toBe("ready");
     if (view.kind !== "ready") return;
     expect(view.freshness).toBe("stale");
-    expect(view.rows).toEqual([{ handle: "wanda", total: 42, rank: 1 }]);
+    expect(view.rows).toEqual([
+      {
+        handle: "wanda",
+        total: 42,
+        rank: 1,
+        castawayPoints: 42,
+        propBetPoints: 0,
+      },
+    ]);
     expect(view.episodeNum).toBe(7);
     expect(describePoolStandingsAsOf(view).label).toContain("episode 7");
   });
@@ -463,7 +485,15 @@ describe("resolvePoolStandingsView", () => {
     expect(view.kind).toBe("ready");
     if (view.kind !== "ready") return;
     expect(view.freshness).toBe("stale");
-    expect(view.rows).toEqual([{ handle: "wanda", total: 42, rank: 1 }]);
+    expect(view.rows).toEqual([
+      {
+        handle: "wanda",
+        total: 42,
+        rank: 1,
+        castawayPoints: 42,
+        propBetPoints: 0,
+      },
+    ]);
     expect(describePoolStandingsAsOf(view).label).toContain("episode 7");
   });
 
@@ -565,20 +595,136 @@ describe("resolvePoolStandingsView", () => {
 // ---------------------------------------------------------------------------
 
 describe("projectPoolStandingsRows", () => {
-  it("keeps handle, total and rank and nothing else", () => {
+  it("keeps a current row's total as published, without adding prop bets again", () => {
     expect(projectPoolStandingsRows([row("wanda", 42, 1, 6)])).toEqual([
-      { handle: "wanda", total: 42, rank: 1 },
+      {
+        handle: "wanda",
+        total: 42,
+        rank: 1,
+        castawayPoints: 36,
+        propBetPoints: 6,
+      },
     ]);
   });
 
-  it("drops every field a row might carry beyond the three R17 allows", () => {
-    // The property under test: whatever arrives, only three keys leave.
+  it("rebuilds a legacy row's total from castaway and prop bet points", () => {
+    // Published before totals included prop bets: `total` is castaway points.
+    expect(
+      projectPoolStandingsRows([
+        { handle: "legacy", total: 8, rank: 5, prop_bet_points: 4 },
+      ]),
+    ).toEqual([
+      {
+        handle: "legacy",
+        total: 12,
+        rank: 5,
+        castawayPoints: 8,
+        propBetPoints: 4,
+      },
+    ]);
+  });
+
+  it("keeps a row whose breakdown values are missing or unusable, without them", () => {
+    expect(
+      projectPoolStandingsRows([
+        { handle: "old", total: 9, rank: 1 },
+        { handle: "neg", total: 8, rank: 2, prop_bet_points: -4 },
+        { handle: "str", total: 7, rank: 3, prop_bet_points: "4" },
+        { handle: "nan", total: 6, rank: 4, prop_bet_points: Number.NaN },
+        {
+          handle: "badc",
+          total: 5,
+          rank: 5,
+          castaway_points: "3",
+          prop_bet_points: 2,
+        },
+        {
+          handle: "badp",
+          total: 4,
+          rank: 6,
+          castaway_points: 4,
+          prop_bet_points: -1,
+        },
+      ]),
+    ).toEqual([
+      { handle: "old", total: 9, rank: 1, castawayPoints: 9 },
+      { handle: "neg", total: 8, rank: 2, castawayPoints: 8 },
+      { handle: "str", total: 7, rank: 3, castawayPoints: 7 },
+      { handle: "nan", total: 6, rank: 4, castawayPoints: 6 },
+      // A current row with a bad castaway value: trust the published total and
+      // show no breakdown rather than guess which shape it is.
+      { handle: "badc", total: 5, rank: 5, propBetPoints: 2 },
+      { handle: "badp", total: 4, rank: 6, castawayPoints: 4 },
+    ]);
+  });
+
+  it("keeps negative and fractional castaway points, and prop bets beside them", () => {
+    // A castaway can lose points, so a signed castaway total is legitimate
+    // and must not cost the row its breakdown.
+    expect(
+      projectPoolStandingsRows([
+        {
+          handle: "neg",
+          total: 2,
+          rank: 1,
+          castaway_points: -1,
+          prop_bet_points: 3,
+        },
+        {
+          handle: "frac",
+          total: 3.5,
+          rank: 1,
+          castaway_points: -0.5,
+          prop_bet_points: 4,
+        },
+        { handle: "legacy-neg", total: -1, rank: 2, prop_bet_points: 3 },
+      ]),
+    ).toEqual([
+      {
+        handle: "neg",
+        total: 2,
+        rank: 1,
+        castawayPoints: -1,
+        propBetPoints: 3,
+      },
+      {
+        handle: "frac",
+        total: 3.5,
+        rank: 1,
+        castawayPoints: -0.5,
+        propBetPoints: 4,
+      },
+      {
+        handle: "legacy-neg",
+        total: 2,
+        rank: 2,
+        castawayPoints: -1,
+        propBetPoints: 3,
+      },
+    ]);
+  });
+
+  it("keeps a usable tie count and drops an unusable one", () => {
+    expect(
+      projectPoolStandingsRows([
+        { ...row("a", 8, 1), tie_count: 3 },
+        { ...row("b", 8, 1), tie_count: 0 },
+        { ...row("c", 8, 1), tie_count: 2.5 },
+        { ...row("d", 8, 1), tie_count: "3" },
+      ]).map((r) => r.tieCount),
+    ).toEqual([3, undefined, undefined, undefined]);
+  });
+
+  it("drops every field a row might carry beyond the five the bound allows", () => {
+    // The property under test: whatever arrives, only five keys leave.
     const contaminated = [
       {
         handle: "wanda",
         total: 42,
         rank: 1,
         prop_bet_points: 6,
+        prop_bets: { propbet_first_vote: "US0754" },
+        prop_bet_status: "definitive_correct",
         uid: "firebase-uid-1234",
         email: "someone@example.com",
         picks: [{ castaway_id: "US0752", full_name: "Alex Moore" }],
@@ -610,18 +756,26 @@ describe("projectPoolStandingsRows", () => {
       "firebase-uid-1234",
       "@",
       "eliminated",
-      "prop_bet_points",
+      "US0754",
+      "propbet_",
+      "definitive_correct",
       "picks",
     ]) {
       expect(serialized).not.toContain(leak);
     }
-    for (const projectedRow of projected) {
-      expect(Object.keys(projectedRow).sort()).toEqual([
-        "handle",
-        "rank",
-        "total",
-      ]);
-    }
+    expect(Object.keys(projected[0]).sort()).toEqual([
+      "castawayPoints",
+      "handle",
+      "propBetPoints",
+      "rank",
+      "total",
+    ]);
+    expect(Object.keys(projected[1]).sort()).toEqual([
+      "castawayPoints",
+      "handle",
+      "rank",
+      "total",
+    ]);
   });
 
   it("drops a row whose shape cannot be trusted rather than rendering junk", () => {
@@ -634,7 +788,7 @@ describe("projectPoolStandingsRows", () => {
         null,
         "not a row",
       ]),
-    ).toEqual([{ handle: "wanda", total: 42, rank: 1 }]);
+    ).toEqual([{ handle: "wanda", total: 42, rank: 1, castawayPoints: 42 }]);
   });
 
   it("preserves the order it was given", () => {
@@ -680,6 +834,137 @@ describe("groupPoolStandingsRows", () => {
     const grouped = groupPoolStandingsRows(rows);
     expect(grouped.filter((g) => g.showRank)).toHaveLength(1);
     expect(grouped.every((g) => g.tiedCount === 15)).toBe(true);
+  });
+
+  it("ranks the Season 51 episode 1 legacy document on combined totals", () => {
+    // As published today: `total` is castaway points only and
+    // TerrificallyTubular's 4 prop bet points sit beside it. Read now, that
+    // row's total is 12, which ties it with davis for first.
+    const legacy = (
+      handle: string,
+      total: number,
+      rank: number,
+      propBetPoints = 0,
+    ) => ({ handle, total, rank, prop_bet_points: propBetPoints });
+    const rows = projectPoolStandingsRows([
+      legacy("davis", 12, 1),
+      legacy("Eric Beyer", 11, 2),
+      legacy("AbyssalChloe", 10, 3),
+      legacy("Annalise", 9, 4),
+      legacy("TerrificallyTubular", 8, 5, 4),
+      legacy("FONTANATOR", 8, 6),
+      legacy("Mysuitcaseispacked", 8, 7),
+      legacy("Kolton", 8, 7),
+      legacy("LQ", 7, 9),
+      legacy("Chrisanthemum", 5, 10),
+      legacy("Amanda", 5, 10),
+    ]);
+    const grouped = groupPoolStandingsRows(rows);
+    expect(
+      grouped.map((g) => [
+        g.label,
+        g.row.handle,
+        g.row.total,
+        g.row.castawayPoints,
+        g.row.propBetPoints,
+      ]),
+    ).toEqual([
+      ["T-1", "davis", 12, 12, 0],
+      ["T-1", "TerrificallyTubular", 12, 8, 4],
+      ["2", "Eric Beyer", 11, 11, 0],
+      ["3", "AbyssalChloe", 10, 10, 0],
+      ["4", "Annalise", 9, 9, 0],
+      ["T-5", "FONTANATOR", 8, 8, 0],
+      ["T-5", "Mysuitcaseispacked", 8, 8, 0],
+      ["T-5", "Kolton", 8, 8, 0],
+      ["6", "LQ", 7, 7, 0],
+      ["T-7", "Chrisanthemum", 5, 5, 0],
+      ["T-7", "Amanda", 5, 5, 0],
+    ]);
+  });
+
+  it("numbers a current document exactly as its published rank", () => {
+    // What the recompute job will publish for the same episode.
+    const rows = projectPoolStandingsRows([
+      row("TerrificallyTubular", 12, 1, 4),
+      row("davis", 12, 1),
+      row("Eric Beyer", 11, 2),
+      row("AbyssalChloe", 10, 3),
+      row("Annalise", 9, 4),
+      row("FONTANATOR", 8, 5),
+      row("Kolton", 8, 5),
+      row("Mysuitcaseispacked", 8, 5),
+      row("LQ", 7, 6),
+      row("Amanda", 5, 7),
+      row("Chrisanthemum", 5, 7),
+    ]);
+    const grouped = groupPoolStandingsRows(rows);
+    expect(grouped.map((g) => g.row.handle)).toEqual(rows.map((r) => r.handle));
+    expect(grouped.map((g) => g.position)).toEqual(rows.map((r) => r.rank));
+    expect(grouped.map((g) => g.label)).toEqual([
+      "T-1",
+      "T-1",
+      "2",
+      "3",
+      "4",
+      "T-5",
+      "T-5",
+      "T-5",
+      "6",
+      "T-7",
+      "T-7",
+    ]);
+  });
+
+  it("labels a tie that continues past the rows in hand", () => {
+    // The summary ends mid-tie: two of three entrants on 8 are in hand, and
+    // only the published count says the third exists.
+    const rows = projectPoolStandingsRows([
+      { ...row("a", 10, 1), tie_count: 1 },
+      { ...row("b", 9, 2), tie_count: 1 },
+      { ...row("c", 8, 3), tie_count: 3 },
+      { ...row("d", 8, 3), tie_count: 3 },
+    ]);
+    const grouped = groupPoolStandingsRows(rows);
+    expect(grouped.map((g) => g.label)).toEqual(["1", "2", "T-3", "T-3"]);
+    expect(grouped.map((g) => g.tiedCount)).toEqual([1, 1, 3, 3]);
+
+    // The same when only one row of the tie is in hand.
+    const lastOnly = groupPoolStandingsRows(rows.slice(0, 3));
+    expect(lastOnly[lastOnly.length - 1]).toMatchObject({
+      label: "T-3",
+      tiedCount: 3,
+    });
+  });
+
+  it("labels a field tied at the top as T-1 throughout", () => {
+    const rows = projectPoolStandingsRows([
+      row("a", 0, 1),
+      row("b", 0, 1),
+      row("c", 0, 1),
+    ]);
+    expect(groupPoolStandingsRows(rows).map((g) => g.label)).toEqual([
+      "T-1",
+      "T-1",
+      "T-1",
+    ]);
+  });
+
+  it("keeps consecutive ties apart", () => {
+    const rows = projectPoolStandingsRows([
+      row("a", 6, 1),
+      row("b", 6, 1),
+      row("c", 4, 3),
+      row("d", 4, 3),
+      row("e", 1, 5),
+    ]);
+    expect(groupPoolStandingsRows(rows).map((g) => g.label)).toEqual([
+      "T-1",
+      "T-1",
+      "T-2",
+      "T-2",
+      "3",
+    ]);
   });
 
   it("keeps the order rankPoolEntries produced", () => {

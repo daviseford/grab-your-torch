@@ -492,7 +492,9 @@ export const planRecompute = (input: RecomputeInput): RecomputePlan => {
     const rows: PoolStandingsRow[] = ranked.map((row) => ({
       handle: row.handle,
       total: row.total_points,
+      castaway_points: row.castaway_points,
       prop_bet_points: row.prop_bet_points,
+      tie_count: row.tie_count,
       rank: row.rank,
     }));
 

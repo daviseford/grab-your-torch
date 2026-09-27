@@ -85,10 +85,9 @@
 }
 
 /* Ties are the ordinary case in the first weeks (KD4), so a run of entrants
-   sharing a position is drawn as one block: the position is printed once at
-   the top of the run and the rows under it carry a short tick in the rank
-   column instead of a repeated number. The hairline above each new position
-   is what separates one block from the next. */
+   sharing a position is drawn as one block: every row carries the shared
+   "T-N" label, and the hairline above each new position is what separates
+   one block from the next. */
 .groupStart td {
   border-top: 1px solid var(--gyt-rule-strong);
 }
@@ -108,14 +107,6 @@
   font-weight: 700;
 }
 
-.tiedMark {
-  display: inline-block;
-  width: 10px;
-  height: 1px;
-  vertical-align: middle;
-  background: var(--gyt-rule-strong);
-}
-
 .handle {
   /* A handle is capped at 24 characters by rules, but it can still be 24
      unbroken characters on a 375px screen. */
@@ -128,6 +119,63 @@
   text-align: right;
   padding-right: 0;
   font-variant-numeric: tabular-nums;
+}
+
+.table .breakdownCol {
+  width: 6.5rem;
+  padding-left: 16px;
+  white-space: nowrap;
+  color: var(--mantine-color-dimmed);
+}
+
+.totalCell {
+  font-weight: 700;
+}
+
+/* Breakdown headers swap to short labels on a narrow screen; the full label
+   stays available to a screen reader either way. */
+.labelShort,
+.labelShortSr {
+  display: none;
+}
+
+/* Two number columns leave a 375px screen little room for the handle, so they
+   give back what they do not need. */
+@media (max-width: 30em) {
+  .rankCol {
+    width: 3rem;
+  }
+
+  .table .pointsCol {
+    width: 2.75rem;
+  }
+
+  .table .breakdownCol {
+    width: 3.25rem;
+    padding-left: 6px;
+    font-size: var(--mantine-font-size-xs);
+  }
+
+  .labelFull {
+    display: none;
+  }
+
+  .labelShort {
+    display: inline;
+  }
+
+  .labelShortSr {
+    display: inline;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
 }
 
 .expand {

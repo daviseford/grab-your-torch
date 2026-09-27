@@ -4,4 +4,4 @@
 // silently disagreeing with the Node recompute job.
 //
 // See scripts/generate-scoring-revision.ts for the source list.
-export const SCORING_REVISION = "8467fbf0a4b23132";
+export const SCORING_REVISION = "bfde734ac4f08398";
