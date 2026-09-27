@@ -20,7 +20,10 @@ import * as path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { CastawayIdMappingFile } from "../scripts/lib/castaway-id-remap";
 import { buildCensus } from "../scripts/lib/castaway-id-remap";
-import { pushSeason } from "../scripts/lib/push-season-collections";
+import {
+  commitSeasonPush,
+  pushSeason,
+} from "../scripts/lib/push-season-collections";
 import {
   commitPoolProvision,
   commitPoolRepairs,
@@ -31,6 +34,7 @@ import {
   readRemapLedgerStatus,
   seasonPushRefusal,
 } from "../scripts/lib/remap-ledger";
+import { buildSeasonDocument } from "../scripts/lib/season-document";
 import { adpCohortAction } from "../scripts/recompute-castaway-adp";
 import {
   type Admin,
@@ -49,6 +53,7 @@ import {
   runWrite,
   type StoreFactory,
 } from "../scripts/remap-castaway-ids";
+import { SEASON_51_CASTAWAY_LOOKUP } from "../src/data/season_51";
 
 const PROJECT_ID = "demo-survivor-fantasy-rules";
 const FIRESTORE_HOST = process.env.FIRESTORE_EMULATOR_HOST;
@@ -1064,6 +1069,102 @@ describe("other write routes and resolution", () => {
     ]);
     expect(await fsDoc("seasons/season_51")).toEqual(before);
     expect(await fsDoc("events/season_51")).toEqual({});
+  });
+
+  it("push-seasons after the remap keeps the stored logo unless seasons.ts sets one", async () => {
+    await seed();
+    await cutover();
+    expect(
+      await runFinalize(admin, ctx, {
+        project: PROJECT_ID,
+        localState: "remapped",
+      }),
+    ).toEqual({ refusals: [] });
+    await admin.firestore
+      .doc("seasons/season_51")
+      .update({ img: "/images/season_51/stored-logo.webp" });
+    const seasons = new Set(["seasons"] as const);
+
+    // A season registered without a logo must not blank the stored one.
+    const kept = await pushSeason(admin.firestore, 51, seasons, false, {
+      localSeasonImg: "",
+    });
+    expect(kept.failed).toEqual([]);
+    const afterKeep = await fsDoc("seasons/season_51");
+    expect(afterKeep.img).toBe("/images/season_51/stored-logo.webp");
+    // The rest of the document is still the bundle, revisions included.
+    expect(afterKeep.data_revision).toEqual(expect.any(String));
+    expect(afterKeep.scoring_revision).toEqual(expect.any(String));
+
+    // A logo set in seasons.ts is an intentional change and is written.
+    await pushSeason(admin.firestore, 51, seasons, false, {
+      localSeasonImg: "/images/season_51/new-logo.webp",
+    });
+    expect((await fsDoc("seasons/season_51")).img).toBe(
+      "/images/season_51/new-logo.webp",
+    );
+
+    // By default the logo comes from the committed seasons.ts.
+    await pushSeason(admin.firestore, 51, seasons, false);
+    expect((await fsDoc("seasons/season_51")).img).toBe(
+      "/images/season_51/season-51-logo.webp",
+    );
+  });
+
+  // pushSeasonToFirestore (the nightly sync, push-all-seasons, new-season)
+  // writes through commitSeasonPush; it initializes the production Admin SDK
+  // on import, so its shared write is exercised here directly.
+  it("the shared season write: gate first, then keeps the stored logo unless one is given", async () => {
+    const seasonDoc = (img: string) =>
+      buildSeasonDocument({
+        seasonNum: 51,
+        seasonImg: img,
+        players: [],
+        episodes: [],
+        castawayLookup: SEASON_51_CASTAWAY_LOOKUP,
+        challenges: {},
+        eliminations: {},
+        events: {},
+      });
+    const write = (img: string) =>
+      commitSeasonPush(admin.firestore, 51, SEASON_51_CASTAWAY_LOOKUP, [
+        { collection: "seasons", data: seasonDoc(img) },
+        { collection: "events", data: {} },
+      ]);
+
+    await seed();
+    await cutover();
+    const before = await fsDoc("seasons/season_51");
+    expect(await write("")).toMatch(/in progress/);
+    expect(await fsDoc("seasons/season_51")).toEqual(before);
+
+    expect(
+      await runFinalize(admin, ctx, {
+        project: PROJECT_ID,
+        localState: "remapped",
+      }),
+    ).toEqual({ refusals: [] });
+    await admin.firestore
+      .doc("seasons/season_51")
+      .update({ img: "/images/season_51/stored-logo.webp" });
+
+    // The nightly sync of a season whose seasons.ts entry has no logo.
+    expect(await write("")).toBeNull();
+    const kept = await fsDoc("seasons/season_51");
+    expect(kept.img).toBe("/images/season_51/stored-logo.webp");
+    expect(kept.data_revision).toBe(seasonDoc("").data_revision);
+    expect(kept.scoring_revision).toBe(seasonDoc("").scoring_revision);
+
+    // An explicit logo (seasons.ts, or new-season's downloaded logo) wins.
+    expect(await write("/images/season_51/new-logo.webp")).toBeNull();
+    expect((await fsDoc("seasons/season_51")).img).toBe(
+      "/images/season_51/new-logo.webp",
+    );
+
+    // With nothing stored and nothing given, the logo stays empty.
+    await admin.firestore.doc("seasons/season_51").delete();
+    expect(await write("")).toBeNull();
+    expect((await fsDoc("seasons/season_51")).img).toBe("");
   });
 
   it("resolves born team assignments and an orphaned competition only with --accept-born, so finalize is not a dead end", async () => {

@@ -6,9 +6,15 @@
  */
 
 import type { Firestore } from "firebase-admin/firestore";
+import * as fs from "fs";
 import * as path from "path";
 import { seasonPushGate } from "./remap-ledger.js";
 import { buildSeasonDocument } from "./season-document.js";
+import {
+  readLocalSeasonImg,
+  resolveSeasonImg,
+  SEASONS_FILE_PATH,
+} from "./season-img.js";
 
 const PROJECT_ROOT = path.resolve(import.meta.dirname, "..", "..");
 export const VALID_COLLECTIONS = [
@@ -43,6 +49,12 @@ export async function pushSeason(
   seasonNum: number,
   collections: Set<Collection>,
   dryRun: boolean,
+  {
+    localSeasonImg = readLocalSeasonImg(
+      fs.readFileSync(SEASONS_FILE_PATH, "utf-8"),
+      seasonNum,
+    ),
+  }: { localSeasonImg?: string } = {},
 ): Promise<{ pushed: string[]; skipped: string[]; failed: string[] }> {
   const seasonKey = `season_${seasonNum}`;
   const seasonDataPath = getSeasonDataPath(seasonNum);
@@ -64,7 +76,8 @@ export async function pushSeason(
       collection: "seasons",
       data: buildSeasonDocument({
         seasonNum,
-        seasonImg: "",
+        // An empty logo keeps the stored one; see commitSeasonPush.
+        seasonImg: localSeasonImg,
         players: players || [],
         episodes: episodes || [],
         castawayLookup: castawayLookup || {},
@@ -95,6 +108,9 @@ export async function pushSeason(
   console.log(
     `    revisions: data ${seasonDoc.data_revision}, scoring ${seasonDoc.scoring_revision}`,
   );
+  if (collections.has("seasons")) {
+    console.log(`    img: ${describeSeasonImg(localSeasonImg)}`);
+  }
 
   const pushed: string[] = [];
   const skipped: string[] = [];
@@ -119,35 +135,69 @@ export async function pushSeason(
   }
 
   if (!dryRun && selectedDocs.length > 0) {
-    // The same gate as pushSeasonToFirestore: result collections carry
-    // castaway ids too, so no route may push them mid-cutover or from the
-    // wrong side of a remap.
-    const refusal = await seasonPushGate(db!, seasonNum, castawayLookup);
-    if (refusal) {
-      console.error(`    [REFUSED] season ${seasonNum}: ${refusal}`);
-      failed.push(
-        ...selectedDocs.map((doc) => `${doc.collection}/${seasonKey}`),
-      );
-      return { pushed, skipped, failed };
-    }
-    const batch = db!.batch();
-    for (const doc of selectedDocs) {
-      batch.set(db!.collection(doc.collection).doc(seasonKey), doc.data);
-    }
-
+    const paths = selectedDocs.map((doc) => `${doc.collection}/${seasonKey}`);
     try {
-      await batch.commit();
-      pushed.push(
-        ...selectedDocs.map((doc) => `${doc.collection}/${seasonKey}`),
+      const refusal = await commitSeasonPush(
+        db!,
+        seasonNum,
+        castawayLookup,
+        selectedDocs,
       );
+      if (refusal) {
+        console.error(`    [REFUSED] season ${seasonNum}: ${refusal}`);
+        failed.push(...paths);
+      } else {
+        pushed.push(...paths);
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`    [FAIL] season ${seasonNum}: ${msg}`);
-      failed.push(
-        ...selectedDocs.map((doc) => `${doc.collection}/${seasonKey}`),
-      );
+      failed.push(...paths);
     }
   }
 
   return { pushed, skipped, failed };
+}
+
+/** How a push will set `img`, for dry runs and logs. */
+export function describeSeasonImg(seasonImg: string): string {
+  return seasonImg
+    ? `"${seasonImg}"`
+    : "none given; the stored logo, if any, is kept";
+}
+
+/**
+ * The one write every season push route makes (push-seasons, and through
+ * pushSeasonToFirestore the nightly sync, push-all-seasons and the new-season
+ * scripts). Returns the gate's refusal without reading or writing anything,
+ * or null once the batch committed; a failed commit throws.
+ *
+ * The gate comes first: result collections carry castaway ids too, so no
+ * route may push them mid-cutover or from the wrong side of a remap. Then,
+ * because `set` replaces the season document whole, a season document
+ * without a logo takes the stored one instead of deleting it. A logo the
+ * caller gives is an intentional value and is written as is.
+ */
+export async function commitSeasonPush(
+  db: Firestore,
+  seasonNum: number,
+  castawayLookup: unknown,
+  docs: readonly { collection: string; data: Record<string, unknown> }[],
+): Promise<string | null> {
+  const seasonKey = `season_${seasonNum}`;
+  const refusal = await seasonPushGate(db, seasonNum, castawayLookup);
+  if (refusal) return refusal;
+
+  const seasonDoc = docs.find((doc) => doc.collection === "seasons");
+  if (seasonDoc && !seasonDoc.data.img) {
+    const stored = await db.collection("seasons").doc(seasonKey).get();
+    seasonDoc.data.img = resolveSeasonImg("", stored.get("img"));
+  }
+
+  const batch = db.batch();
+  for (const doc of docs) {
+    batch.set(db.collection(doc.collection).doc(seasonKey), doc.data);
+  }
+  await batch.commit();
+  return null;
 }

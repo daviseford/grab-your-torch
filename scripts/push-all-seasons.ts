@@ -10,6 +10,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { pushSeasonToFirestore } from "./lib/firebase-push.js";
+import { readLocalSeasonImg } from "./lib/season-img.js";
 
 const PROJECT_ROOT = path.resolve(import.meta.dirname, "..");
 
@@ -17,16 +18,6 @@ const PROJECT_ROOT = path.resolve(import.meta.dirname, "..");
 function getRegisteredSeasons(content: string): number[] {
   const matches = [...content.matchAll(/season_(\d+):/g)];
   return matches.map((m) => Number(m[1])).sort((a, b) => a - b);
-}
-
-/** Extract the season image URL from the seasons file content. */
-function getSeasonImg(content: string, seasonNum: number): string {
-  const seasonBlock = content.match(
-    new RegExp(
-      `season_${seasonNum}:\\s*\\{[\\s\\S]*?img:\\s*"([^"]*)"[\\s\\S]*?\\}`,
-    ),
-  );
-  return seasonBlock?.[1] ?? "";
 }
 
 async function main(): Promise<void> {
@@ -46,7 +37,7 @@ async function main(): Promise<void> {
   const failures: number[] = [];
 
   for (const seasonNum of seasonNums) {
-    const seasonImg = getSeasonImg(seasonsContent, seasonNum);
+    const seasonImg = readLocalSeasonImg(seasonsContent, seasonNum);
     console.log(`\n--- Season ${seasonNum} ---`);
 
     try {

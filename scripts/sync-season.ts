@@ -16,6 +16,8 @@ import {
 } from "./lib/codegen.js";
 import { regenerateSeasonFile } from "./lib/curated-cast.js";
 import { pushSeasonToFirestore } from "./lib/firebase-push.js";
+import { planSeasonFileWrite } from "./lib/season-file-change.js";
+import { readLocalSeasonImg } from "./lib/season-img.js";
 import { fetchSeasonData, fetchTable } from "./lib/survivor-client.js";
 import {
   transformPlayers,
@@ -51,19 +53,6 @@ function getRegisteredSeasons(seasonsFilePath: string): number[] {
   const content = fs.readFileSync(seasonsFilePath, "utf-8");
   const matches = [...content.matchAll(/season_(\d+):/g)];
   return matches.map((m) => Number(m[1]));
-}
-
-/**
- * Extract the season image from seasons.ts for Firestore push.
- */
-function getSeasonImg(seasonsFilePath: string, seasonNum: number): string {
-  const content = fs.readFileSync(seasonsFilePath, "utf-8");
-  const seasonBlock = content.match(
-    new RegExp(
-      `season_${seasonNum}:\\s*\\{[\\s\\S]*?img:\\s*"([^"]*)"[\\s\\S]*?\\}`,
-    ),
-  );
-  return seasonBlock?.[1] ?? "";
 }
 
 /**
@@ -136,7 +125,7 @@ async function main(): Promise<void> {
   // Keep the committed cast (images, professions, bios, nicknames and any
   // hand correction) and regenerate only the results; see lib/curated-cast.ts.
   console.log("  Generating season file...");
-  const { content: generatedContent, keptDifferences } = regenerateSeasonFile(
+  const { content: rawContent, keptDifferences } = regenerateSeasonFile(
     existingContent,
     playerData,
     resultsData,
@@ -151,8 +140,15 @@ async function main(): Promise<void> {
     }
   }
 
+  // Compare and write Prettier's layout, the one the workflow commits.
+  const { content: generatedContent, unchanged } = await planSeasonFileWrite(
+    existingContent,
+    rawContent,
+    seasonFilePath,
+  );
+
   if (!isNewSeason && existingContent !== undefined) {
-    if (existingContent === generatedContent) {
+    if (unchanged) {
       const result: SyncResult = {
         changed: false,
         seasonNum,
@@ -225,7 +221,9 @@ async function main(): Promise<void> {
   }
 
   // Push to Firestore
-  const seasonImg = isNewSeason ? "" : getSeasonImg(seasonsFilePath, seasonNum);
+  const seasonImg = isNewSeason
+    ? ""
+    : readLocalSeasonImg(fs.readFileSync(seasonsFilePath, "utf-8"), seasonNum);
   let firestorePushed = false;
   let firestoreError: string | undefined;
 

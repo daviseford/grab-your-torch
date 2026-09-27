@@ -9,7 +9,10 @@ import * as path from "path";
 
 // Import to trigger shared Firebase Admin initialization
 import "./admin.js";
-import { seasonPushGate } from "./remap-ledger.js";
+import {
+  commitSeasonPush,
+  describeSeasonImg,
+} from "./push-season-collections.js";
 import { buildSeasonDocument } from "./season-document.js";
 
 interface FirestoreDocument {
@@ -119,39 +122,34 @@ export async function pushSeasonToFirestore(
     }
     console.log(`  seasons/${seasonKey} revisions:`);
     console.log(`    data_revision:    ${seasonDoc.data_revision}`);
-    console.log(`    scoring_revision: ${seasonDoc.scoring_revision}\n`);
+    console.log(`    scoring_revision: ${seasonDoc.scoring_revision}`);
+    console.log(`    img:              ${describeSeasonImg(seasonImg)}\n`);
     return;
   }
 
   const db = getFirestore();
-  // Every push path (sync, push-seasons, new-season) comes through here, so
-  // this is where a castaway id cutover holds them.
-  const refusal = await seasonPushGate(db, seasonNum, castawayLookup);
-  if (refusal) {
-    throw new Error(`Refusing to push ${seasonKey}: ${refusal}`);
-  }
-  console.log(`\nUploading season ${seasonNum} data to Firestore...\n`);
-
-  const batch = db.batch();
-  for (const doc of documents) {
-    batch.set(db.collection(doc.collection).doc(doc.docId), doc.data);
-  }
-
+  // Every push path (sync, push-all-seasons, new-season) comes through here
+  // and push-seasons calls the same write, so the castaway id cutover gate
+  // and the stored-logo rule hold for all of them.
+  let refusal: string | null;
   try {
-    await batch.commit();
-    for (const doc of documents) {
-      const docPath = `${doc.collection}/${doc.docId}`;
-      console.log(`  [OK] ${docPath}`);
-    }
-    console.log(
-      `  [OK] revisions: data ${seasonDoc.data_revision}, scoring ${seasonDoc.scoring_revision}`,
-    );
+    refusal = await commitSeasonPush(db, seasonNum, castawayLookup, documents);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     throw new Error(
       `Firestore upload failed without applying the season update: ${message}`,
     );
   }
+  if (refusal) {
+    throw new Error(`Refusing to push ${seasonKey}: ${refusal}`);
+  }
+  console.log(`\nUploaded season ${seasonNum} data to Firestore:\n`);
+  for (const doc of documents) {
+    console.log(`  [OK] ${doc.collection}/${doc.docId}`);
+  }
+  console.log(
+    `  [OK] img: ${seasonDoc.img ? `"${seasonDoc.img}"` : "(none)"}, revisions: data ${seasonDoc.data_revision}, scoring ${seasonDoc.scoring_revision}`,
+  );
 
   console.log(`\nFirestore upload complete.`);
 }
