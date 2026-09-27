@@ -2141,7 +2141,11 @@ const seedCompetition = async (
   owner: SeededUser,
   rival: { uid: string; displayName: string; email: string },
   picks: [string, string],
-  state: { finished: boolean; current_episode: number | null },
+  state: {
+    finished: boolean;
+    current_episode: number | null;
+    season_num?: number;
+  },
 ) => {
   const participants = [owner, rival].map((p) => ({
     uid: p.uid,
@@ -2349,10 +2353,13 @@ test("competitions: watch-along rows show that competition's episode and live ro
     seedCompetition("competition_pre", "Pre League", viewer, rival, [p1, p2], {
       finished: false,
       current_episode: 0,
+      // A two-digit season widens the season badge, the tightest phone row.
+      season_num: 51,
     }),
     seedCompetition("competition_mid", "Mid League", viewer, rival, [p1, p2], {
       finished: false,
       current_episode: 2,
+      season_num: 51,
     }),
     seedCompetition(
       "competition_live",
@@ -2402,7 +2409,8 @@ test("competitions: watch-along rows show that competition's episode and live ro
     fullPage: true,
   });
 
-  // Phones show the episode beside the badges and read it in the link name.
+  // Phones show the episode on its own line under the badges, which stay on
+  // one row as a live card's do, and read it in the link name.
   await page.setViewportSize({ width: 390, height: 844 });
   const link = (name: string) =>
     main(page).getByRole("link", { name: new RegExp(`^${name}(?: |$)`) });
@@ -2414,6 +2422,32 @@ test("competitions: watch-along rows show that competition's episode and live ro
   await expect(link("Live League")).toHaveAccessibleName("Live League");
   await expect(link("Live League")).not.toContainText(/Episode \d/);
   await expect(link("Live League")).not.toContainText("Pre-season");
+  const phoneRows = [
+    {
+      name: "Pre League",
+      badges: ["S51", "Watch-along", "In progress"],
+      episode: "Pre-season",
+    },
+    {
+      name: "Mid League",
+      badges: ["S51", "Watch-along", "In progress"],
+      episode: "Episode 2",
+    },
+    {
+      name: "Live League",
+      badges: ["S1", "Live", "In progress"],
+      episode: null,
+    },
+  ];
+  for (const { name, badges, episode } of phoneRows) {
+    const top = async (text: string) =>
+      (await link(name).getByText(text, { exact: true }).boundingBox())!.y;
+    const [first, ...rest] = await Promise.all(badges.map(top));
+    // The season badge sits a few pixels off on its tooltip wrapper; a
+    // wrapped badge drops a whole row, about 24px.
+    for (const y of rest) expect(Math.abs(y - first)).toBeLessThan(12);
+    if (episode) expect(await top(episode)).toBeGreaterThan(first + 12);
+  }
   await page.screenshot({
     path: test.info().outputPath("competitions-episode-phone.png"),
     fullPage: true,

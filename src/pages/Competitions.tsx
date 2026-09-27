@@ -229,16 +229,17 @@ const CompetitionBadges = ({ comp }: { comp: Competition }) => (
       size="sm"
       classNames={badgeClassNames}
     />
-    {comp.current_episode != null && (
-      <span id={`${comp.id}-episode`} className={classes.episode}>
-        {competitionEpisodeLabel(comp)}
-      </span>
-    )}
     <StatusBadge
       kind={comp.finished ? "complete" : "in-progress"}
       size="sm"
       classNames={badgeClassNames}
     />
+    {/* Its own quiet line, so the badges above keep to one row. */}
+    {comp.current_episode != null && (
+      <span id={`${comp.id}-episode`} className={classes.rowEpisode}>
+        {competitionEpisodeLabel(comp)}
+      </span>
+    )}
   </>
 );
 

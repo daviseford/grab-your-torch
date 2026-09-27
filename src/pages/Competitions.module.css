@@ -259,6 +259,13 @@
   white-space: nowrap;
 }
 
+.rowEpisode {
+  flex-basis: 100%;
+  font-size: var(--mantine-font-size-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--mantine-color-dimmed);
+}
+
 .rowFinished {
   grid-template-areas:
     "name chev"
