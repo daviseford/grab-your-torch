@@ -1,7 +1,15 @@
+/* One centered column on wide screens. 58rem is the footer's content width
+   (Mantine's md container less its padding), so the page and the footer share
+   edges, and it still holds a full season of episode columns in the entrant's
+   points table and five castaway slates per row in the picker. Below that
+   width the column simply fills the shell as before. */
 .page {
   display: flex;
   flex-direction: column;
   gap: var(--mantine-spacing-xl);
+  width: 100%;
+  max-width: 58rem;
+  margin-inline: auto;
   padding-block: var(--mantine-spacing-md);
 }
 

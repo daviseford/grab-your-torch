@@ -90,8 +90,11 @@
   border-bottom: 0;
 }
 
+/* `.table tfoot .pick` outranks `.table .pick`, whose row rule would otherwise
+   draw a stray line under "Weekly total" alone. */
 .table tfoot th,
-.table tfoot td {
+.table tfoot td,
+.table tfoot .pick {
   border-top: 1px solid var(--gyt-rule-strong);
   border-bottom: 0;
 }
