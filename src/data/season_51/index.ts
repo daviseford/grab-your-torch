@@ -2,6 +2,12 @@
 // names (doehm/survivoR@7336413) by
 // `yarn remap-castaway-ids 51 --rewrite-season-file`, mapping fe734ff53fbaf8a3.
 // See docs/castaway-id-mapping.md.
+//
+// The cast block is curated. The daily survivoR sync (scripts/sync-season.ts)
+// keeps every committed cast field and only fills fields a castaway lacks; see
+// scripts/lib/curated-cast.ts. The episode, challenge, elimination, event and
+// vote history exports are regenerated from survivoR on every sync, so edit
+// survivoR's data or the transformer rather than these exports.
 import {
   CastawayLookup,
   Challenge,
@@ -134,8 +140,8 @@ export const SEASON_51_PLAYERS = [
     full_name: "Cristian Chavez",
     img: "/images/season_51/Cristian-Chavez.jpg",
     description:
-      "Age: 25 | Hometown: Salt Lake City, Utah | Occupation: Head of HR",
-    age: 25,
+      "Age: 26 | Hometown: Salt Lake City, Utah | Occupation: Head of HR",
+    age: 26,
     profession: "Head of HR",
     hometown: "Salt Lake City, Utah",
   }),
@@ -195,8 +201,8 @@ export const SEASON_51_PLAYERS = [
     full_name: "Kristin Flickinger",
     img: "/images/season_51/Kristin-Flickinger.jpg",
     description:
-      "Age: 49 | Hometown: Santa Barbara, California | Occupation: Crisis Management",
-    age: 49,
+      "Age: 53 | Hometown: Santa Barbara, California | Occupation: Crisis Management",
+    age: 53,
     profession: "Crisis Management",
     hometown: "Santa Barbara, California",
   }),
@@ -204,11 +210,10 @@ export const SEASON_51_PLAYERS = [
     castaway_id: "US0765",
     full_name: "Lewis Kelly",
     img: "/images/season_51/Lewis-Kelly.jpg",
-    description:
-      "Age: 28 | Hometown: Corozal, Puerto Rico | Occupation: Farmer",
+    description: "Age: 28 | Hometown: Puerto Rico | Occupation: Farmer",
     age: 28,
     profession: "Farmer",
-    hometown: "Corozal, Puerto Rico",
+    hometown: "Puerto Rico",
   }),
   buildPlayer({
     castaway_id: "US0766",
@@ -225,10 +230,10 @@ export const SEASON_51_PLAYERS = [
     full_name: "Maggie Nestor",
     img: "/images/season_51/Maggie-Nestor.jpg",
     description:
-      "Age: 40 | Hometown: Charles Town, West Virginia | Occupation: Farmer",
+      "Age: 40 | Hometown: Charlestown, West Virginia | Occupation: Farmer",
     age: 40,
     profession: "Farmer",
-    hometown: "Charles Town, West Virginia",
+    hometown: "Charlestown, West Virginia",
   }),
   buildPlayer({
     castaway_id: "US0768",
@@ -256,10 +261,10 @@ export const SEASON_51_PLAYERS = [
     full_name: "Patt Cannaday",
     img: "/images/season_51/Patt-Cannaday.jpg",
     description:
-      "Age: 33 | Hometown: Washington, D.C. | Occupation: Federal Prosecutor",
+      "Age: 33 | Hometown: Washington, District of Columbia | Occupation: Federal Prosecutor",
     age: 33,
     profession: "Federal Prosecutor",
-    hometown: "Washington, D.C.",
+    hometown: "Washington, District of Columbia",
     nickname: "Patt",
   }),
   buildPlayer({
@@ -267,8 +272,8 @@ export const SEASON_51_PLAYERS = [
     full_name: "Rob Antonson",
     img: "/images/season_51/Rob-Antonson.jpg",
     description:
-      "Age: 40 | Hometown: Cumberland, Rhode Island | Occupation: Airline Gate Agent",
-    age: 40,
+      "Age: 34 | Hometown: Cumberland, Rhode Island | Occupation: Airline Gate Agent",
+    age: 34,
     profession: "Airline Gate Agent",
     hometown: "Cumberland, Rhode Island",
   }),
@@ -291,27 +296,219 @@ export const SEASON_51_PLAYERS = [
     age: 24,
     profession: "Medical Student",
     hometown: "Fort Worth, Texas",
+    nickname: "Thien An",
   }),
 ] satisfies Player<CastawayIdType, SeasonNumber>[];
 
-export const SEASON_51_EPISODES = [] satisfies Episode<SeasonNumber>[];
+export const SEASON_51_EPISODES = [
+  {
+    id: "episode_1",
+    season_id: "season_51",
+    season_num: 51,
+    order: 1,
+    name: "Permanent Uncertainty",
+    air_date: "2026-09-23",
+    post_merge: false,
+    finale: false,
+    merge_occurs: false,
+  },
+] satisfies Episode<SeasonNumber>[];
 
-export const SEASON_51_CHALLENGES = {} satisfies Record<
-  Challenge["id"],
-  Challenge<CastawayIdType, SeasonNumber>
->;
+export const SEASON_51_CHALLENGES = {
+  challenge_0: {
+    id: "challenge_0",
+    season_id: "season_51",
+    season_num: 51,
+    episode_id: "episode_1",
+    episode_num: 1,
+    variant: "team_immunity",
+    order: 0,
+    winning_castaways: [
+      "US0753",
+      "US0755",
+      "US0758",
+      "US0759",
+      "US0762",
+      "US0764",
+      "US0766",
+      "US0769",
+      "US0771",
+      "US0772",
+    ],
+  },
+} satisfies Record<Challenge["id"], Challenge<CastawayIdType, SeasonNumber>>;
 
-export const SEASON_51_ELIMINATIONS = {} satisfies Record<
+export const SEASON_51_ELIMINATIONS = {
+  elimination_1: {
+    id: "elimination_1",
+    season_id: "season_51",
+    season_num: 51,
+    episode_id: "episode_1",
+    episode_num: 1,
+    order: 1,
+    castaway_id: "US0752",
+    variant: "tribal",
+  },
+} satisfies Record<
   Elimination["id"],
   Elimination<CastawayIdType, SeasonNumber>
 >;
 
-export const SEASON_51_EVENTS = {} satisfies Record<
-  GameEvent["id"],
-  GameEvent<CastawayIdType, SeasonNumber>
->;
+export const SEASON_51_EVENTS = {
+  event_1: {
+    id: "event_1",
+    season_id: "season_51",
+    season_num: 51,
+    episode_id: "episode_1",
+    episode_num: 1,
+    castaway_id: "US0771",
+    action: "find_idol",
+    multiplier: null,
+  },
+  event_2: {
+    id: "event_2",
+    season_id: "season_51",
+    season_num: 51,
+    episode_id: "episode_1",
+    episode_num: 1,
+    castaway_id: "US0752",
+    action: "use_shot_in_the_dark_unsuccessfully",
+    multiplier: null,
+  },
+  event_3: {
+    id: "event_3",
+    season_id: "season_51",
+    season_num: 51,
+    episode_id: "episode_1",
+    episode_num: 1,
+    castaway_id: "US0763",
+    action: "use_shot_in_the_dark_unsuccessfully",
+    multiplier: null,
+  },
+} satisfies Record<GameEvent["id"], GameEvent<CastawayIdType, SeasonNumber>>;
 
-export const SEASON_51_VOTE_HISTORY = {} satisfies Record<
+export const SEASON_51_VOTE_HISTORY = {
+  vote_1_US0754_US0752_1: {
+    id: "vote_1_US0754_US0752_1",
+    season_id: "season_51",
+    season_num: 51,
+    episode_id: "episode_1",
+    episode_num: 1,
+    tribe: "Toka",
+    voter_castaway_id: "US0754",
+    target_castaway_id: "US0752",
+    voted_out_castaway_id: "US0752",
+    nullified: false,
+    tie: false,
+    sog_id: 1,
+    vote_order: 1,
+  },
+  vote_1_US0756_US0763_1: {
+    id: "vote_1_US0756_US0763_1",
+    season_id: "season_51",
+    season_num: 51,
+    episode_id: "episode_1",
+    episode_num: 1,
+    tribe: "Toka",
+    voter_castaway_id: "US0756",
+    target_castaway_id: "US0763",
+    voted_out_castaway_id: "US0752",
+    nullified: false,
+    tie: false,
+    sog_id: 1,
+    vote_order: 1,
+  },
+  vote_1_US0757_US0752_1: {
+    id: "vote_1_US0757_US0752_1",
+    season_id: "season_51",
+    season_num: 51,
+    episode_id: "episode_1",
+    episode_num: 1,
+    tribe: "Toka",
+    voter_castaway_id: "US0757",
+    target_castaway_id: "US0752",
+    voted_out_castaway_id: "US0752",
+    nullified: false,
+    tie: false,
+    sog_id: 1,
+    vote_order: 1,
+  },
+  vote_1_US0760_US0752_1: {
+    id: "vote_1_US0760_US0752_1",
+    season_id: "season_51",
+    season_num: 51,
+    episode_id: "episode_1",
+    episode_num: 1,
+    tribe: "Toka",
+    voter_castaway_id: "US0760",
+    target_castaway_id: "US0752",
+    voted_out_castaway_id: "US0752",
+    nullified: false,
+    tie: false,
+    sog_id: 1,
+    vote_order: 1,
+  },
+  vote_1_US0761_US0763_1: {
+    id: "vote_1_US0761_US0763_1",
+    season_id: "season_51",
+    season_num: 51,
+    episode_id: "episode_1",
+    episode_num: 1,
+    tribe: "Toka",
+    voter_castaway_id: "US0761",
+    target_castaway_id: "US0763",
+    voted_out_castaway_id: "US0752",
+    nullified: false,
+    tie: false,
+    sog_id: 1,
+    vote_order: 1,
+  },
+  vote_1_US0767_US0752_1: {
+    id: "vote_1_US0767_US0752_1",
+    season_id: "season_51",
+    season_num: 51,
+    episode_id: "episode_1",
+    episode_num: 1,
+    tribe: "Toka",
+    voter_castaway_id: "US0767",
+    target_castaway_id: "US0752",
+    voted_out_castaway_id: "US0752",
+    nullified: false,
+    tie: false,
+    sog_id: 1,
+    vote_order: 1,
+  },
+  vote_1_US0768_US0752_1: {
+    id: "vote_1_US0768_US0752_1",
+    season_id: "season_51",
+    season_num: 51,
+    episode_id: "episode_1",
+    episode_num: 1,
+    tribe: "Toka",
+    voter_castaway_id: "US0768",
+    target_castaway_id: "US0752",
+    voted_out_castaway_id: "US0752",
+    nullified: false,
+    tie: false,
+    sog_id: 1,
+    vote_order: 1,
+  },
+  vote_1_US0770_US0752_1: {
+    id: "vote_1_US0770_US0752_1",
+    season_id: "season_51",
+    season_num: 51,
+    episode_id: "episode_1",
+    episode_num: 1,
+    tribe: "Toka",
+    voter_castaway_id: "US0770",
+    target_castaway_id: "US0752",
+    voted_out_castaway_id: "US0752",
+    nullified: false,
+    tie: false,
+    sog_id: 1,
+    vote_order: 1,
+  },
+} satisfies Record<
   VoteHistory["id"],
   VoteHistory<CastawayIdType, SeasonNumber>
 >;
