@@ -184,3 +184,58 @@ test.describe("signed-out homepage (AE4)", () => {
     expect(overflow).toBeLessThanOrEqual(1);
   });
 });
+
+/**
+ * The pool page's width, measured rather than eyeballed.
+ *
+ * On a large desktop the page used to run edge to edge, so a standings row put
+ * a handle and its points two thousand pixels apart. The page is now one
+ * centered column no wider than the footer's content (58rem = 928px), and
+ * below that width it fills the shell exactly as before. The standings board
+ * is the anchor because it renders signed out, whatever state the pool is in
+ * once it has published an episode.
+ */
+const POOL_PAGE_MAX_WIDTH = 928;
+
+const measurePoolPage = async (page: Page, width: number) => {
+  await page.setViewportSize({ width, height: 900 });
+  await page.goto("/pool/season_51");
+  const standings = page.getByRole("region", { name: /^Standings/ });
+  await expect(standings.getByRole("table")).toBeVisible({ timeout: 30_000 });
+  return standings.evaluate((section) => {
+    const column = section.parentElement!.getBoundingClientRect();
+    const main = document.querySelector("main")!.getBoundingClientRect();
+    return {
+      left: column.left - main.left,
+      right: main.right - column.right,
+      width: column.width,
+      overflow:
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth,
+    };
+  });
+};
+
+test.describe("pool page layout", () => {
+  for (const width of [2544, 1440]) {
+    test(`is one centered column at ${width}px`, async ({ page }) => {
+      const box = await measurePoolPage(page, width);
+      expect(box.width).toBeLessThanOrEqual(POOL_PAGE_MAX_WIDTH + 1);
+      expect(box.width).toBeGreaterThanOrEqual(POOL_PAGE_MAX_WIDTH - 1);
+      expect(Math.abs(box.left - box.right)).toBeLessThanOrEqual(1);
+      expect(box.overflow).toBeLessThanOrEqual(1);
+    });
+  }
+
+  for (const width of [768, 375]) {
+    test(`fills the shell without scrolling sideways at ${width}px`, async ({
+      page,
+    }) => {
+      const box = await measurePoolPage(page, width);
+      // The shell's own padding is the only gutter: 20px from 48em, 16px below.
+      const gutter = width >= 768 ? 20 : 16;
+      expect(box.width).toBeCloseTo(width - gutter * 2, 0);
+      expect(box.overflow).toBeLessThanOrEqual(1);
+    });
+  }
+});
