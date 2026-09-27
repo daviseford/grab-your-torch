@@ -1,3 +1,4 @@
+import * as fs from "fs";
 import * as path from "path";
 import { describe, expect, it } from "vitest";
 import { regenerateSeasonFile } from "../curated-cast";
@@ -7,7 +8,7 @@ import { transformPlayers } from "../survivor-transformer";
 import type { SurvivorCastaway } from "../survivor-types";
 import type { ScrapeResultsOutput } from "../types";
 
-// Only used to resolve the repo's Prettier config; nothing is read or written.
+// The committed Season 51 file; also where the Prettier config resolves from.
 const SEASON_FILE = path.resolve(
   import.meta.dirname,
   "../../../src/data/season_51/index.ts",
@@ -114,5 +115,15 @@ describe("planSeasonFileWrite", () => {
     const plan = await planSeasonFileWrite(undefined, raw, SEASON_FILE);
     expect(plan.unchanged).toBe(false);
     expect(plan.content).toBe(await committedAfterSync(1));
+  });
+});
+
+describe("formatSeasonSource on the committed Season 51 file", () => {
+  // The no-op check only holds if the committed file is already Prettier's
+  // fixed point: formatting it again must not move a byte.
+  it("leaves the committed file unchanged", async () => {
+    const committed = fs.readFileSync(SEASON_FILE, "utf-8");
+
+    expect(await formatSeasonSource(committed, SEASON_FILE)).toBe(committed);
   });
 });

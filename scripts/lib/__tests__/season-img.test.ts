@@ -27,6 +27,23 @@ describe("readLocalSeasonImg", () => {
     expect(readLocalSeasonImg(source, 52)).toBe("");
     expect(readLocalSeasonImg(source, 53)).toBe("/images/season_53/logo.webp");
   });
+
+  // push-all-seasons, sync-season and push-seasons all read logos through
+  // this, so every registered season must read its own entry's value.
+  it("reads each registered season's own logo from the committed seasons.ts", () => {
+    const source = fs.readFileSync(SEASONS_FILE_PATH, "utf-8");
+    const entries = [
+      ...source.matchAll(/^ {2}season_(\d+): \{\n([\s\S]*?)^ {2}\},?$/gm),
+    ];
+    expect(entries.length).toBeGreaterThan(40);
+
+    for (const [, num, body] of entries) {
+      const own = body.match(/^ {4}img: "([^"]*)",$/m)?.[1] ?? "";
+      expect(readLocalSeasonImg(source, Number(num)), `season_${num}`).toBe(
+        own,
+      );
+    }
+  });
 });
 
 describe("resolveSeasonImg", () => {
