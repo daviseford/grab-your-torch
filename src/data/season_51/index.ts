@@ -140,8 +140,8 @@ export const SEASON_51_PLAYERS = [
     full_name: "Cristian Chavez",
     img: "/images/season_51/Cristian-Chavez.jpg",
     description:
-      "Age: 25 | Hometown: Salt Lake City, Utah | Occupation: Head of HR",
-    age: 25,
+      "Age: 26 | Hometown: Salt Lake City, Utah | Occupation: Head of HR",
+    age: 26,
     profession: "Head of HR",
     hometown: "Salt Lake City, Utah",
   }),
@@ -201,8 +201,8 @@ export const SEASON_51_PLAYERS = [
     full_name: "Kristin Flickinger",
     img: "/images/season_51/Kristin-Flickinger.jpg",
     description:
-      "Age: 49 | Hometown: Santa Barbara, California | Occupation: Crisis Management",
-    age: 49,
+      "Age: 53 | Hometown: Santa Barbara, California | Occupation: Crisis Management",
+    age: 53,
     profession: "Crisis Management",
     hometown: "Santa Barbara, California",
   }),
@@ -210,11 +210,10 @@ export const SEASON_51_PLAYERS = [
     castaway_id: "US0765",
     full_name: "Lewis Kelly",
     img: "/images/season_51/Lewis-Kelly.jpg",
-    description:
-      "Age: 28 | Hometown: Corozal, Puerto Rico | Occupation: Farmer",
+    description: "Age: 28 | Hometown: Puerto Rico | Occupation: Farmer",
     age: 28,
     profession: "Farmer",
-    hometown: "Corozal, Puerto Rico",
+    hometown: "Puerto Rico",
   }),
   buildPlayer({
     castaway_id: "US0766",
@@ -231,10 +230,10 @@ export const SEASON_51_PLAYERS = [
     full_name: "Maggie Nestor",
     img: "/images/season_51/Maggie-Nestor.jpg",
     description:
-      "Age: 40 | Hometown: Charles Town, West Virginia | Occupation: Farmer",
+      "Age: 40 | Hometown: Charlestown, West Virginia | Occupation: Farmer",
     age: 40,
     profession: "Farmer",
-    hometown: "Charles Town, West Virginia",
+    hometown: "Charlestown, West Virginia",
   }),
   buildPlayer({
     castaway_id: "US0768",
@@ -262,10 +261,10 @@ export const SEASON_51_PLAYERS = [
     full_name: "Patt Cannaday",
     img: "/images/season_51/Patt-Cannaday.jpg",
     description:
-      "Age: 33 | Hometown: Washington, D.C. | Occupation: Federal Prosecutor",
+      "Age: 33 | Hometown: Washington, District of Columbia | Occupation: Federal Prosecutor",
     age: 33,
     profession: "Federal Prosecutor",
-    hometown: "Washington, D.C.",
+    hometown: "Washington, District of Columbia",
     nickname: "Patt",
   }),
   buildPlayer({
@@ -273,8 +272,8 @@ export const SEASON_51_PLAYERS = [
     full_name: "Rob Antonson",
     img: "/images/season_51/Rob-Antonson.jpg",
     description:
-      "Age: 40 | Hometown: Cumberland, Rhode Island | Occupation: Airline Gate Agent",
-    age: 40,
+      "Age: 34 | Hometown: Cumberland, Rhode Island | Occupation: Airline Gate Agent",
+    age: 34,
     profession: "Airline Gate Agent",
     hometown: "Cumberland, Rhode Island",
   }),

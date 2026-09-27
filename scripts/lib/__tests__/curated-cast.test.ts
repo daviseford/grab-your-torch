@@ -20,8 +20,8 @@ const SEASON_51_FILE = path.resolve(
 
 /**
  * The Season 51 castaways rows of doehm/survivoR@7336413, reduced to the
- * columns transformPlayers reads. survivoR disagrees with the committed cast
- * on three ages and three hometowns and has no professions at all.
+ * columns transformPlayers reads. It agrees with the committed ages and
+ * hometowns and has no professions at all.
  */
 const SURVIVOR_51_CASTAWAYS: Array<
   [
@@ -150,13 +150,9 @@ describe("regenerateSeasonFile on the committed Season 51 file", () => {
       /episode_id: "episode_2",[^}]*castaway_id: "US0763"/,
     );
     expect(formatted).toContain("SEASON_51_EVENTS = {} satisfies");
-    // survivoR carries no professions, images or bios, so it can only
-    // disagree on these (at 7336413: three ages and three hometowns).
-    for (const note of keptDifferences) {
-      expect(note).toMatch(
-        /^US\d{4} .+: kept (age|hometown|castawayShortName|nickname) /,
-      );
-    }
+    // The committed ages and hometowns were moved to survivoR's values, so
+    // survivoR@7336413 has nothing left to disagree with.
+    expect(keptDifferences).toEqual([]);
   });
 
   it("reads every curated field of the committed cast", () => {
@@ -173,6 +169,13 @@ describe("regenerateSeasonFile on the committed Season 51 file", () => {
       nickname: "Jelly",
       img: "/images/season_51/Jelly-Loblack.jpg",
     });
+    // The sync keeps description as committed, so an age or hometown edit
+    // has to update it by hand.
+    for (const p of cast) {
+      expect(p.description).toBe(
+        `Age: ${p.age} | Hometown: ${p.hometown} | Occupation: ${p.profession}`,
+      );
+    }
   });
 });
 
