@@ -108,14 +108,6 @@
   font-weight: 700;
 }
 
-.tiedMark {
-  display: inline-block;
-  width: 10px;
-  height: 1px;
-  vertical-align: middle;
-  background: var(--gyt-rule-strong);
-}
-
 .handle {
   /* A handle is capped at 24 characters by rules, but it can still be 24
      unbroken characters on a 375px screen. */

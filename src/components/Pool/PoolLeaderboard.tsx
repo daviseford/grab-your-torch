@@ -29,12 +29,9 @@ import classes from "./PoolLeaderboard.module.css";
  *  - the standings, with their as-of stamp;
  *  - the standings plus a note, when the stamp says they are behind.
  *
- * SHARED RANKS ARE THE ORDINARY CASE (KD4). Prop bets break ties and they
- * award points only when definitively correct, so most of the field shares
- * rank one in the first weeks. A column of identical numbers reads as a
- * rendering fault, so a run of tied entrants shows its position once and the
- * rest of the run is marked as tied, with the position still announced to a
- * screen reader on every row.
+ * SHARED RANKS ARE THE ORDINARY CASE (KD4). Entrants on the same total share
+ * a position, every row of a tie shows it as "T-5", and positions are dense:
+ * the total after a tie is 6. The rules live on `groupPoolStandingsRows`.
  *
  * NOT UNIT TESTED, deliberately: this repo has no React Testing Library and no
  * `.test.tsx` files. Everything it decides is a pure function tested in
@@ -136,32 +133,35 @@ export const PoolLeaderboard = ({
             </tr>
           </thead>
           <tbody>
-            {grouped.map(({ row, showRank, tiedCount }, index) => (
-              <tr
-                // Handles are not unique and rows carry no id, so position in
-                // the published order is the only stable key there is. That
-                // order is deterministic by construction (R14).
-                key={`${index}-${row.handle}`}
-                className={showRank ? classes.groupStart : classes.tiedRow}
-              >
-                <td className={classes.rankCol}>
-                  {showRank ? (
-                    <span className={classes.rank}>{row.rank}</span>
-                  ) : (
-                    <span className={classes.tiedMark} aria-hidden="true" />
-                  )}
-                  {tiedCount > 1 && (
-                    <span className={classes.srOnly}>
-                      {` Rank ${row.rank}, tied with ${tiedCount - 1} ${
-                        tiedCount === 2 ? "other entrant" : "other entrants"
-                      }.`}
+            {grouped.map(
+              ({ row, showRank, tiedCount, position, label }, index) => (
+                <tr
+                  // Handles are not unique and rows carry no id, so position in
+                  // the published order is the only stable key there is. That
+                  // order is deterministic by construction (R14).
+                  key={`${index}-${row.handle}`}
+                  className={showRank ? classes.groupStart : classes.tiedRow}
+                >
+                  <td className={classes.rankCol}>
+                    <span
+                      className={classes.rank}
+                      aria-hidden={tiedCount > 1 ? "true" : undefined}
+                    >
+                      {label}
                     </span>
-                  )}
-                </td>
-                <td className={classes.handle}>{row.handle}</td>
-                <td className={classes.pointsCol}>{row.total}</td>
-              </tr>
-            ))}
+                    {tiedCount > 1 && (
+                      <span className={classes.srOnly}>
+                        {`Rank ${position}, tied with ${tiedCount - 1} ${
+                          tiedCount === 2 ? "other entrant" : "other entrants"
+                        }.`}
+                      </span>
+                    )}
+                  </td>
+                  <td className={classes.handle}>{row.handle}</td>
+                  <td className={classes.pointsCol}>{row.total}</td>
+                </tr>
+              ),
+            )}
           </tbody>
         </table>
       </div>

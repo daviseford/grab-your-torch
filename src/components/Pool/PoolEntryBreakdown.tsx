@@ -159,11 +159,6 @@ export const PoolEntryBreakdown = ({
           </tfoot>
         </table>
       </div>
-
-      <p className={classes.note}>
-        This is yours alone. The public leaderboard shows handles, totals and
-        positions only.
-      </p>
     </div>
   );
 };

@@ -271,36 +271,71 @@ export const projectPoolStandingsRows = (
 
 export type GroupedStandingsRow = {
   row: PublicStandingsRow;
-  /** True for the first row of a run sharing a rank. */
+  /** True for the first row of a run sharing a total. */
   showRank: boolean;
-  /** How many rows share this rank, including this one. */
+  /** How many rows share this total, including this one. */
   tiedCount: number;
+  /**
+   * The position shown to people: 1 for the highest total, 2 for the next
+   * distinct total, and so on. A tie takes one position, not one per entrant.
+   */
+  position: number;
+  /** What the rank column says: "7", or "T-7" on every row of a tie. */
+  label: string;
 };
 
 /**
- * Annotate rows so a run of tied entrants reads as one shared position.
+ * Number the rows as people read them: by the total they can see.
  *
- * Prop bets are the only tiebreak and they award points only when definitively
- * correct, so ties are the ordinary case in the first weeks rather than an
- * edge case (KD4). Fifteen rows each stamped "1" reads as a rendering fault;
- * one position with fifteen entrants under it reads as what happened.
+ * TIES ARE DECIDED BY THE VISIBLE TOTAL. Entrants on the same total share a
+ * position, and every one of them is labelled "T-" plus that position. The
+ * published `rank` is deliberately not used: `rankPoolEntries` separates equal
+ * totals by prop bet points, which the leaderboard never shows, so honouring
+ * it would print different positions beside identical numbers with nothing on
+ * screen to explain why. Prop bet points and the uid still decide the order of
+ * rows inside a tie, because that order is the published order and is kept.
  *
- * Order is preserved exactly. `rankPoolEntries` emits final published order,
- * including its deterministic uid tiebreak, and re-sorting here would make
- * tied rows visibly reshuffle between visits.
+ * Positions are dense: the total after a tie is the next number, so four
+ * entrants at T-5 are followed by 6, not 9.
+ *
+ * Ties are the ordinary case in the first weeks rather than an edge case
+ * (KD4), which is why every row carries its position rather than only the
+ * first row of a run.
+ *
+ * Rows always start from row one of the published order (the summary, or the
+ * pages from page zero), so counting positions over them is exact. The one
+ * blind spot is a tie that straddles the end of the rows in hand: the last row
+ * shown cannot see its partner on an unfetched page and reads as untied until
+ * the list is expanded.
+ *
+ * Order is preserved exactly. Re-sorting here would make tied rows visibly
+ * reshuffle between visits.
  */
 export const groupPoolStandingsRows = (
   rows: readonly PublicStandingsRow[],
 ): GroupedStandingsRow[] => {
-  const counts = new Map<number, number>();
-  for (const row of rows) {
-    counts.set(row.rank, (counts.get(row.rank) ?? 0) + 1);
-  }
-  let previousRank: number | null = null;
-  return rows.map((row) => {
-    const showRank = row.rank !== previousRank;
-    previousRank = row.rank;
-    return { row, showRank, tiedCount: counts.get(row.rank) ?? 1 };
+  // Published order is total descending, so a tie is a run of equal totals.
+  const runLengths: number[] = [];
+  rows.forEach((row, index) => {
+    if (index > 0 && rows[index - 1].total === row.total) {
+      runLengths[runLengths.length - 1] += 1;
+    } else {
+      runLengths.push(1);
+    }
+  });
+
+  let position = 0;
+  return rows.map((row, index) => {
+    const showRank = index === 0 || rows[index - 1].total !== row.total;
+    if (showRank) position += 1;
+    const tiedCount = runLengths[position - 1];
+    return {
+      row,
+      showRank,
+      tiedCount,
+      position,
+      label: tiedCount > 1 ? `T-${position}` : `${position}`,
+    };
   });
 };
 

@@ -158,15 +158,6 @@
   font-weight: 700;
 }
 
-.note {
-  margin: 0;
-  font-size: var(--mantine-font-size-xs);
-  line-height: 1.45;
-  color: var(--mantine-color-dimmed);
-  border-left: 2px solid var(--gyt-rule-strong);
-  padding-left: 10px;
-}
-
 .srOnly {
   position: absolute;
   width: 1px;

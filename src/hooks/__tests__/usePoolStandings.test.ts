@@ -682,6 +682,75 @@ describe("groupPoolStandingsRows", () => {
     expect(grouped.every((g) => g.tiedCount === 15)).toBe(true);
   });
 
+  it("ties equal totals whatever the prop bets said", () => {
+    // Episode 1 of the Season 51 pool. The published ranks separate the four
+    // 8-point entrants by prop bet points, which the leaderboard never shows,
+    // so the labels ignore them and tie on the visible total.
+    const rows = projectPoolStandingsRows([
+      row("davis", 12, 1),
+      row("Eric Beyer", 11, 2),
+      row("AbyssalChloe", 10, 3),
+      row("Annalise", 9, 4),
+      row("TerrificallyTubular", 8, 5),
+      row("FONTANATOR", 8, 6),
+      row("Mysuitcaseispacked", 8, 7),
+      row("Kolton", 8, 7),
+      row("LQ", 7, 9),
+      row("Chrisanthemum", 5, 10),
+      row("Amanda", 5, 10),
+    ]);
+    const grouped = groupPoolStandingsRows(rows);
+    expect(grouped.map((g) => [g.row.handle, g.label])).toEqual([
+      ["davis", "1"],
+      ["Eric Beyer", "2"],
+      ["AbyssalChloe", "3"],
+      ["Annalise", "4"],
+      ["TerrificallyTubular", "T-5"],
+      ["FONTANATOR", "T-5"],
+      ["Mysuitcaseispacked", "T-5"],
+      ["Kolton", "T-5"],
+      ["LQ", "6"],
+      ["Chrisanthemum", "T-7"],
+      ["Amanda", "T-7"],
+    ]);
+    expect(grouped.map((g) => g.position)).toEqual([
+      1, 2, 3, 4, 5, 5, 5, 5, 6, 7, 7,
+    ]);
+    expect(grouped.map((g) => g.tiedCount)).toEqual([
+      1, 1, 1, 1, 4, 4, 4, 4, 1, 2, 2,
+    ]);
+  });
+
+  it("labels a field tied at the top as T-1 throughout", () => {
+    const rows = projectPoolStandingsRows([
+      row("a", 0, 1),
+      row("b", 0, 1),
+      row("c", 0, 1),
+    ]);
+    expect(groupPoolStandingsRows(rows).map((g) => g.label)).toEqual([
+      "T-1",
+      "T-1",
+      "T-1",
+    ]);
+  });
+
+  it("keeps consecutive ties apart", () => {
+    const rows = projectPoolStandingsRows([
+      row("a", 6, 1),
+      row("b", 6, 1),
+      row("c", 4, 3),
+      row("d", 4, 3),
+      row("e", 1, 5),
+    ]);
+    expect(groupPoolStandingsRows(rows).map((g) => g.label)).toEqual([
+      "T-1",
+      "T-1",
+      "T-2",
+      "T-2",
+      "3",
+    ]);
+  });
+
   it("keeps the order rankPoolEntries produced", () => {
     const rows = projectPoolStandingsRows([
       row("zeta", 10, 1),
