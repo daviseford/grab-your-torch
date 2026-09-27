@@ -6,9 +6,15 @@
  */
 
 import type { Firestore } from "firebase-admin/firestore";
+import * as fs from "fs";
 import * as path from "path";
 import { seasonPushGate } from "./remap-ledger.js";
 import { buildSeasonDocument } from "./season-document.js";
+import {
+  readLocalSeasonImg,
+  resolveSeasonImg,
+  SEASONS_FILE_PATH,
+} from "./season-img.js";
 
 const PROJECT_ROOT = path.resolve(import.meta.dirname, "..", "..");
 export const VALID_COLLECTIONS = [
@@ -43,6 +49,12 @@ export async function pushSeason(
   seasonNum: number,
   collections: Set<Collection>,
   dryRun: boolean,
+  {
+    localSeasonImg = readLocalSeasonImg(
+      fs.readFileSync(SEASONS_FILE_PATH, "utf-8"),
+      seasonNum,
+    ),
+  }: { localSeasonImg?: string } = {},
 ): Promise<{ pushed: string[]; skipped: string[]; failed: string[] }> {
   const seasonKey = `season_${seasonNum}`;
   const seasonDataPath = getSeasonDataPath(seasonNum);
@@ -64,7 +76,8 @@ export async function pushSeason(
       collection: "seasons",
       data: buildSeasonDocument({
         seasonNum,
-        seasonImg: "",
+        // Resolved against the stored logo just before the write, below.
+        seasonImg: localSeasonImg,
         players: players || [],
         episodes: episodes || [],
         castawayLookup: castawayLookup || {},
@@ -95,6 +108,11 @@ export async function pushSeason(
   console.log(
     `    revisions: data ${seasonDoc.data_revision}, scoring ${seasonDoc.scoring_revision}`,
   );
+  if (collections.has("seasons")) {
+    console.log(
+      `    img: ${localSeasonImg ? `"${localSeasonImg}" (seasons.ts)` : "keep the stored logo (seasons.ts has none)"}`,
+    );
+  }
 
   const pushed: string[] = [];
   const skipped: string[] = [];
@@ -129,6 +147,12 @@ export async function pushSeason(
         ...selectedDocs.map((doc) => `${doc.collection}/${seasonKey}`),
       );
       return { pushed, skipped, failed };
+    }
+    if (collections.has("seasons") && !localSeasonImg) {
+      // The season document is replaced whole, so an empty local logo would
+      // otherwise delete the one production shows.
+      const stored = await db!.collection("seasons").doc(seasonKey).get();
+      seasonDoc.img = resolveSeasonImg(localSeasonImg, stored.get("img"));
     }
     const batch = db!.batch();
     for (const doc of selectedDocs) {
