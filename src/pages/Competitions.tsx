@@ -44,8 +44,18 @@ import {
   type PoolLifecycle,
 } from "../utils/poolModuleState";
 import classes from "./Competitions.module.css";
+import {
+  competitionEpisodeLabel,
+  competitionEpisodeSortKey,
+} from "./competitionSignals";
 
-type SortField = "name" | "season" | "participants" | "type" | "status";
+type SortField =
+  | "name"
+  | "season"
+  | "participants"
+  | "type"
+  | "episode"
+  | "status";
 
 const badgeClassNames = { label: classes.badgeLabel };
 type SortDir = "asc" | "desc";
@@ -224,8 +234,30 @@ const CompetitionBadges = ({ comp }: { comp: Competition }) => (
       size="sm"
       classNames={badgeClassNames}
     />
+    {/* Its own quiet line, so the badges above keep to one row. */}
+    {comp.current_episode != null && (
+      <span id={`${comp.id}-episode`} className={classes.rowEpisode}>
+        {competitionEpisodeLabel(comp)}
+      </span>
+    )}
   </>
 );
+
+/**
+ * How far this competition's group has watched. Only a watch-along
+ * competition has an episode boundary; a live one shows a placeholder rather
+ * than the season's latest episode, which would read as that group's own.
+ */
+const CompetitionEpisode = ({ comp }: { comp: Competition }) => {
+  const label = competitionEpisodeLabel(comp);
+  if (label) return <span className={classes.episode}>{label}</span>;
+  return (
+    <span className={classes.winnerEmpty}>
+      <span aria-hidden="true">—</span>
+      <VisuallyHidden>Not applicable: live</VisuallyHidden>
+    </span>
+  );
+};
 
 const formatPoints = (total: number) =>
   `${total} ${Math.abs(total) === 1 ? "pt" : "pts"}`;
@@ -366,6 +398,9 @@ export const Competitions = () => {
             Number(a.current_episode != null) -
             Number(b.current_episode != null);
           break;
+        case "episode":
+          cmp = competitionEpisodeSortKey(a) - competitionEpisodeSortKey(b);
+          break;
         case "status":
           cmp = Number(a.finished) - Number(b.finished);
           break;
@@ -477,6 +512,9 @@ export const Competitions = () => {
           size="sm"
           classNames={badgeClassNames}
         />
+      </Table.Td>
+      <Table.Td className={classes.badgeCell}>
+        <CompetitionEpisode comp={x} />
       </Table.Td>
       <Table.Td className={classes.badgeCell}>
         <StatusBadge
@@ -637,13 +675,18 @@ export const Competitions = () => {
                 <Link
                   to={`/competitions/${x.id}`}
                   className={`${classes.row} ${x.finished ? classes.rowFinished : ""}`}
-                  // Named by the competition name plus, once it is finished,
-                  // the winner line. On a phone this link is the only place
-                  // the winner is shown, and screen readers that announce a
-                  // link as one element read only its name.
-                  aria-labelledby={
-                    x.finished ? `${x.id}-name ${x.id}-winner` : `${x.id}-name`
-                  }
+                  // Named by the competition name, a watch-along group's
+                  // episode, and, once it is finished, the winner line. On a
+                  // phone this link is the only place those are shown, and
+                  // screen readers that announce a link as one element read
+                  // only its name.
+                  aria-labelledby={[
+                    `${x.id}-name`,
+                    x.current_episode != null && `${x.id}-episode`,
+                    x.finished && `${x.id}-winner`,
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
                 >
                   <div className={classes.rowName}>
                     <div id={`${x.id}-name`} className={classes.name}>
@@ -708,6 +751,13 @@ export const Competitions = () => {
                   <SortableHeader
                     label="Type"
                     field="type"
+                    sortField={sortField}
+                    sortDir={sortDir}
+                    onSort={handleSort}
+                  />
+                  <SortableHeader
+                    label="Episode"
+                    field="episode"
                     sortField={sortField}
                     sortDir={sortDir}
                     onSort={handleSort}

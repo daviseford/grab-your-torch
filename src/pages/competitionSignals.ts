@@ -41,3 +41,25 @@ export const competitionContextLine = (competition: CompetitionSignals) => {
   if (!mode) return undefined;
   return `Season ${competition.season_num} · ${mode === "live" ? "Live" : "Watch-along"}`;
 };
+
+/**
+ * How far a watch-along group has watched, from the competition's own
+ * `current_episode` boundary: "Pre-season" at 0, then "Episode N". A live
+ * competition has no boundary of its own (results appear as they air), so it
+ * gets null rather than the season's latest episode.
+ */
+export const competitionEpisodeLabel = (
+  competition: Pick<Competition, "current_episode">,
+): string | null => {
+  const { current_episode } = competition;
+  if (current_episode == null) return null;
+  return current_episode > 0 ? `Episode ${current_episode}` : "Pre-season";
+};
+
+/**
+ * Sort key for the episode column: watch-along groups by how far they have
+ * watched, pre-season ahead of live competitions, which have no episode.
+ */
+export const competitionEpisodeSortKey = (
+  competition: Pick<Competition, "current_episode">,
+) => competition.current_episode ?? -1;
