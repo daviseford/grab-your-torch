@@ -812,7 +812,8 @@ export const Pool = () => {
           Prop bets
         </h2>
         <Text className={classes.sectionNote}>
-          Answer every question. These break ties on the leaderboard.
+          Answer every question. Points for correct answers show in their own
+          column on the leaderboard, separate from your total.
         </Text>
         {blockerMessage && (
           <Notice label="Not yet" tone="warning" role="alert">

@@ -428,8 +428,8 @@ describe("resolvePoolStandingsView", () => {
     if (view.kind !== "ready") return;
     expect(view.freshness).toBe("fresh");
     expect(view.rows).toEqual([
-      { handle: "wanda", total: 42, rank: 1 },
-      { handle: "pete", total: 30, rank: 2 },
+      { handle: "wanda", total: 42, rank: 1, propBetPoints: 0 },
+      { handle: "pete", total: 30, rank: 2, propBetPoints: 0 },
     ]);
   });
 
@@ -448,7 +448,9 @@ describe("resolvePoolStandingsView", () => {
     expect(view.kind).toBe("ready");
     if (view.kind !== "ready") return;
     expect(view.freshness).toBe("stale");
-    expect(view.rows).toEqual([{ handle: "wanda", total: 42, rank: 1 }]);
+    expect(view.rows).toEqual([
+      { handle: "wanda", total: 42, rank: 1, propBetPoints: 0 },
+    ]);
     expect(view.episodeNum).toBe(7);
     expect(describePoolStandingsAsOf(view).label).toContain("episode 7");
   });
@@ -463,7 +465,9 @@ describe("resolvePoolStandingsView", () => {
     expect(view.kind).toBe("ready");
     if (view.kind !== "ready") return;
     expect(view.freshness).toBe("stale");
-    expect(view.rows).toEqual([{ handle: "wanda", total: 42, rank: 1 }]);
+    expect(view.rows).toEqual([
+      { handle: "wanda", total: 42, rank: 1, propBetPoints: 0 },
+    ]);
     expect(describePoolStandingsAsOf(view).label).toContain("episode 7");
   });
 
@@ -565,20 +569,40 @@ describe("resolvePoolStandingsView", () => {
 // ---------------------------------------------------------------------------
 
 describe("projectPoolStandingsRows", () => {
-  it("keeps handle, total and rank and nothing else", () => {
+  it("keeps handle, total, rank and prop bet points and nothing else", () => {
     expect(projectPoolStandingsRows([row("wanda", 42, 1, 6)])).toEqual([
-      { handle: "wanda", total: 42, rank: 1 },
+      { handle: "wanda", total: 42, rank: 1, propBetPoints: 6 },
     ]);
   });
 
-  it("drops every field a row might carry beyond the three R17 allows", () => {
-    // The property under test: whatever arrives, only three keys leave.
+  it("keeps a row whose prop bet points are missing or unusable, without them", () => {
+    expect(
+      projectPoolStandingsRows([
+        { handle: "old", total: 9, rank: 1 },
+        { handle: "neg", total: 8, rank: 2, prop_bet_points: -4 },
+        { handle: "str", total: 7, rank: 3, prop_bet_points: "4" },
+        { handle: "nan", total: 6, rank: 4, prop_bet_points: Number.NaN },
+        { handle: "zero", total: 5, rank: 5, prop_bet_points: 0 },
+      ]),
+    ).toEqual([
+      { handle: "old", total: 9, rank: 1 },
+      { handle: "neg", total: 8, rank: 2 },
+      { handle: "str", total: 7, rank: 3 },
+      { handle: "nan", total: 6, rank: 4 },
+      { handle: "zero", total: 5, rank: 5, propBetPoints: 0 },
+    ]);
+  });
+
+  it("drops every field a row might carry beyond the four the bound allows", () => {
+    // The property under test: whatever arrives, only four keys leave.
     const contaminated = [
       {
         handle: "wanda",
         total: 42,
         rank: 1,
         prop_bet_points: 6,
+        prop_bets: { propbet_first_vote: "US0754" },
+        prop_bet_status: "definitive_correct",
         uid: "firebase-uid-1234",
         email: "someone@example.com",
         picks: [{ castaway_id: "US0752", full_name: "Alex Moore" }],
@@ -610,18 +634,24 @@ describe("projectPoolStandingsRows", () => {
       "firebase-uid-1234",
       "@",
       "eliminated",
-      "prop_bet_points",
+      "US0754",
+      "propbet_",
+      "definitive_correct",
       "picks",
     ]) {
       expect(serialized).not.toContain(leak);
     }
-    for (const projectedRow of projected) {
-      expect(Object.keys(projectedRow).sort()).toEqual([
-        "handle",
-        "rank",
-        "total",
-      ]);
-    }
+    expect(Object.keys(projected[0]).sort()).toEqual([
+      "handle",
+      "propBetPoints",
+      "rank",
+      "total",
+    ]);
+    expect(Object.keys(projected[1]).sort()).toEqual([
+      "handle",
+      "rank",
+      "total",
+    ]);
   });
 
   it("drops a row whose shape cannot be trusted rather than rendering junk", () => {

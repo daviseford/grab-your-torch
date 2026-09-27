@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { PropBetQuestionKeys } from "../../src/data/propbets";
+import {
+  PropBetQuestionKeys,
+  PropBetsQuestions,
+} from "../../src/data/propbets";
 import { SCORING_REVISION } from "../../src/data/scoringRevision.generated";
 import type {
   CastawayId,
@@ -371,6 +374,77 @@ describe("prop bets", () => {
     expect(rows[0].prop_bet_points).toBeGreaterThan(0);
     expect(rows[0].rank).toBe(1);
     expect(rows[1].rank).toBe(2);
+  });
+
+  it("publishes a bet's points from the episode it settles in", () => {
+    // Dev is the first boot in episode 1, so a correct first-vote answer
+    // settles immediately and every standings document carries it.
+    const plan = planRecompute(
+      input({
+        entries: [
+          entry("uid_a", "alpha", [ADA, BEN], {
+            propbet_first_vote: DEV.castaway_id,
+          }),
+        ],
+      }),
+    );
+
+    expect(
+      plan.episodes.map((ep) => ep.summary.rows[0].prop_bet_points),
+    ).toEqual(
+      Array.from(
+        { length: 3 },
+        () => PropBetsQuestions.propbet_first_vote.point_value,
+      ),
+    );
+  });
+
+  it("publishes nothing for a bet that has not settled or settled against the entrant", () => {
+    // No winner yet, Ada is not the first boot, and no medevac has happened,
+    // so none of these can award anything, and "leading" is not settled.
+    const plan = planRecompute(
+      input({
+        entries: [
+          entry("uid_a", "alpha", [ADA, BEN], {
+            propbet_winner: ADA.castaway_id,
+            propbet_ftc: ADA.castaway_id,
+            propbet_immunities: ADA.castaway_id,
+            propbet_first_vote: ADA.castaway_id,
+            propbet_medical_evac: "Yes",
+          }),
+        ],
+      }),
+    );
+
+    for (const ep of plan.episodes) {
+      expect(ep.summary.rows[0].prop_bet_points).toBe(0);
+      expect(ep.summary.rows[0].total).toBeGreaterThan(0);
+    }
+  });
+
+  it("publishes an entrant's prop bet points as one number and nothing about the bets", () => {
+    const plan = planRecompute(
+      input({
+        entries: [
+          entry("uid_a", "alpha", [ADA, BEN], {
+            propbet_first_vote: DEV.castaway_id,
+            propbet_winner: ADA.castaway_id,
+          }),
+        ],
+      }),
+    );
+
+    const published = plan.episodes.at(-1)!.summary.rows[0];
+    expect(Object.keys(published).sort()).toEqual([
+      "handle",
+      "prop_bet_points",
+      "rank",
+      "total",
+    ]);
+    const serialized = JSON.stringify(plan.episodes);
+    for (const leak of ["propbet_", "first_vote", "winner", "status"]) {
+      expect(serialized).not.toContain(leak);
+    }
   });
 
   it("drops answer values the rules cannot validate", () => {

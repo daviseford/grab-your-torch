@@ -12,8 +12,9 @@ import classes from "./PoolLeaderboard.module.css";
 /**
  * The public leaderboard (U8).
  *
- * Handles, totals and ranks. Nothing else (R17): no castaway, no elimination
- * state, no per-castaway breakdown. That bound is applied upstream by
+ * Handles, totals, ranks and awarded prop bet points. Nothing else: no
+ * castaway, no elimination state, no per-castaway breakdown, and no bet name,
+ * answer or pending bet behind the prop bet number. That bound is applied upstream by
  * `projectPoolStandingsRows`, which is why this component receives a
  * `PoolStandingsView` rather than raw documents. There is no prop through
  * which a castaway name could arrive.
@@ -94,6 +95,11 @@ export const PoolLeaderboard = ({
   const grouped = compact ? allGrouped.slice(0, 5) : allGrouped;
   const shown = grouped.length;
   const hidden = Math.max(view.totalRows - shown, 0);
+  // Standings published before the field existed carry no prop bet points;
+  // an empty column would read as everyone scoring nothing.
+  const showPropBets = grouped.some(
+    ({ row }) => row.propBetPoints !== undefined,
+  );
 
   return (
     <section
@@ -119,7 +125,11 @@ export const PoolLeaderboard = ({
       <div className={classes.tableWrap}>
         <table className={classes.table}>
           <caption className={classes.caption}>
-            {asOf.label}. Handles, total points and position.
+            {`${asOf.label}. ${
+              showPropBets
+                ? "Handles, total points, prop bet points and position."
+                : "Handles, total points and position."
+            }`}
           </caption>
           <thead>
             <tr>
@@ -130,6 +140,14 @@ export const PoolLeaderboard = ({
               <th scope="col" className={classes.pointsCol}>
                 Points
               </th>
+              {showPropBets && (
+                <th
+                  scope="col"
+                  className={`${classes.pointsCol} ${classes.propCol}`}
+                >
+                  Prop bets
+                </th>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -159,6 +177,11 @@ export const PoolLeaderboard = ({
                   </td>
                   <td className={classes.handle}>{row.handle}</td>
                   <td className={classes.pointsCol}>{row.total}</td>
+                  {showPropBets && (
+                    <td className={`${classes.pointsCol} ${classes.propCol}`}>
+                      {row.propBetPoints ?? "—"}
+                    </td>
+                  )}
                 </tr>
               ),
             )}

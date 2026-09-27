@@ -122,6 +122,29 @@
   font-variant-numeric: tabular-nums;
 }
 
+.table .propCol {
+  width: 7rem;
+  padding-left: 16px;
+  white-space: nowrap;
+}
+
+/* Two number columns leave a 375px screen little room for the handle, so they
+   give back what they do not need. */
+@media (max-width: 30em) {
+  .rankCol {
+    width: 3rem;
+  }
+
+  .table .pointsCol {
+    width: 3.5rem;
+  }
+
+  .table .propCol {
+    width: 5.5rem;
+    padding-left: 8px;
+  }
+}
+
 .expand {
   display: flex;
 }

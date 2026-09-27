@@ -220,23 +220,28 @@ export const resolvePoolStandingsFreshness = ({
 // ---------------------------------------------------------------------------
 
 /**
- * A row as it may appear in public: handle, total points, rank. Nothing else.
+ * A row as it may appear in public: handle, total points, rank and awarded
+ * prop bet points. Nothing else.
  *
- * `prop_bet_points` is dropped along with everything else. It is a tiebreak
- * the job applies before serialization, not something the leaderboard shows,
- * and R17 lists three things.
+ * `propBetPoints` is one number per entrant: the points from prop bets that
+ * have definitively settled in their favour. Pending and "leading" bets award
+ * nothing (`getPropBetScoresForUser`), so an unresolved bet never shows up
+ * here. It is never folded into `total` (R13). No bet name, answer, event or
+ * castaway travels with it, and the payload has none to offer.
  */
 export type PublicStandingsRow = {
   handle: string;
   total: number;
   rank: number;
+  /** Absent when the published row has no usable value. */
+  propBetPoints?: number;
 };
 
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
 
 /**
- * Narrow published rows to the three fields R17 permits.
+ * Narrow published rows to the fields the public bound permits.
  *
  * This is a projection rather than a pass-through so that no field can reach
  * the rendered output by being added upstream later. A row carrying a
@@ -245,7 +250,7 @@ const isFiniteNumber = (value: unknown): value is number =>
  * says anything added later inherits that bound; this function is where the
  * bound is applied rather than remembered.
  *
- * A row whose three fields are not the right shape is dropped rather than
+ * A row whose handle, total or rank is not the right shape is dropped rather than
  * coerced. Half a row on a public leaderboard reads as a bug in the standings,
  * not as a bug in the payload.
  */
@@ -256,11 +261,21 @@ export const projectPoolStandingsRows = (
   const projected: PublicStandingsRow[] = [];
   for (const candidate of rows) {
     if (typeof candidate !== "object" || candidate === null) continue;
-    const { handle, total, rank } = candidate as Record<string, unknown>;
+    const {
+      handle,
+      total,
+      rank,
+      prop_bet_points: propBetPoints,
+    } = candidate as Record<string, unknown>;
     if (typeof handle !== "string") continue;
     if (!isFiniteNumber(total)) continue;
     if (!isFiniteNumber(rank)) continue;
-    projected.push({ handle, total, rank });
+    // Optional: a bad value loses the prop bet cell, not the whole row.
+    projected.push(
+      isFiniteNumber(propBetPoints) && propBetPoints >= 0
+        ? { handle, total, rank, propBetPoints }
+        : { handle, total, rank },
+    );
   }
   return projected;
 };
@@ -290,10 +305,10 @@ export type GroupedStandingsRow = {
  * TIES ARE DECIDED BY THE VISIBLE TOTAL. Entrants on the same total share a
  * position, and every one of them is labelled "T-" plus that position. The
  * published `rank` is deliberately not used: `rankPoolEntries` separates equal
- * totals by prop bet points, which the leaderboard never shows, so honouring
- * it would print different positions beside identical numbers with nothing on
- * screen to explain why. Prop bet points and the uid still decide the order of
- * rows inside a tie, because that order is the published order and is kept.
+ * totals by prop bet points, so honouring it would print different positions
+ * beside identical totals. Prop bet points have their own column and never
+ * change a position; they and the uid still decide the order of rows inside a
+ * tie, because that order is the published order and is kept.
  *
  * Positions are dense: the total after a tie is the next number, so four
  * entrants at T-5 are followed by 6, not 9.

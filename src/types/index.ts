@@ -592,8 +592,15 @@ export type PoolEntry = {
 export type PoolStandingsRow = {
   handle: string;
   total: number;
+  /**
+   * Awarded prop bet points: settled, correct bets only. Shown publicly in
+   * its own column and never folded into `total`.
+   */
   prop_bet_points: number;
-  /** Entrants who stay tied share a rank, and the next rank skips (KD4). */
+  /**
+   * Entrants who stay tied share a rank, and the next rank skips (KD4). The
+   * leaderboard does not display this: it numbers rows densely by `total`.
+   */
   rank: number;
 };
 
