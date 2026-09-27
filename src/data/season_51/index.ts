@@ -2,6 +2,9 @@
 // names (doehm/survivoR@7336413) by
 // `yarn remap-castaway-ids 51 --rewrite-season-file`, mapping fe734ff53fbaf8a3.
 // See docs/castaway-id-mapping.md.
+//
+// Episode, challenge, elimination, event and vote history exports below are
+// the unedited transformer output for doehm/survivoR@7336413 (through episode 1).
 import {
   CastawayLookup,
   Challenge,
@@ -294,24 +297,215 @@ export const SEASON_51_PLAYERS = [
   }),
 ] satisfies Player<CastawayIdType, SeasonNumber>[];
 
-export const SEASON_51_EPISODES = [] satisfies Episode<SeasonNumber>[];
+export const SEASON_51_EPISODES = [
+  {
+    id: "episode_1",
+    season_id: "season_51",
+    season_num: 51,
+    order: 1,
+    name: "Permanent Uncertainty",
+    air_date: "2026-09-23",
+    post_merge: false,
+    finale: false,
+    merge_occurs: false,
+  },
+] satisfies Episode<SeasonNumber>[];
 
-export const SEASON_51_CHALLENGES = {} satisfies Record<
-  Challenge["id"],
-  Challenge<CastawayIdType, SeasonNumber>
->;
+export const SEASON_51_CHALLENGES = {
+  challenge_0: {
+    id: "challenge_0",
+    season_id: "season_51",
+    season_num: 51,
+    episode_id: "episode_1",
+    episode_num: 1,
+    variant: "team_immunity",
+    order: 0,
+    winning_castaways: [
+      "US0753",
+      "US0755",
+      "US0758",
+      "US0759",
+      "US0762",
+      "US0764",
+      "US0766",
+      "US0769",
+      "US0771",
+      "US0772",
+    ],
+  },
+} satisfies Record<Challenge["id"], Challenge<CastawayIdType, SeasonNumber>>;
 
-export const SEASON_51_ELIMINATIONS = {} satisfies Record<
+export const SEASON_51_ELIMINATIONS = {
+  elimination_1: {
+    id: "elimination_1",
+    season_id: "season_51",
+    season_num: 51,
+    episode_id: "episode_1",
+    episode_num: 1,
+    order: 1,
+    castaway_id: "US0752",
+    variant: "tribal",
+  },
+} satisfies Record<
   Elimination["id"],
   Elimination<CastawayIdType, SeasonNumber>
 >;
 
-export const SEASON_51_EVENTS = {} satisfies Record<
-  GameEvent["id"],
-  GameEvent<CastawayIdType, SeasonNumber>
->;
+export const SEASON_51_EVENTS = {
+  event_1: {
+    id: "event_1",
+    season_id: "season_51",
+    season_num: 51,
+    episode_id: "episode_1",
+    episode_num: 1,
+    castaway_id: "US0771",
+    action: "find_idol",
+    multiplier: null,
+  },
+  event_2: {
+    id: "event_2",
+    season_id: "season_51",
+    season_num: 51,
+    episode_id: "episode_1",
+    episode_num: 1,
+    castaway_id: "US0752",
+    action: "use_shot_in_the_dark_unsuccessfully",
+    multiplier: null,
+  },
+  event_3: {
+    id: "event_3",
+    season_id: "season_51",
+    season_num: 51,
+    episode_id: "episode_1",
+    episode_num: 1,
+    castaway_id: "US0763",
+    action: "use_shot_in_the_dark_unsuccessfully",
+    multiplier: null,
+  },
+} satisfies Record<GameEvent["id"], GameEvent<CastawayIdType, SeasonNumber>>;
 
-export const SEASON_51_VOTE_HISTORY = {} satisfies Record<
+export const SEASON_51_VOTE_HISTORY = {
+  vote_1_US0754_US0752_1: {
+    id: "vote_1_US0754_US0752_1",
+    season_id: "season_51",
+    season_num: 51,
+    episode_id: "episode_1",
+    episode_num: 1,
+    tribe: "Toka",
+    voter_castaway_id: "US0754",
+    target_castaway_id: "US0752",
+    voted_out_castaway_id: "US0752",
+    nullified: false,
+    tie: false,
+    sog_id: 1,
+    vote_order: 1,
+  },
+  vote_1_US0756_US0763_1: {
+    id: "vote_1_US0756_US0763_1",
+    season_id: "season_51",
+    season_num: 51,
+    episode_id: "episode_1",
+    episode_num: 1,
+    tribe: "Toka",
+    voter_castaway_id: "US0756",
+    target_castaway_id: "US0763",
+    voted_out_castaway_id: "US0752",
+    nullified: false,
+    tie: false,
+    sog_id: 1,
+    vote_order: 1,
+  },
+  vote_1_US0757_US0752_1: {
+    id: "vote_1_US0757_US0752_1",
+    season_id: "season_51",
+    season_num: 51,
+    episode_id: "episode_1",
+    episode_num: 1,
+    tribe: "Toka",
+    voter_castaway_id: "US0757",
+    target_castaway_id: "US0752",
+    voted_out_castaway_id: "US0752",
+    nullified: false,
+    tie: false,
+    sog_id: 1,
+    vote_order: 1,
+  },
+  vote_1_US0760_US0752_1: {
+    id: "vote_1_US0760_US0752_1",
+    season_id: "season_51",
+    season_num: 51,
+    episode_id: "episode_1",
+    episode_num: 1,
+    tribe: "Toka",
+    voter_castaway_id: "US0760",
+    target_castaway_id: "US0752",
+    voted_out_castaway_id: "US0752",
+    nullified: false,
+    tie: false,
+    sog_id: 1,
+    vote_order: 1,
+  },
+  vote_1_US0761_US0763_1: {
+    id: "vote_1_US0761_US0763_1",
+    season_id: "season_51",
+    season_num: 51,
+    episode_id: "episode_1",
+    episode_num: 1,
+    tribe: "Toka",
+    voter_castaway_id: "US0761",
+    target_castaway_id: "US0763",
+    voted_out_castaway_id: "US0752",
+    nullified: false,
+    tie: false,
+    sog_id: 1,
+    vote_order: 1,
+  },
+  vote_1_US0767_US0752_1: {
+    id: "vote_1_US0767_US0752_1",
+    season_id: "season_51",
+    season_num: 51,
+    episode_id: "episode_1",
+    episode_num: 1,
+    tribe: "Toka",
+    voter_castaway_id: "US0767",
+    target_castaway_id: "US0752",
+    voted_out_castaway_id: "US0752",
+    nullified: false,
+    tie: false,
+    sog_id: 1,
+    vote_order: 1,
+  },
+  vote_1_US0768_US0752_1: {
+    id: "vote_1_US0768_US0752_1",
+    season_id: "season_51",
+    season_num: 51,
+    episode_id: "episode_1",
+    episode_num: 1,
+    tribe: "Toka",
+    voter_castaway_id: "US0768",
+    target_castaway_id: "US0752",
+    voted_out_castaway_id: "US0752",
+    nullified: false,
+    tie: false,
+    sog_id: 1,
+    vote_order: 1,
+  },
+  vote_1_US0770_US0752_1: {
+    id: "vote_1_US0770_US0752_1",
+    season_id: "season_51",
+    season_num: 51,
+    episode_id: "episode_1",
+    episode_num: 1,
+    tribe: "Toka",
+    voter_castaway_id: "US0770",
+    target_castaway_id: "US0752",
+    voted_out_castaway_id: "US0752",
+    nullified: false,
+    tie: false,
+    sog_id: 1,
+    vote_order: 1,
+  },
+} satisfies Record<
   VoteHistory["id"],
   VoteHistory<CastawayIdType, SeasonNumber>
 >;
