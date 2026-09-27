@@ -1505,7 +1505,11 @@ test("pool: photo gallery supports keyboard browsing and local picks", async ({
   await expect(photo.getByText("24 · Chef")).toBeVisible();
   await page.keyboard.press("ArrowRight");
   await expect(photo).toHaveAccessibleName("Alexis Levine");
-  await expect(photo.getByText(/Criminal Defense Attorney/)).toBeVisible();
+  // The occupation shows twice: in the meta line and in the preseason profile.
+  await expect(photo.getByText("34 · Criminal Defense Attorney")).toBeVisible();
+  await expect(
+    photo.getByText("Criminal Defense Attorney", { exact: true }),
+  ).toBeVisible();
   await page.keyboard.press("ArrowLeft");
   await expect(photo).toHaveAccessibleName("Aaliyah Puglia");
   await photo.getByRole("button", { name: "Previous castaway" }).click();
