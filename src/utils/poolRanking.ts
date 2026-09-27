@@ -31,6 +31,8 @@ export type PoolStandingRow = {
    * favour. Already counted in `total_points`; never add it again.
    */
   prop_bet_points: number;
+  /** How many entrants share this total, this one included. */
+  tie_count: number;
 };
 
 const sumPicks = (
@@ -64,7 +66,9 @@ const sumPicks = (
  *
  * Ranks are dense and follow the total: entrants on the same total share a
  * rank, and the next total takes the next number (1, 2, 2, 3). The leaderboard
- * shows that tie as "T-2" on every row (`groupPoolStandingsRows`).
+ * shows that tie as "T-2" on every row (`groupPoolStandingsRows`). Each row
+ * also carries `tie_count`, counted over the whole field, so a tie that runs
+ * past the summary document is still labelled on the summary's last row.
  *
  * Pure: no React, no Firebase, no browser globals, and no ownership or
  * trade helpers.
@@ -97,12 +101,17 @@ export const rankPoolEntries = (
     return a.uid < b.uid ? -1 : 1;
   });
 
+  const tieCounts = new Map<number, number>();
+  for (const row of scored) {
+    tieCounts.set(row.total_points, (tieCounts.get(row.total_points) ?? 0) + 1);
+  }
+
   let rank = 0;
   return scored.map((row, index) => {
     const previous = scored[index - 1];
     if (previous === undefined || previous.total_points !== row.total_points) {
       rank += 1;
     }
-    return { ...row, rank };
+    return { ...row, rank, tie_count: tieCounts.get(row.total_points) ?? 1 };
   });
 };

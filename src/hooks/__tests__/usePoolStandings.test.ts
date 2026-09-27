@@ -653,9 +653,66 @@ describe("projectPoolStandingsRows", () => {
       { handle: "nan", total: 6, rank: 4, castawayPoints: 6 },
       // A current row with a bad castaway value: trust the published total and
       // show no breakdown rather than guess which shape it is.
-      { handle: "badc", total: 5, rank: 5 },
+      { handle: "badc", total: 5, rank: 5, propBetPoints: 2 },
       { handle: "badp", total: 4, rank: 6, castawayPoints: 4 },
     ]);
+  });
+
+  it("keeps negative and fractional castaway points, and prop bets beside them", () => {
+    // A castaway can lose points, so a signed castaway total is legitimate
+    // and must not cost the row its breakdown.
+    expect(
+      projectPoolStandingsRows([
+        {
+          handle: "neg",
+          total: 2,
+          rank: 1,
+          castaway_points: -1,
+          prop_bet_points: 3,
+        },
+        {
+          handle: "frac",
+          total: 3.5,
+          rank: 1,
+          castaway_points: -0.5,
+          prop_bet_points: 4,
+        },
+        { handle: "legacy-neg", total: -1, rank: 2, prop_bet_points: 3 },
+      ]),
+    ).toEqual([
+      {
+        handle: "neg",
+        total: 2,
+        rank: 1,
+        castawayPoints: -1,
+        propBetPoints: 3,
+      },
+      {
+        handle: "frac",
+        total: 3.5,
+        rank: 1,
+        castawayPoints: -0.5,
+        propBetPoints: 4,
+      },
+      {
+        handle: "legacy-neg",
+        total: 2,
+        rank: 2,
+        castawayPoints: -1,
+        propBetPoints: 3,
+      },
+    ]);
+  });
+
+  it("keeps a usable tie count and drops an unusable one", () => {
+    expect(
+      projectPoolStandingsRows([
+        { ...row("a", 8, 1), tie_count: 3 },
+        { ...row("b", 8, 1), tie_count: 0 },
+        { ...row("c", 8, 1), tie_count: 2.5 },
+        { ...row("d", 8, 1), tie_count: "3" },
+      ]).map((r) => r.tieCount),
+    ).toEqual([3, undefined, undefined, undefined]);
   });
 
   it("drops every field a row might carry beyond the five the bound allows", () => {
@@ -857,6 +914,27 @@ describe("groupPoolStandingsRows", () => {
       "T-7",
       "T-7",
     ]);
+  });
+
+  it("labels a tie that continues past the rows in hand", () => {
+    // The summary ends mid-tie: two of three entrants on 8 are in hand, and
+    // only the published count says the third exists.
+    const rows = projectPoolStandingsRows([
+      { ...row("a", 10, 1), tie_count: 1 },
+      { ...row("b", 9, 2), tie_count: 1 },
+      { ...row("c", 8, 3), tie_count: 3 },
+      { ...row("d", 8, 3), tie_count: 3 },
+    ]);
+    const grouped = groupPoolStandingsRows(rows);
+    expect(grouped.map((g) => g.label)).toEqual(["1", "2", "T-3", "T-3"]);
+    expect(grouped.map((g) => g.tiedCount)).toEqual([1, 1, 3, 3]);
+
+    // The same when only one row of the tie is in hand.
+    const lastOnly = groupPoolStandingsRows(rows.slice(0, 3));
+    expect(lastOnly[lastOnly.length - 1]).toMatchObject({
+      label: "T-3",
+      tiedCount: 3,
+    });
   });
 
   it("labels a field tied at the top as T-1 throughout", () => {

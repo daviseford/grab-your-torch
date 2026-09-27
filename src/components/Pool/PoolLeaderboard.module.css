@@ -85,10 +85,9 @@
 }
 
 /* Ties are the ordinary case in the first weeks (KD4), so a run of entrants
-   sharing a position is drawn as one block: the position is printed once at
-   the top of the run and the rows under it carry a short tick in the rank
-   column instead of a repeated number. The hairline above each new position
-   is what separates one block from the next. */
+   sharing a position is drawn as one block: every row carries the shared
+   "T-N" label, and the hairline above each new position is what separates
+   one block from the next. */
 .groupStart td {
   border-top: 1px solid var(--gyt-rule-strong);
 }

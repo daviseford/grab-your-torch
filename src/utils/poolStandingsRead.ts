@@ -236,17 +236,29 @@ export type PublicStandingsRow = {
   handle: string;
   total: number;
   rank: number;
-  /** Absent when the published row has no usable value. */
+  /**
+   * Signed: a castaway can lose points, so a negative or fractional value is
+   * legitimate. Absent when the published row has no usable value.
+   */
   castawayPoints?: number;
-  /** Absent when the published row has no usable value. */
+  /** Never negative. Absent when the published row has no usable value. */
   propBetPoints?: number;
+  /**
+   * How many entrants across the whole field share this total, from the
+   * recompute job. Lets the last row in hand know about a tie partner on a
+   * page that has not been fetched. Absent on legacy documents.
+   */
+  tieCount?: number;
 };
 
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
 
-const isPoints = (value: unknown): value is number =>
+const isPropBetPoints = (value: unknown): value is number =>
   isFiniteNumber(value) && value >= 0;
+
+const isTieCount = (value: unknown): value is number =>
+  isFiniteNumber(value) && Number.isInteger(value) && value >= 1;
 
 /**
  * Narrow published rows to the fields the public bound permits.
@@ -270,7 +282,8 @@ const isPoints = (value: unknown): value is number =>
  * A row whose handle, total or rank is not the right shape is dropped rather
  * than coerced. Half a row on a public leaderboard reads as a bug in the
  * standings, not as a bug in the payload. A bad breakdown value loses only
- * its own cell.
+ * its own cell. Castaway points are signed (a castaway can lose points);
+ * prop bet points never go below zero.
  */
 export const projectPoolStandingsRows = (
   rows: readonly unknown[] | undefined,
@@ -285,23 +298,29 @@ export const projectPoolStandingsRows = (
       rank,
       castaway_points: castawayPoints,
       prop_bet_points: propBetPoints,
+      tie_count: tieCount,
     } = candidate as Record<string, unknown>;
     if (typeof handle !== "string") continue;
     if (!isFiniteNumber(total)) continue;
     if (!isFiniteNumber(rank)) continue;
 
     const row: PublicStandingsRow = { handle, total, rank };
-    if (isPoints(castawayPoints)) {
-      row.castawayPoints = castawayPoints;
-      if (isPoints(propBetPoints)) row.propBetPoints = propBetPoints;
-    } else if (!("castaway_points" in candidate)) {
+    const legacy = !("castaway_points" in candidate);
+    // Each breakdown value is judged on its own, so a bad one never takes the
+    // other with it.
+    if (isPropBetPoints(propBetPoints)) {
+      row.propBetPoints = propBetPoints;
+    }
+    if (legacy) {
       // Legacy shape: `total` is castaway points only.
       row.castawayPoints = total;
-      if (isPoints(propBetPoints)) {
-        row.propBetPoints = propBetPoints;
-        row.total = total + propBetPoints;
+      if (row.propBetPoints !== undefined) {
+        row.total = total + row.propBetPoints;
       }
+    } else if (isFiniteNumber(castawayPoints)) {
+      row.castawayPoints = castawayPoints;
     }
+    if (isTieCount(tieCount)) row.tieCount = tieCount;
     projected.push(row);
   }
   return projected;
@@ -345,10 +364,11 @@ export type GroupedStandingsRow = {
  * first row of a run.
  *
  * Rows always start from row one of the published order (the summary, or the
- * pages from page zero), so counting positions over them is exact. The one
- * blind spot is a tie that straddles the end of the rows in hand: the last row
- * shown cannot see its partner on an unfetched page and reads as untied until
- * the list is expanded.
+ * pages from page zero), so counting positions over them is exact. A tie that
+ * straddles the end of the rows in hand is caught by the published
+ * `tie_count`, which the job counts over the whole field. Legacy documents
+ * have no such count, so there the last row shown reads as untied until the
+ * list is expanded.
  *
  * The only reordering is a stable sort by total, which is a no-op on current
  * documents. On a legacy summary it can only reorder the rows in hand: a row
@@ -376,7 +396,9 @@ export const groupPoolStandingsRows = (
   return rows.map((row, index) => {
     const showRank = index === 0 || rows[index - 1].total !== row.total;
     if (showRank) position += 1;
-    const tiedCount = runLengths[position - 1];
+    // The published count covers the whole field; the run covers only the
+    // rows in hand. The larger is right whichever document was read.
+    const tiedCount = Math.max(runLengths[position - 1], row.tieCount ?? 1);
     return {
       row,
       showRank,
@@ -406,7 +428,7 @@ export type PoolStandingsReadyView = {
   computedAt: string;
   /** Entrants in the pool as of this run, from the summary document. */
   entryCount: number;
-  /** Already projected to handle, total and rank. */
+  /** Already projected by `projectPoolStandingsRows`. */
   rows: PublicStandingsRow[];
   /** How many rows exist in total, so "show all" can name a number. */
   totalRows: number;

@@ -604,6 +604,12 @@ export type PoolStandingsRow = {
    */
   prop_bet_points: number;
   /**
+   * How many entrants across the whole field share this `total`, this one
+   * included. Lets a reader holding only the summary label a tie that
+   * continues onto an overflow page. Absent on legacy documents.
+   */
+  tie_count?: number;
+  /**
    * Dense, by `total`: equal totals share a rank and the next total takes the
    * next number. Documents published before totals included prop bets used a
    * skipping rank that broke ties on prop bets; the leaderboard never reads

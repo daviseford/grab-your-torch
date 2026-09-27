@@ -458,12 +458,31 @@ describe("prop bets", () => {
       "handle",
       "prop_bet_points",
       "rank",
+      "tie_count",
       "total",
     ]);
     const serialized = JSON.stringify(plan.episodes);
     for (const leak of ["propbet_", "first_vote", "winner", "status"]) {
       expect(serialized).not.toContain(leak);
     }
+  });
+
+  it("counts a tie over the whole field, past the end of the summary", () => {
+    // 51 identical entries: the summary holds 50 of them and the 51st lives
+    // on a page, so only the published count tells the summary it is a tie.
+    const plan = planRecompute(
+      input({
+        entries: Array.from({ length: 51 }, (_, i) =>
+          entry(`uid_${String(i).padStart(2, "0")}`, `e${i}`, [ADA, BEN]),
+        ),
+      }),
+    );
+
+    const { summary, pages } = plan.episodes.at(-1)!;
+    expect(summary.rows).toHaveLength(50);
+    expect(pages.flatMap((page) => page.rows)).toHaveLength(51);
+    expect(summary.rows.every((row) => row.tie_count === 51)).toBe(true);
+    expect(summary.rows.every((row) => row.rank === 1)).toBe(true);
   });
 
   it("drops answer values the rules cannot validate", () => {

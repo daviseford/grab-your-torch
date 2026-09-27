@@ -58,6 +58,7 @@ describe("rankPoolEntries", () => {
         total_points: 8,
         castaway_points: 8,
         prop_bet_points: 0,
+        tie_count: 1,
       },
     ]);
   });
@@ -137,6 +138,21 @@ describe("rankPoolEntries", () => {
     );
 
     expect(rows.map((r) => r.rank)).toEqual([1, 1, 2, 2, 3]);
+    expect(rows.map((r) => r.tie_count)).toEqual([2, 2, 2, 2, 1]);
+  });
+
+  it("keeps a negative or fractional castaway total signed in the combined total", () => {
+    const rows = rankPoolEntries(
+      [entry("u1", "sinking", [ALICE])],
+      { [ALICE]: perEpisode(-1.5, 0.5, 0) },
+      { u1: 3 },
+    );
+
+    expect(rows[0]).toMatchObject({
+      castaway_points: -1,
+      prop_bet_points: 3,
+      total_points: 2,
+    });
   });
 
   it("shares a rank when totals and prop bets are both equal, and numbers the next rank densely", () => {
@@ -223,6 +239,7 @@ describe("rankPoolEntries", () => {
         total_points: 0,
         castaway_points: 0,
         prop_bet_points: 0,
+        tie_count: 1,
       },
     ]);
   });
