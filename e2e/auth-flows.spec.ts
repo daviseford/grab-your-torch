@@ -2297,7 +2297,7 @@ test("competitions: finished competitions name their winner, ties included, and 
         /^Ghost League Winner: Unknown participant · \d+ pts$/,
       );
       await expect(row("Behind League")).toHaveAccessibleName(
-        "Behind League Winner: Not available",
+        "Behind League Episode 2 Winner: Not available",
       );
       await expect(row("Running League")).toHaveAccessibleName(
         "Running League",
@@ -2321,6 +2321,103 @@ test("competitions: finished competitions name their winner, ties included, and 
   await expectWinners(false);
   await page.setViewportSize({ width: 390, height: 844 });
   await expectWinners(true);
+});
+
+/**
+ * The episode column reads each competition's own `current_episode`: a
+ * watch-along group before episode 1 is pre-season, one further along names
+ * its episode, and a live competition has no episode of its own. The season
+ * has three episodes; none of these rows may show the season's latest.
+ */
+test("competitions: watch-along rows show that competition's episode and live rows show none", async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName === "webkit",
+    "WebKit does not receive later Firestore reads from the local emulator",
+  );
+  await seedFinishedSeason();
+  const viewer = await createUser(
+    uniqueEmail("episode"),
+    PASSWORD,
+    "Watching Viewer",
+  );
+  const rival = { uid: "rival-uid", displayName: "Rival", email: "" };
+  const [p1, p2] = SEASON_PLAYERS.map((p) => p.castaway_id);
+  await Promise.all([
+    seedCompetition("competition_pre", "Pre League", viewer, rival, [p1, p2], {
+      finished: false,
+      current_episode: 0,
+    }),
+    seedCompetition("competition_mid", "Mid League", viewer, rival, [p1, p2], {
+      finished: false,
+      current_episode: 2,
+    }),
+    seedCompetition(
+      "competition_live",
+      "Live League",
+      viewer,
+      rival,
+      [p1, p2],
+      {
+        finished: false,
+        current_episode: null,
+      },
+    ),
+  ]);
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/competitions");
+  await main(page)
+    .getByRole("button", { name: "Sign in", exact: true })
+    .click();
+  await signInThrough(page, { email: viewer.email, password: PASSWORD });
+
+  const table = main(page).getByRole("table");
+  const header = table.getByRole("columnheader", { name: "Sort by Episode" });
+  await expect(header).toBeVisible(SLOW);
+  const episodeCell = (name: string) =>
+    main(page).getByRole("row", { name, exact: true }).getByRole("cell").nth(5);
+  await expect(episodeCell("Pre League")).toHaveText("Pre-season");
+  await expect(episodeCell("Mid League")).toHaveText("Episode 2");
+  await expect(episodeCell("Live League")).toHaveText("—Not applicable: live");
+  await expect(main(page).getByText("Episode 3")).toHaveCount(0);
+
+  // Sorting: the first click sorts descending, furthest watched first and
+  // live last; the second reverses it.
+  const order = () =>
+    table
+      .getByRole("row")
+      .filter({ has: page.getByRole("cell") })
+      .evaluateAll((rows) => rows.map((r) => r.getAttribute("aria-label")));
+  await header.getByRole("button").click();
+  await expect(header).toHaveAttribute("aria-sort", "descending");
+  expect(await order()).toEqual(["Mid League", "Pre League", "Live League"]);
+  await header.getByRole("button").click();
+  await expect(header).toHaveAttribute("aria-sort", "ascending");
+  expect(await order()).toEqual(["Live League", "Pre League", "Mid League"]);
+  await page.screenshot({
+    path: test.info().outputPath("competitions-episode-desktop.png"),
+    fullPage: true,
+  });
+
+  // Phones show the episode beside the badges and read it in the link name.
+  await page.setViewportSize({ width: 390, height: 844 });
+  const link = (name: string) =>
+    main(page).getByRole("link", { name: new RegExp(`^${name}(?: |$)`) });
+  await expect(link("Pre League")).toHaveAccessibleName(
+    "Pre League Pre-season",
+    SLOW,
+  );
+  await expect(link("Mid League")).toHaveAccessibleName("Mid League Episode 2");
+  await expect(link("Live League")).toHaveAccessibleName("Live League");
+  await expect(link("Live League")).not.toContainText(/Episode \d/);
+  await expect(link("Live League")).not.toContainText("Pre-season");
+  await page.screenshot({
+    path: test.info().outputPath("competitions-episode-phone.png"),
+    fullPage: true,
+  });
 });
 
 /**
