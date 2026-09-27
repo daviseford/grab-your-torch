@@ -56,6 +56,7 @@ describe("rankPoolEntries", () => {
         handle: "torchsnuffer",
         rank: 1,
         total_points: 8,
+        castaway_points: 8,
         prop_bet_points: 0,
       },
     ]);
@@ -79,32 +80,66 @@ describe("rankPoolEntries", () => {
     ]);
   });
 
-  it("breaks an equal total with prop bet points", () => {
-    const rows = rankPoolEntries(
-      [entry("u1", "no-props", [ALICE]), entry("u2", "props", [BOB, CHARLIE])],
-      pointsByCastaway,
-      { u1: 0, u2: 5 },
-    );
-
-    expect(rows.map((r) => r.total_points)).toEqual([6, 6]);
-    expect(rows.map((r) => [r.handle, r.rank])).toEqual([
-      ["props", 1],
-      ["no-props", 2],
-    ]);
-  });
-
-  it("keeps prop bet points out of the total", () => {
+  it("adds awarded prop bet points to the total exactly once", () => {
     const rows = rankPoolEntries(
       [entry("u1", "solo", [CHARLIE])],
       pointsByCastaway,
       { u1: 40 },
     );
 
-    expect(rows[0].total_points).toBe(2);
-    expect(rows[0].prop_bet_points).toBe(40);
+    expect(rows[0]).toMatchObject({
+      total_points: 42,
+      castaway_points: 2,
+      prop_bet_points: 40,
+    });
+    expect(rows[0].total_points).toBe(
+      rows[0].castaway_points + rows[0].prop_bet_points,
+    );
   });
 
-  it("shares a rank when totals and prop bets are both equal, and skips the next rank", () => {
+  it("ranks on the combined total, so prop bets can lift an entrant", () => {
+    const rows = rankPoolEntries(
+      [entry("u1", "castaways", [ALICE]), entry("u2", "props", [CHARLIE])],
+      pointsByCastaway,
+      { u1: 0, u2: 5 },
+    );
+
+    expect(rows.map((r) => [r.handle, r.total_points, r.rank])).toEqual([
+      ["props", 7, 1],
+      ["castaways", 6, 2],
+    ]);
+  });
+
+  it("ties equal totals whatever they are made of, prop-heavy row first", () => {
+    const rows = rankPoolEntries(
+      [entry("u1", "no-props", [ALICE]), entry("u2", "props", [BOB])],
+      pointsByCastaway,
+      { u1: 0, u2: 2 },
+    );
+
+    expect(rows.map((r) => [r.handle, r.total_points, r.rank])).toEqual([
+      ["props", 6, 1],
+      ["no-props", 6, 1],
+    ]);
+  });
+
+  it("numbers ranks densely after a tie", () => {
+    const rows = rankPoolEntries(
+      [
+        entry("u1", "a", [ALICE]),
+        entry("u2", "b", [ALICE]),
+        entry("u3", "c", [BOB]),
+        entry("u4", "d", [BOB]),
+        entry("u5", "e", [CHARLIE]),
+      ],
+      pointsByCastaway,
+      {},
+    );
+
+    expect(rows.map((r) => r.rank)).toEqual([1, 1, 2, 2, 3]);
+  });
+
+  it("shares a rank when totals and prop bets are both equal, and numbers the next rank densely", () => {
     const rows = rankPoolEntries(
       [
         entry("u1", "tied-a", [ALICE]),
@@ -118,7 +153,7 @@ describe("rankPoolEntries", () => {
     expect(rows.map((r) => [r.handle, r.rank])).toEqual([
       ["tied-a", 1],
       ["tied-b", 1],
-      ["behind", 3],
+      ["behind", 2],
     ]);
   });
 
@@ -186,6 +221,7 @@ describe("rankPoolEntries", () => {
         handle: "empty",
         rank: 1,
         total_points: 0,
+        castaway_points: 0,
         prop_bet_points: 0,
       },
     ]);

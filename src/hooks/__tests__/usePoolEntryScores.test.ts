@@ -388,8 +388,8 @@ describe("resolvePoolEntryBreakdownAccess", () => {
  * answer. Everything above that differs. The breakdown scopes episodes with
  * `latestScoredPoolEpisode`, projects one dense row per PICK, and sums across
  * picks. The published side scopes with its own filter, derives over the whole
- * five-castaway CAST including two nobody picked, ranks, breaks ties on prop
- * bets and pages the rows. And both are independently pinned to the
+ * five-castaway CAST including two nobody picked, adds prop bet points,
+ * ranks and pages the rows. And both are independently pinned to the
  * hand-computed table in `HAND_CUMULATIVE`, so a shared misunderstanding would
  * have to survive three-way arithmetic.
  * ------------------------------------------------------------------ */
@@ -410,9 +410,13 @@ const STAMP: PoolStandingsStamp = {
  *
  * A verbatim transcription of the loop in `planRecompute`: scope to the newest
  * episode with data, derive the whole cast once, then rank against the first
- * N per-episode entries for each episode N. Prop bets are empty here, so the
- * tiebreak is inert and totals are the only thing under test.
+ * N per-episode entries for each episode N. The private breakdown shows castaway
+ * points only, so it is compared with the published `castaway_points`; alpha
+ * carries prop bet points so that comparison cannot pass against `total`.
  */
+/** Alpha's awarded prop bet points in the published fixture. */
+const ALPHA_PROP_BET_POINTS = 4;
+
 const publish = (data = HAND_DATA()) => {
   const recorded = [...data.challenges, ...data.eliminations, ...data.events]
     .map((record) => record.episode_num)
@@ -440,7 +444,13 @@ const publish = (data = HAND_DATA()) => {
     { uid: "uid_b", handle: "bravo", picks: BRAVO_PICKS },
     { uid: "uid_c", handle: "carol", picks: CAROL_PICKS },
   ];
-  const propBetPointsByUid = { uid_a: 0, uid_b: 0, uid_c: 0 };
+  // Nonzero for alpha so the published total and castaway points differ, and
+  // the agreement below is provably against castaway points, not the total.
+  const propBetPointsByUid = {
+    uid_a: ALPHA_PROP_BET_POINTS,
+    uid_b: 0,
+    uid_c: 0,
+  };
 
   return aired.map((episode, index) => {
     const pointsThrough = Object.fromEntries(
@@ -457,6 +467,7 @@ const publish = (data = HAND_DATA()) => {
     ).map((row) => ({
       handle: row.handle,
       total: row.total_points,
+      castaway_points: row.castaway_points,
       prop_bet_points: row.prop_bet_points,
       rank: row.rank,
     }));
@@ -508,7 +519,7 @@ describe("an entrant's own breakdown agrees with the published leaderboard", () 
       expect(
         published.map(
           ({ summary }) =>
-            summary.rows.find((row) => row.handle === handle)?.total,
+            summary.rows.find((row) => row.handle === handle)?.castaway_points,
         ),
       ).toEqual(expected);
     });
@@ -524,7 +535,7 @@ describe("an entrant's own breakdown agrees with the published leaderboard", () 
         expect({
           handle: row.handle,
           episode_num,
-          total: row.total,
+          total: row.castaway_points,
         }).toEqual({
           handle: row.handle,
           episode_num,
@@ -540,7 +551,11 @@ describe("an entrant's own breakdown agrees with the published leaderboard", () 
 
     Object.entries(PICKS_BY_HANDLE).forEach(([handle, picks]) => {
       const row = newest.summary.rows.find((r) => r.handle === handle);
-      expect(row?.total).toBe(ready(project(picks)).total);
+      expect(row?.castaway_points).toBe(ready(project(picks)).total);
+      expect(row?.total).toBe(
+        ready(project(picks)).total +
+          (handle === "alpha" ? ALPHA_PROP_BET_POINTS : 0),
+      );
     });
   });
 
@@ -569,9 +584,12 @@ describe("an entrant's own breakdown agrees with the published leaderboard", () 
     const ownBefore = ready(project(ALPHA_PICKS)).total;
     const ownAfter = ready(project(ALPHA_PICKS, perturbed)).total;
 
+    expect(afterAlpha?.castaway_points).toBe(
+      (beforeAlpha?.castaway_points ?? 0) + 1,
+    );
     expect(afterAlpha?.total).toBe((beforeAlpha?.total ?? 0) + 1);
     expect(ownAfter).toBe(ownBefore + 1);
-    expect(ownAfter).toBe(afterAlpha?.total);
+    expect(ownAfter).toBe(afterAlpha?.castaway_points);
 
     // The untouched entrants do not move, so the perturbation is targeted.
     expect(

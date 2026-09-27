@@ -220,25 +220,33 @@ export const resolvePoolStandingsFreshness = ({
 // ---------------------------------------------------------------------------
 
 /**
- * A row as it may appear in public: handle, total points, rank and awarded
- * prop bet points. Nothing else.
+ * A row as it may appear in public: handle, rank and three point figures.
+ * Nothing else.
  *
- * `propBetPoints` is one number per entrant: the points from prop bets that
- * have definitively settled in their favour. Pending and "leading" bets award
- * nothing (`getPropBetScoresForUser`), so an unresolved bet never shows up
- * here. It is never folded into `total` (R13). No bet name, answer, event or
- * castaway travels with it, and the payload has none to offer.
+ * `total` is castaway points plus awarded prop bet points, and it is what the
+ * leaderboard ranks on. `castawayPoints` and `propBetPoints` break it down;
+ * they are already inside `total` and are shown beside it, never added to it.
+ * `propBetPoints` counts only bets that have definitively settled in the
+ * entrant's favour: pending and "leading" bets award nothing
+ * (`getPropBetScoresForUser`), so an unresolved bet never shows up here. No
+ * bet name, answer, event or castaway travels with it, and the payload has
+ * none to offer.
  */
 export type PublicStandingsRow = {
   handle: string;
   total: number;
   rank: number;
   /** Absent when the published row has no usable value. */
+  castawayPoints?: number;
+  /** Absent when the published row has no usable value. */
   propBetPoints?: number;
 };
 
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
+
+const isPoints = (value: unknown): value is number =>
+  isFiniteNumber(value) && value >= 0;
 
 /**
  * Narrow published rows to the fields the public bound permits.
@@ -250,9 +258,19 @@ const isFiniteNumber = (value: unknown): value is number =>
  * says anything added later inherits that bound; this function is where the
  * bound is applied rather than remembered.
  *
- * A row whose handle, total or rank is not the right shape is dropped rather than
- * coerced. Half a row on a public leaderboard reads as a bug in the standings,
- * not as a bug in the payload.
+ * TWO PUBLISHED SHAPES. A row carrying `castaway_points` is current: its
+ * `total` already includes prop bet points. A row without it was published
+ * before that change, when `total` held castaway points only, and it stays
+ * readable until the recompute job next republishes every episode. For such a
+ * row the total is rebuilt as `total + prop_bet_points` here, once, so the
+ * leaderboard shows the same number either way and nothing downstream has to
+ * know which shape it read. A legacy row with no usable prop bet value keeps
+ * its castaway-only total and shows no prop bet cell.
+ *
+ * A row whose handle, total or rank is not the right shape is dropped rather
+ * than coerced. Half a row on a public leaderboard reads as a bug in the
+ * standings, not as a bug in the payload. A bad breakdown value loses only
+ * its own cell.
  */
 export const projectPoolStandingsRows = (
   rows: readonly unknown[] | undefined,
@@ -265,17 +283,26 @@ export const projectPoolStandingsRows = (
       handle,
       total,
       rank,
+      castaway_points: castawayPoints,
       prop_bet_points: propBetPoints,
     } = candidate as Record<string, unknown>;
     if (typeof handle !== "string") continue;
     if (!isFiniteNumber(total)) continue;
     if (!isFiniteNumber(rank)) continue;
-    // Optional: a bad value loses the prop bet cell, not the whole row.
-    projected.push(
-      isFiniteNumber(propBetPoints) && propBetPoints >= 0
-        ? { handle, total, rank, propBetPoints }
-        : { handle, total, rank },
-    );
+
+    const row: PublicStandingsRow = { handle, total, rank };
+    if (isPoints(castawayPoints)) {
+      row.castawayPoints = castawayPoints;
+      if (isPoints(propBetPoints)) row.propBetPoints = propBetPoints;
+    } else if (!("castaway_points" in candidate)) {
+      // Legacy shape: `total` is castaway points only.
+      row.castawayPoints = total;
+      if (isPoints(propBetPoints)) {
+        row.propBetPoints = propBetPoints;
+        row.total = total + propBetPoints;
+      }
+    }
+    projected.push(row);
   }
   return projected;
 };
@@ -302,13 +329,13 @@ export type GroupedStandingsRow = {
 /**
  * Number the rows as people read them: by the total they can see.
  *
- * TIES ARE DECIDED BY THE VISIBLE TOTAL. Entrants on the same total share a
- * position, and every one of them is labelled "T-" plus that position. The
- * published `rank` is deliberately not used: `rankPoolEntries` separates equal
- * totals by prop bet points, so honouring it would print different positions
- * beside identical totals. Prop bet points have their own column and never
- * change a position; they and the uid still decide the order of rows inside a
- * tie, because that order is the published order and is kept.
+ * TIES ARE DECIDED BY THE TOTAL: castaway points plus awarded prop bet points.
+ * Entrants on the same total share a position, and every one of them is
+ * labelled "T-" plus that position. Current documents publish a `rank` that
+ * agrees (`rankPoolEntries`), but legacy documents published a rank that broke
+ * ties on prop bets over a castaway-only total, so positions are always
+ * counted here from `total` rather than read from `rank`. Inside a tie, rows
+ * keep the published order (prop bet points, then the uid).
  *
  * Positions are dense: the total after a tie is the next number, so four
  * entrants at T-5 are followed by 6, not 9.
@@ -323,13 +350,19 @@ export type GroupedStandingsRow = {
  * shown cannot see its partner on an unfetched page and reads as untied until
  * the list is expanded.
  *
- * Order is preserved exactly. Re-sorting here would make tied rows visibly
- * reshuffle between visits.
+ * The only reordering is a stable sort by total, which is a no-op on current
+ * documents. On a legacy summary it can only reorder the rows in hand: a row
+ * past the summary whose rebuilt total would rank higher stays on its page
+ * until the list is expanded or the job republishes.
  */
 export const groupPoolStandingsRows = (
-  rows: readonly PublicStandingsRow[],
+  published: readonly PublicStandingsRow[],
 ): GroupedStandingsRow[] => {
-  // Published order is total descending, so a tie is a run of equal totals.
+  // Current documents are already in this order and a stable sort leaves them
+  // alone. Legacy documents were ordered by castaway points, and their totals
+  // are rebuilt on read, so this is what puts them in total order.
+  const rows = [...published].sort((a, b) => b.total - a.total);
+  // A tie is now a run of equal totals.
   const runLengths: number[] = [];
   rows.forEach((row, index) => {
     if (index > 0 && rows[index - 1].total === row.total) {

@@ -25,8 +25,8 @@ export const POOL_STANDINGS_PAGE_ROWS = 500;
  * Split already-ranked rows into the documents that get published.
  *
  * Rows arrive in final published order: the caller has already ranked them,
- * broken ties on prop bet points, and applied the deterministic uid tie-break
- * before dropping the uid. No uid reaches either document -- standings are
+ * ordered equal totals by prop bet points, and applied the deterministic uid
+ * tie-break before dropping the uid. No uid reaches either document -- standings are
  * world-readable and no collection in this project publishes Firebase uids to
  * signed-out readers.
  */

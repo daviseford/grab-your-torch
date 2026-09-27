@@ -812,8 +812,8 @@ export const Pool = () => {
           Prop bets
         </h2>
         <Text className={classes.sectionNote}>
-          Answer every question. Points for correct answers show in their own
-          column on the leaderboard, separate from your total.
+          Answer every question. Points for correct answers are added to your
+          leaderboard total, and the leaderboard also lists them on their own.
         </Text>
         {blockerMessage && (
           <Notice label="Not yet" tone="warning" role="alert">

@@ -12,7 +12,9 @@ import classes from "./PoolLeaderboard.module.css";
 /**
  * The public leaderboard (U8).
  *
- * Handles, totals, ranks and awarded prop bet points. Nothing else: no
+ * Handles, ranks, and three point figures: the total, and the castaway points
+ * and awarded prop bet points it is made of. The two breakdown columns are
+ * already inside the total and are never added to it. Nothing else: no
  * castaway, no elimination state, no per-castaway breakdown, and no bet name,
  * answer or pending bet behind the prop bet number. That bound is applied upstream by
  * `projectPoolStandingsRows`, which is why this component receives a
@@ -95,11 +97,15 @@ export const PoolLeaderboard = ({
   const grouped = compact ? allGrouped.slice(0, 5) : allGrouped;
   const shown = grouped.length;
   const hidden = Math.max(view.totalRows - shown, 0);
-  // Standings published before the field existed carry no prop bet points;
-  // an empty column would read as everyone scoring nothing.
-  const showPropBets = grouped.some(
-    ({ row }) => row.propBetPoints !== undefined,
-  );
+  // The compact homepage preview keeps to the total. Elsewhere the breakdown
+  // shows once a row has one; an empty column would read as everyone scoring
+  // nothing.
+  const showBreakdown =
+    !compact &&
+    grouped.some(
+      ({ row }) =>
+        row.castawayPoints !== undefined || row.propBetPoints !== undefined,
+    );
 
   return (
     <section
@@ -126,8 +132,8 @@ export const PoolLeaderboard = ({
         <table className={classes.table}>
           <caption className={classes.caption}>
             {`${asOf.label}. ${
-              showPropBets
-                ? "Handles, total points, prop bet points and position."
+              showBreakdown
+                ? "Handles, position, total points, and the castaway points and prop bet points that make up each total."
                 : "Handles, total points and position."
             }`}
           </caption>
@@ -138,15 +144,31 @@ export const PoolLeaderboard = ({
               </th>
               <th scope="col">Handle</th>
               <th scope="col" className={classes.pointsCol}>
-                Points
+                {showBreakdown ? "Total" : "Points"}
               </th>
-              {showPropBets && (
-                <th
-                  scope="col"
-                  className={`${classes.pointsCol} ${classes.propCol}`}
-                >
-                  Prop bets
-                </th>
+              {showBreakdown && (
+                <>
+                  <th
+                    scope="col"
+                    className={`${classes.pointsCol} ${classes.breakdownCol}`}
+                  >
+                    <span className={classes.labelFull}>Castaways</span>
+                    <span className={classes.labelShort} aria-hidden="true">
+                      Cast
+                    </span>
+                    <span className={classes.labelShortSr}>Castaways</span>
+                  </th>
+                  <th
+                    scope="col"
+                    className={`${classes.pointsCol} ${classes.breakdownCol}`}
+                  >
+                    <span className={classes.labelFull}>Prop bets</span>
+                    <span className={classes.labelShort} aria-hidden="true">
+                      Props
+                    </span>
+                    <span className={classes.labelShortSr}>Prop bets</span>
+                  </th>
+                </>
               )}
             </tr>
           </thead>
@@ -176,11 +198,22 @@ export const PoolLeaderboard = ({
                     )}
                   </td>
                   <td className={classes.handle}>{row.handle}</td>
-                  <td className={classes.pointsCol}>{row.total}</td>
-                  {showPropBets && (
-                    <td className={`${classes.pointsCol} ${classes.propCol}`}>
-                      {row.propBetPoints ?? "—"}
-                    </td>
+                  <td className={`${classes.pointsCol} ${classes.totalCell}`}>
+                    {row.total}
+                  </td>
+                  {showBreakdown && (
+                    <>
+                      <td
+                        className={`${classes.pointsCol} ${classes.breakdownCol}`}
+                      >
+                        {row.castawayPoints ?? "—"}
+                      </td>
+                      <td
+                        className={`${classes.pointsCol} ${classes.breakdownCol}`}
+                      >
+                        {row.propBetPoints ?? "—"}
+                      </td>
+                    </>
                   )}
                 </tr>
               ),

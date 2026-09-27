@@ -356,7 +356,7 @@ describe("planRecompute scoring", () => {
  * ------------------------------------------------------------------ */
 
 describe("prop bets", () => {
-  it("breaks a tie without changing the total", () => {
+  it("adds awarded prop bet points to the published total and ranks on it", () => {
     const plan = planRecompute(
       input({
         entries: [
@@ -368,12 +368,20 @@ describe("prop bets", () => {
       }),
     );
 
+    const firstVote = PropBetsQuestions.propbet_first_vote.point_value;
     const rows = plan.episodes.at(-1)!.summary.rows;
-    expect(rows.map((r) => r.handle)).toEqual(["zulu", "alpha"]);
-    expect(rows.map((r) => r.total)).toEqual([10, 10]);
-    expect(rows[0].prop_bet_points).toBeGreaterThan(0);
-    expect(rows[0].rank).toBe(1);
-    expect(rows[1].rank).toBe(2);
+    expect(
+      rows.map((r) => [
+        r.handle,
+        r.total,
+        r.castaway_points,
+        r.prop_bet_points,
+        r.rank,
+      ]),
+    ).toEqual([
+      ["zulu", 10 + firstVote, 10, firstVote, 1],
+      ["alpha", 10, 10, 0, 2],
+    ]);
   });
 
   it("publishes a bet's points from the episode it settles in", () => {
@@ -389,14 +397,18 @@ describe("prop bets", () => {
       }),
     );
 
+    const firstVote = PropBetsQuestions.propbet_first_vote.point_value;
+    // alpha's castaway points read 3, 7, 10 (see HAND_DATA).
     expect(
-      plan.episodes.map((ep) => ep.summary.rows[0].prop_bet_points),
-    ).toEqual(
-      Array.from(
-        { length: 3 },
-        () => PropBetsQuestions.propbet_first_vote.point_value,
-      ),
-    );
+      plan.episodes.map((ep) => {
+        const { total, castaway_points, prop_bet_points } = ep.summary.rows[0];
+        return [total, castaway_points, prop_bet_points];
+      }),
+    ).toEqual([
+      [3 + firstVote, 3, firstVote],
+      [7 + firstVote, 7, firstVote],
+      [10 + firstVote, 10, firstVote],
+    ]);
   });
 
   it("publishes nothing for a bet that has not settled or settled against the entrant", () => {
@@ -416,10 +428,16 @@ describe("prop bets", () => {
       }),
     );
 
-    for (const ep of plan.episodes) {
-      expect(ep.summary.rows[0].prop_bet_points).toBe(0);
-      expect(ep.summary.rows[0].total).toBeGreaterThan(0);
-    }
+    expect(
+      plan.episodes.map((ep) => {
+        const { total, castaway_points, prop_bet_points } = ep.summary.rows[0];
+        return [total, castaway_points, prop_bet_points];
+      }),
+    ).toEqual([
+      [3, 3, 0],
+      [7, 7, 0],
+      [10, 10, 0],
+    ]);
   });
 
   it("publishes an entrant's prop bet points as one number and nothing about the bets", () => {
@@ -436,6 +454,7 @@ describe("prop bets", () => {
 
     const published = plan.episodes.at(-1)!.summary.rows[0];
     expect(Object.keys(published).sort()).toEqual([
+      "castaway_points",
       "handle",
       "prop_bet_points",
       "rank",
