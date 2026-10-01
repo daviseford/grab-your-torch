@@ -57,6 +57,7 @@ interface FakeState {
   pending?: unknown[];
   pulls?: Record<number, unknown>;
   prComments?: Record<number, unknown[]>;
+  closed?: unknown[];
 }
 
 /** A fake GitHub. Every path the gate reads must be listed here. */
@@ -76,6 +77,12 @@ function fakeIo(state: FakeState = {}): Pick<GithubIo, "get"> & {
           { name: "json", type: "dir", sha: TREE },
           { name: "xlsx", type: "dir", sha: "c".repeat(40) },
         ];
+      }
+      if (
+        p ===
+        `/repos/${REPO}/pulls?state=closed&base=main&sort=updated&direction=desc&per_page=50`
+      ) {
+        return state.closed ?? [];
       }
       if (p === `/repos/${REPO}/pulls?state=open&base=main`) {
         return [
@@ -154,6 +161,57 @@ describe("runGate", () => {
     state: "APPROVED",
     commit_id: HEAD,
   };
+
+  it("alerts once on a sync pull request merged by hand, and never publishes it", async () => {
+    const merged = pull({
+      number: 310,
+      state: "closed",
+      merged_at: "2026-10-02T00:00:00Z",
+      merge_commit_sha: "f".repeat(40),
+      merged_by: { login: "daviseford" },
+      labels: [],
+    });
+    const io = (comments: unknown[] = []) =>
+      fakeIo({
+        closed: [
+          merged,
+          // An old sync pull request with no observer marker is ignored.
+          pull({
+            number: 202,
+            state: "closed",
+            body: "Automated survivoR data sync",
+            merged_at: "2026-08-19T00:00:00Z",
+          }),
+          // Unrelated branches are never read in full.
+          pull({
+            number: 296,
+            head: { ref: "feat/x", sha: HEAD, repo: { full_name: REPO } },
+            merged_at: "2026-10-01T00:00:00Z",
+          }),
+        ],
+        pulls: {
+          310: merged,
+          202: pull({ number: 202, body: "old", merged_at: "x" }),
+        },
+        prComments: { 310: comments },
+      });
+    const report = await runGate(io(), {
+      repo: REPO,
+      sync,
+      reviewers: ["daviseford"],
+    });
+    expect(report.handMerged).toEqual([310]);
+    expect(report.publish).toEqual([]);
+    const notice = report.notices.find((n) => n.pr === 310)!;
+    expect(notice.key).toBe(`hand-merged:${HEAD}`);
+
+    const again = await runGate(
+      io([{ body: noticeComment(notice), user: { login: BOT_LOGIN } }]),
+      { repo: REPO, sync, reviewers: ["daviseford"] },
+    );
+    expect(again.handMerged).toEqual([310]);
+    expect(again.notices.some((n) => n.pr === 310)).toBe(false);
+  });
 
   it("asks for review once, then stays quiet", async () => {
     const first = await runGate(fakeIo(), {
@@ -391,6 +449,25 @@ describe("survivor-observer workflow", () => {
     expect(cleanup).toContain('select(.kind == "unlabel")');
     expect(cleanup).toContain('select(.kind == "reject")');
     expect(cleanup).toContain("--add-label observer-publish-failed");
+  });
+
+  it("notices, alerts on and labels a hand-merged sync pull request, without publishing it", () => {
+    const fast = step("Decide whether anything needs a full run");
+    expect(fast).toContain('contains("survivor-observer:begin")');
+    expect(fast).toContain(
+      '[.labels[].name | startswith("observer-")] | any | not',
+    );
+    expect(fast).toContain(
+      'full "a sync pull request was merged outside the observer"',
+    );
+    const label = step("Label hand-merged sync pull requests");
+    expect(label).toContain("env.LIVE == 'true'");
+    expect(label).toContain('[ "$RECORDED" != "true" ]');
+    expect(label).toContain("--add-label observer-hand-merged");
+    expect(label).not.toContain("publish-pending");
+    expect(step("Fail on any unfinished part")).toContain(
+      "jq -r '.handMerged[]?'",
+    );
   });
 
   it("needs the database URL a live publish uses (K4)", () => {

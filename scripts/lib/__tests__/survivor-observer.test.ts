@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   BOT_LOGIN,
   evaluateGate,
+  handMergedNotice,
+  isHandMerged,
   judgePending,
+  MANUAL_MERGE_WARNING,
   noticeComment,
   parseMarker,
   parseReviewers,
@@ -480,5 +483,60 @@ describe("judgePending", () => {
       judgePending({ ...merged, mergedAt: null, mergeSha: null }, recorded)
         .kind,
     ).toBe("unlabel");
+  });
+});
+
+describe("manual merge safety", () => {
+  const body = renderSyncPrBody(sync, marker);
+  const handMerged = {
+    number: 300,
+    headRef: "auto/survivor-sync-season-51",
+    headSha: HEAD,
+    mergedAt: "2026-10-02T00:00:00Z",
+    mergeSha: "e".repeat(40),
+    mergedBy: "daviseford",
+    body,
+    labels: [],
+  };
+
+  it("leads every sync pull request with a do-not-merge warning", () => {
+    expect(body.indexOf(MANUAL_MERGE_WARNING)).toBeGreaterThan(-1);
+    expect(body.indexOf(MANUAL_MERGE_WARNING)).toBeLessThan(
+      body.indexOf("## Automated survivoR data sync"),
+    );
+    // A bootstrap is merged by hand on purpose, so it carries no warning.
+    expect(
+      renderSyncPrBody({ ...sync, isNewSeason: true }, marker),
+    ).not.toContain(MANUAL_MERGE_WARNING);
+  });
+
+  it("detects a sync pull request merged from the GitHub button", () => {
+    expect(isHandMerged(handMerged, [])).toBe(true);
+    const notice = handMergedNotice(handMerged, "https://pr");
+    expect(notice.key).toBe(`hand-merged:${HEAD}`);
+    expect(notice.subject).toContain("NOT published");
+    expect(notice.body).toContain("yarn tsx scripts/publish-season.ts 51");
+  });
+
+  it("does not flag the observer's own merge, a labelled one, or an unmarked one", () => {
+    const own = { ...handMerged, mergedBy: BOT_LOGIN };
+    const recorded = [
+      noticeComment({ key: `publishing:${HEAD}`, subject: "s", body: "b" }),
+    ];
+    expect(isHandMerged(own, recorded)).toBe(false);
+    // The bot merging without a recorded notice is still outside the gate.
+    expect(isHandMerged(own, [])).toBe(true);
+    expect(
+      isHandMerged({ ...handMerged, labels: ["observer-hand-merged"] }, []),
+    ).toBe(false);
+    // Older sync pull requests, from before the observer, have no marker.
+    expect(isHandMerged({ ...handMerged, body: "old sync" }, [])).toBe(false);
+    expect(isHandMerged({ ...handMerged, mergedAt: null }, [])).toBe(false);
+    expect(
+      isHandMerged(
+        { ...handMerged, headRef: "auto/survivor-new-season-52" },
+        [],
+      ),
+    ).toBe(false);
   });
 });

@@ -193,6 +193,15 @@ jobs:
             || full "could not list pending publishes"
           [ "$pending" = "0" ] || full "a merged sync is waiting to publish"
 
+          # An observer sync pull request merged from the GitHub button: no
+          # observer label, but the observer's marker in its description.
+          handmerged=$(gh api "repos/$REPO/pulls?state=closed&base=main&sort=updated&direction=desc&per_page=50" \
+            --jq '.[] | select(.head.ref | startswith("auto/survivor-sync-season-")) | select(.merged_at != null)
+              | select([.labels[].name | startswith("observer-")] | any | not)
+              | select((.body // "") | contains("survivor-observer:begin")) | .number' | wc -l) \
+            || full "could not list merged sync pull requests"
+          [ "$handmerged" = "0" ] || full "a sync pull request was merged outside the observer"
+
           reviewers=" $(echo "$SURVIVOR_SYNC_REVIEWERS" | tr ',@' '  ' | tr 'A-Z' 'a-z' | xargs) "
           prs=$(gh api --paginate "repos/$REPO/pulls?state=open&base=main&per_page=100" \
             --jq '.[] | select(.head.ref | startswith("auto/survivor-sync-season-")) | "\(.number):\(.head.sha)"') \
@@ -586,6 +595,27 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: yarn survivor-observer record-notices --out "$OUT"
 
+      # A sync pull request merged around the gate (from the GitHub button)
+      # is labelled once its alert is recorded, which also stops the 30-minute
+      # check from reconsidering it. It is never published.
+      - name: Label hand-merged sync pull requests
+        if: env.LIVE == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RECORDED: ${{ steps.notices_recorded.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          for pr in $(jq -r '.handMerged[]' "$OUT/gate.json"); do
+            if jq -e --argjson pr "$pr" '.notices[] | select(.pr == $pr)' "$OUT/gate.json" > /dev/null \
+              && [ "$RECORDED" != "true" ]; then
+              echo "::warning::PR #$pr was merged by hand; its alert is not delivered yet."
+              continue
+            fi
+            gh label create observer-hand-merged --color B60205 --description "Merged outside the survivoR observer; not published" --force
+            gh pr edit "$pr" --add-label observer-hand-merged
+          done
+
       # Merges only a pull request the gate passed, at the exact head commit
       # it evaluated, and only once its "publishing" notice was delivered and
       # recorded (this run or an earlier one): that record is what the
@@ -714,6 +744,9 @@ jobs:
           if [ "$LIVE" = "true" ] && [ "$HAS_NOTICE" = "true" ] && [ "$NOTICE" != "success" ] && [ "$NOTICE_RETRY" != "success" ]; then
             echo "::error::The observer email failed twice. Nothing was merged for it; the next run sends it again."; failed=1
           fi
+          for pr in $(jq -r '.handMerged[]?' "$OUT/gate.json" 2>/dev/null); do
+            echo "::error::Sync PR #$pr was merged by hand: the site has its data, Firestore does not, and the observer will not publish it."; failed=1
+          done
           exit $failed
 
   publish:

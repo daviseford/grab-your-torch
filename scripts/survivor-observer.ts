@@ -39,6 +39,8 @@ import {
   OBSERVER_MARKER_VERSION,
   SYNC_BRANCH_PREFIX,
   evaluateGate,
+  handMergedNotice,
+  isHandMerged,
   judgePending,
   noticeComment,
   parseReviewers,
@@ -115,6 +117,7 @@ interface ApiPull {
   merge_commit_sha?: string | null;
   merged_at?: string | null;
   merged_by?: { login: string } | null;
+  labels?: { name: string }[];
   user: { login: string };
   base: { ref: string };
   head: { ref: string; sha: string; repo: { full_name: string } | null };
@@ -145,6 +148,8 @@ export interface GateReport {
   pending: PendingVerdict[];
   /** The pending ones the observer itself merged, oldest first. */
   publish: { pr: number; season: number; mergeSha: string }[];
+  /** Observer sync pull requests merged by hand; reported, never published. */
+  handMerged: number[];
 }
 
 export async function runGate(
@@ -241,13 +246,70 @@ export async function runGate(
   }
 
   const pending = await readPending(io, repo);
+  const handMerged: number[] = [];
+  for (const { pull, comments } of await readHandMerged(io, repo)) {
+    handMerged.push(pull.number);
+    const notice = handMergedNotice(toMergedPull(pull), pull.html_url);
+    if (!recordedNoticeKeys(comments).has(notice.key)) {
+      notices.push({ ...notice, pr: pull.number });
+    }
+  }
   return {
     upstream,
     decisions,
     notices,
     pending,
     publish: publishable(pending),
+    handMerged,
   };
+}
+
+function toMergedPull(p: ApiPull) {
+  return {
+    number: p.number,
+    headRef: p.head.ref,
+    headSha: p.head.sha,
+    mergedAt: p.merged_at ?? null,
+    mergeSha: p.merge_commit_sha ?? null,
+    mergedBy: p.merged_by?.login ?? null,
+    body: p.body,
+    labels: (p.labels ?? []).map((l) => l.name),
+  };
+}
+
+/** How many recently updated closed pull requests the hand-merge check reads. */
+export const HAND_MERGE_WINDOW = 50;
+
+/**
+ * Observer sync pull requests merged around the gate, among the most
+ * recently updated closed ones. Reported only; never published.
+ */
+export async function readHandMerged(
+  io: Pick<GithubIo, "get">,
+  repo: string,
+): Promise<{ pull: ApiPull; comments: string[] }[]> {
+  const recent = (await io.get(
+    `/repos/${repo}/pulls?state=closed&base=main&sort=updated&direction=desc&per_page=${HAND_MERGE_WINDOW}`,
+  )) as ApiPull[];
+  if (!Array.isArray(recent))
+    throw new Error("closed pull requests is not a list");
+  const found: { pull: ApiPull; comments: string[] }[] = [];
+  for (const summary of recent) {
+    if (
+      !summary.merged_at ||
+      !summary.head.ref.startsWith(SYNC_BRANCH_PREFIX)
+    ) {
+      continue;
+    }
+    // merged_by is only on the single-PR endpoint.
+    const pull = (await io.get(
+      `/repos/${repo}/pulls/${summary.number}`,
+    )) as ApiPull;
+    const comments = await botComments(io, repo, pull.number);
+    if (isHandMerged(toMergedPull(pull), comments))
+      found.push({ pull, comments });
+  }
+  return found;
 }
 
 async function botComments(

@@ -59,6 +59,7 @@ All email goes to `SURVIVOR_RADAR_EMAIL_TO` through the radar's SMTP secrets.
 | survivoR data changed (any table, any season)                                              | Radar email, as before                  |
 | Sync pull request has passing `ci` and needs a review                                      | "ready for review"                      |
 | Pull request on hold (newer episode unfinished), `ci` failed, sync failed, or out of scope | "on hold" / "blocked"                   |
+| Sync pull request merged by hand (not published)                                           | "merged by hand and NOT published"      |
 | Gate passed, about to merge                                                                | "publishing" (merge waits for delivery) |
 | Publish finished or failed                                                                 | "published" / "FAILED"                  |
 
@@ -104,6 +105,7 @@ Running both forever is not the plan. Once the observer has been live for one fu
 ## Recovering
 
 - **Publish failed.** The pull request is merged and labelled `observer-publish-failed`; production still has the previous data. Fix the cause (a castaway id cutover in progress refuses every push, by design), then move the label back to `observer-publish-pending`. The next check publishes from `main`. Publishing again is harmless.
+- **Merged by hand.** Every observer sync pull request opens with a warning not to merge it by hand. If someone merges one anyway (the GitHub button cannot be disabled for people with write access), the site gets its data on the next deploy while Firestore keeps the old data. The observer notices within 30 minutes (any merged sync pull request with its marker and no `observer-` label), emails a "merged by hand and NOT published" alert, labels it `observer-hand-merged`, and turns that run red. It never publishes it, since it skipped the review gate. Publish it by hand with `yarn tsx scripts/publish-season.ts <N>` if the data is right, or revert the merge.
 - **Publish refused.** Only a pull request the observer merged, after recording its "publishing" notice for that exact head, is ever published. A merged pull request labelled by hand, or merged by a person, is moved to `observer-publish-failed` with a comment, and is published by hand if that is intended.
 - **Merge refused.** The run is red, the pending label is removed again, and the pull request stays open with its approval. Find the cause in the run log; the next check retries, because the previous run failed.
 - **A run failed** (a sync error, an undelivered email, a refused merge). The next check, 30 minutes later, does a full run instead of waiting for 14:00. A failure that persists turns every run red until it is fixed.

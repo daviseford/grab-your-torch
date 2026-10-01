@@ -114,6 +114,13 @@ export function renderSyncPrBody(
   const s = result.summary ?? {};
   const episodes = result.newEpisodes ?? [];
   const lines = [
+    ...(result.isNewSeason
+      ? []
+      : [
+          `> [!CAUTION]`,
+          `> **${MANUAL_MERGE_WARNING}** Approve it instead. The survivoR observer merges it and publishes it to Firestore. A merge from the GitHub button redeploys the site with this data while Firestore keeps the old data; the observer then emails an alert and does not publish it.`,
+          "",
+        ]),
     "## Automated survivoR data sync",
     "",
     `Season ${result.seasonNum}, read from survivoR at [\`${marker.upstreamCommit.slice(0, 7)}\`](https://github.com/doehm/survivoR/commit/${marker.upstreamCommit}).`,
@@ -594,4 +601,44 @@ export function judgePending(
     };
   }
   return { kind: "publish", pr: p.number, season, mergeSha: p.mergeSha };
+}
+
+export const MANUAL_MERGE_WARNING = "Do not merge this pull request by hand.";
+
+/** A merged pull request, as the hand-merge check needs it. */
+export interface MergedPull extends PendingPull {
+  body: string | null;
+  labels: string[];
+}
+
+/**
+ * Whether an observer sync pull request was merged around the gate: it
+ * carries the observer's marker, has no observer label yet, and was not
+ * merged by the observer after recording its publishing notice. Such a merge
+ * puts the data on the site but not in Firestore. It is reported, never
+ * published: nobody approved it through the gate.
+ */
+export function isHandMerged(p: MergedPull, botComments: string[]): boolean {
+  if (!p.mergedAt || seasonOfBranch(p.headRef) === null) return false;
+  if (!parseMarker(p.body)) return false;
+  if (p.labels.some((l) => l.startsWith("observer-"))) return false;
+  return judgePending(p, botComments).kind !== "publish";
+}
+
+export function handMergedNotice(p: MergedPull, url: string): Notice {
+  const season = seasonOfBranch(p.headRef);
+  return {
+    key: `hand-merged:${p.headSha}`,
+    subject: `survivoR Observer: PR #${p.number} was merged by hand and is NOT published`,
+    body: [
+      `# PR #${p.number} was merged outside the observer`,
+      "",
+      `Season ${season} sync PR #${p.number} was merged by ${p.mergedBy ?? "someone"}, not by the observer after its gate. Its data is on \`main\`, so the site shows it after the next deploy, but Firestore still has the previous data. The observer will not publish it, because it did not pass the review gate.`,
+      "",
+      `- Pull request: ${url}`,
+      "",
+      `If this data is correct, publish it by hand from an up-to-date \`main\` with \`yarn tsx scripts/publish-season.ts ${season}\`. If it is not, revert the merge.`,
+      "",
+    ].join("\n"),
+  };
 }
