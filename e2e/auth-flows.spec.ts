@@ -2447,9 +2447,9 @@ test("competitions: watch-along rows show that competition's episode and live ro
     const top = async (text: string) =>
       (await link(name).getByText(text, { exact: true }).boundingBox())!.y;
     const [first, ...rest] = await Promise.all(badges.map(top));
-    // The season badge sits a few pixels off on its tooltip wrapper; a
-    // wrapped badge drops a whole row, about 24px.
-    for (const y of rest) expect(Math.abs(y - first)).toBeLessThan(12);
+    // Every badge shares one top edge, the season badge's tooltip wrapper
+    // included (#292: it used to sit about 5px low on phones).
+    for (const y of rest) expect(Math.abs(y - first)).toBeLessThan(1);
     if (episode) expect(await top(episode)).toBeGreaterThan(first + 12);
   }
   await page.screenshot({

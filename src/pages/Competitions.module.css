@@ -195,6 +195,12 @@
   gap: 6px;
 }
 
+/* The season badge's tooltip trigger. As a plain span it would hold the badge
+   on a text line taller than the badge, dropping it below its neighbours. */
+.rowSeason {
+  display: inline-flex;
+}
+
 .rowPeople {
   grid-area: people;
   font-size: var(--mantine-font-size-sm);
