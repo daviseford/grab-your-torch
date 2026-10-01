@@ -1,0 +1,226 @@
+name: "survivoR data radar"
+
+# Emails when the upstream survivoR dataset changes: a new episode, a new
+# season, or a correction to any historical US record, in any table. The
+# daily sync (sync-survivor-data.yml) only regenerates the newest season, so
+# it cannot see the rest; this workflow watches all of it and changes nothing
+# in the app. See docs/survivor-data-radar.md.
+#
+# It runs after each "Sync survivoR data" run on main, whatever that run's
+# result, so a failed sync still gets a radar pass. A daily 16:00 UTC fallback
+# (two hours after the sync's 14:00) keeps it running if the sync is renamed,
+# disabled by hand, or runs late. It does not help when GitHub disables
+# scheduled workflows after repository inactivity: that disables both. When
+# both fire on the same day, the second run finds the state already recorded
+# and sends nothing.
+#
+# Activation is deliberate, not a side effect of merging: the triggered run
+# does nothing until the repository variable SURVIVOR_DATA_RADAR is set to
+# "enabled". Once enabled it fails closed, recording nothing and sending
+# nothing, unless the secrets SMTP_USERNAME and SMTP_PASSWORD and the
+# variable SURVIVOR_RADAR_EMAIL_TO are all set. A manual workflow_dispatch
+# run always executes, as a dry run (observe and report only) unless
+# `dry_run` is unticked. Ticking `test_email` sends one fixed test message
+# and nothing else: no observation, no email decision, no state.
+#
+# Deliberately never `pull_request`: this job reads the SMTP secrets.
+on:
+  workflow_run:
+    workflows: ["Sync survivoR data"]
+    types: [completed]
+    branches: [main]
+  schedule:
+    - cron: "0 16 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Observe and report only: send no email and record no state"
+        type: boolean
+        required: false
+        default: true
+      test_email:
+        description: "Send one test email to check the email settings (forces a dry run; records no state)"
+        type: boolean
+        required: false
+        default: false
+
+# Never cancel a run between a delivered email and recording its state.
+concurrency:
+  group: survivor-data-radar
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+# The radar state lives in a bot-managed issue; nothing else is written.
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  radar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      vars.SURVIVOR_DATA_RADAR == 'enabled'
+    env:
+      RADAR_DIR: ${{ github.workspace }}/.survivor-radar
+      LIVE: ${{ github.event_name == 'workflow_run' || github.event_name == 'schedule' || (inputs.dry_run == false && inputs.test_email != true) }}
+      TEST_EMAIL: ${{ github.event_name == 'workflow_dispatch' && inputs.test_email == true }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      # Fail closed before observing: a live run that could not email must
+      # not record a baseline or advance past a change it cannot report.
+      # Only names are printed, never values.
+      - name: Check email configuration
+        if: env.LIVE == 'true' || env.TEST_EMAIL == 'true'
+        shell: bash
+        env:
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SURVIVOR_RADAR_EMAIL_TO: ${{ vars.SURVIVOR_RADAR_EMAIL_TO }}
+        run: |
+          missing=()
+          [ -n "$SMTP_USERNAME" ] || missing+=("secret SMTP_USERNAME")
+          [ -n "$SMTP_PASSWORD" ] || missing+=("secret SMTP_PASSWORD")
+          [ -n "$SURVIVOR_RADAR_EMAIL_TO" ] || missing+=("variable SURVIVOR_RADAR_EMAIL_TO")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::survivoR radar email is not configured (missing: ${missing[*]}). Nothing was observed, sent or recorded."
+            exit 1
+          fi
+
+      # A fixed message: no observation, no state. A failure turns the run red.
+      - name: Send test email
+        if: env.TEST_EMAIL == 'true'
+        uses: dawidd6/action-send-mail@2cea9617b09d79a095af21254fbcb7ae95903dde # v3.12.0
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: "survivoR Radar: test email"
+          body: "This is a test from the survivoR data radar workflow. Email settings work. No survivoR state was recorded."
+          to: ${{ vars.SURVIVOR_RADAR_EMAIL_TO }}
+          from: Grab Your Torch survivoR Radar
+
+      - name: Observe survivoR
+        id: observe
+        if: env.TEST_EMAIL != 'true'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          yarn survivor-radar observe --out "$RADAR_DIR"
+          action=$(jq -r '.action' "$RADAR_DIR/decision.json")
+          echo "action=$action" >> "$GITHUB_OUTPUT"
+          if [ "$action" = "alert" ]; then
+            echo "subject=$(tr -d '\r\n' < "$RADAR_DIR/subject.txt")" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Send radar email
+        id: email
+        if: env.LIVE == 'true' && steps.observe.outputs.action == 'alert'
+        continue-on-error: true
+        uses: dawidd6/action-send-mail@2cea9617b09d79a095af21254fbcb7ae95903dde # v3.12.0
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: ${{ steps.observe.outputs.subject }}
+          body: file://${{ env.RADAR_DIR }}/body.md
+          html_body: file://${{ env.RADAR_DIR }}/body.md
+          convert_markdown: true
+          to: ${{ vars.SURVIVOR_RADAR_EMAIL_TO }}
+          from: Grab Your Torch survivoR Radar
+
+      - name: Wait before retrying the radar email
+        if: env.LIVE == 'true' && steps.observe.outputs.action == 'alert' && steps.email.outcome == 'failure'
+        run: sleep 30
+
+      - name: Retry radar email
+        id: email_retry
+        if: env.LIVE == 'true' && steps.observe.outputs.action == 'alert' && steps.email.outcome == 'failure'
+        continue-on-error: true
+        uses: dawidd6/action-send-mail@2cea9617b09d79a095af21254fbcb7ae95903dde # v3.12.0
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: ${{ steps.observe.outputs.subject }}
+          body: file://${{ env.RADAR_DIR }}/body.md
+          html_body: file://${{ env.RADAR_DIR }}/body.md
+          convert_markdown: true
+          to: ${{ vars.SURVIVOR_RADAR_EMAIL_TO }}
+          from: Grab Your Torch survivoR Radar
+
+      # The state edge moves only for a baseline or a delivered email. An
+      # undelivered alert leaves the old state in place, so the next run
+      # re-sends it with anything newer folded in.
+      - name: Record radar state
+        id: record
+        if: >-
+          env.LIVE == 'true' && (
+            steps.observe.outputs.action == 'baseline' ||
+            (steps.observe.outputs.action == 'alert' &&
+              (steps.email.outcome == 'success' || steps.email_retry.outcome == 'success'))
+          )
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTION: ${{ steps.observe.outputs.action }}
+        run: |
+          if ! yarn survivor-radar record --out "$RADAR_DIR"; then
+            if [ "$ACTION" = "alert" ]; then
+              echo "::error::The radar email was delivered but its state was not recorded; the next run will email the same change again."
+            fi
+            exit 1
+          fi
+
+      - name: Fail on undelivered email
+        if: >-
+          env.LIVE == 'true' &&
+          steps.observe.outputs.action == 'alert' &&
+          steps.email.outcome != 'success' &&
+          steps.email_retry.outcome != 'success'
+        run: |
+          echo "::error::The radar email failed twice. The radar state was not advanced, so the next run will send it again."
+          exit 1
+
+      - name: Write job summary
+        if: always()
+        shell: bash
+        env:
+          ACTION: ${{ steps.observe.outputs.action }}
+          EMAIL: ${{ steps.email.outcome }}
+          EMAIL_RETRY: ${{ steps.email_retry.outcome }}
+          RECORD: ${{ steps.record.outcome }}
+        run: |
+          {
+            echo "## survivoR data radar"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Mode | $([ "$LIVE" = "true" ] && echo live || echo dry run) |"
+            echo "| Decision | ${ACTION:-not reached} |"
+            echo "| Email | ${EMAIL:-skipped} (retry: ${EMAIL_RETRY:-skipped}) |"
+            echo "| State recorded | ${RECORD:-skipped} |"
+            if [ -f "$RADAR_DIR/decision.json" ]; then
+              echo ""
+              echo "### Changed groups"
+              jq -r '.changes[] | "- \(.kind): `\(.table)` / \(.group)"' "$RADAR_DIR/decision.json"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

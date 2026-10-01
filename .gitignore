@@ -160,3 +160,6 @@ firebase-private-key.json
 autoresearch-results.tsv
 /.claude
 /.playwright-mcp
+
+# survivoR data radar run artifacts
+.survivor-radar/

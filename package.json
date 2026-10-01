@@ -37,6 +37,7 @@
     "snapshot-firestore": "tsx scripts/snapshot-firestore.ts",
     "new-season": "tsx scripts/new-season.ts",
     "sync-season": "tsx scripts/sync-season.ts",
+    "survivor-radar": "tsx scripts/survivor-radar.ts",
     "push-all-seasons": "tsx scripts/push-all-seasons.ts",
     "optimize-images": "tsx scripts/optimize-images.ts",
     "tsc:scripts": "tsc -p scripts/tsconfig.json --noEmit",
