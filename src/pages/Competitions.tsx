@@ -218,7 +218,7 @@ const CompetitionBadges = ({ comp }: { comp: Competition }) => (
       label={`Season ${comp.season_num}`}
       events={{ hover: true, focus: true, touch: true }}
     >
-      <span>
+      <span className={classes.rowSeason}>
         <StatusBadge kind="season" size="sm" classNames={badgeClassNames}>
           S{comp.season_num}
         </StatusBadge>
