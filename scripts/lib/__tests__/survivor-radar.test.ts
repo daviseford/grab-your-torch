@@ -230,14 +230,24 @@ describe("issue state block", () => {
     expect(parseIssueBody(renderIssueBody(original))).toEqual(original);
   });
 
-  it("returns null for a missing block or another radar version", () => {
-    expect(parseIssueBody(null)).toBeNull();
-    expect(parseIssueBody("hand-written notes")).toBeNull();
+  it("fails closed on an existing issue with no usable state", () => {
+    // Re-baselining here would drop every change since the last record.
+    expect(() => parseIssueBody(null)).toThrow(/empty body/);
+    expect(() => parseIssueBody("hand-written notes")).toThrow(
+      /no state block/,
+    );
     const otherVersion = renderIssueBody(original).replace(
       '"version":1',
       '"version":2',
     );
-    expect(parseIssueBody(otherVersion)).toBeNull();
+    expect(() => parseIssueBody(otherVersion)).toThrow(/version 2/);
+    const otherScope = renderIssueBody(original).replace(
+      '"scope":"US"',
+      '"scope":"AU"',
+    );
+    expect(() => parseIssueBody(otherScope)).toThrow(/scope AU/);
+    const notJson = renderIssueBody(original).replace('{"version"', "{oops");
+    expect(() => parseIssueBody(notJson)).toThrow(/not valid JSON/);
   });
 
   it("fails loudly on a corrupted block instead of re-baselining", () => {

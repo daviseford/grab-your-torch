@@ -293,7 +293,7 @@ export function renderBody(
     "",
     "---",
     "",
-    "The daily survivoR sync only imports the newest season. A change to an older season, or to a table the app does not read, needs a manual look. Each change is emailed once.",
+    "The daily survivoR sync only imports the newest season. A change to an older season, or to a table the app does not read, needs a manual look. A change is normally emailed once; if recording it fails after delivery, the next run emails it again rather than risk losing it.",
   );
   return `${lines.join("\n").trim()}\n`;
 }
@@ -328,7 +328,7 @@ export function renderIssueBody(state: RadarState): string {
   const body = [
     "Managed by `.github/workflows/survivor-data-radar.yml`. Do not edit.",
     "",
-    "This issue stores the survivoR data fingerprints the radar last emailed about (or the first baseline). Closing it is harmless. Deleting its state block makes the next run record a fresh baseline without emailing. See `docs/survivor-data-radar.md`.",
+    "This issue stores the survivoR data fingerprints the radar last emailed about (or the first baseline). Closing it is harmless. Editing or deleting the state block makes the radar fail until it is restored; to start over from a fresh baseline, retitle or delete this issue. See `docs/survivor-data-radar.md`.",
     "",
     `- survivoR commit: \`${state.commit}\``,
     `- Observed: ${state.observedAt}`,
@@ -350,30 +350,39 @@ export function renderIssueBody(state: RadarState): string {
 }
 
 /**
- * Read the state back out of a managed issue body. Returns null when there is
- * no state block or it was written by a different radar version or scope
- * (the next run then records a baseline); throws when a block is present but
- * malformed, so a corrupted store fails loudly instead of re-baselining past
- * a change.
+ * Read the state back out of an existing managed issue body. Only the
+ * absence of the issue itself means "no state yet". Once the issue exists, a
+ * missing, malformed, or other-version/scope block throws: re-baselining
+ * there would silently drop every change since the last recorded state.
+ * Re-baselining on purpose means retitling or deleting the issue.
  */
-export function parseIssueBody(
-  body: string | null | undefined,
-): RadarState | null {
-  if (!body) return null;
+export function parseIssueBody(body: string | null | undefined): RadarState {
+  if (!body) {
+    throw new Error("Radar state issue exists but has an empty body");
+  }
   const start = body.indexOf(STATE_BEGIN);
   const end = body.indexOf(STATE_END);
-  if (start === -1 || end === -1) return null;
+  if (start === -1 || end === -1 || end < start) {
+    throw new Error("Radar state issue exists but has no state block");
+  }
   const block = body
     .slice(start + STATE_BEGIN.length, end)
     .trim()
     .replace(/^```json\s*/, "")
     .replace(/\s*```$/, "");
-  const encoded = JSON.parse(block) as EncodedState;
+  let encoded: EncodedState;
+  try {
+    encoded = JSON.parse(block) as EncodedState;
+  } catch {
+    throw new Error("Radar state block is not valid JSON");
+  }
   if (
-    encoded.version !== RADAR_STATE_VERSION ||
+    encoded?.version !== RADAR_STATE_VERSION ||
     encoded.scope !== RADAR_SCOPE
   ) {
-    return null;
+    throw new Error(
+      `Radar state block is version ${String(encoded?.version)} scope ${String(encoded?.scope)}, expected ${RADAR_STATE_VERSION} ${RADAR_SCOPE}`,
+    );
   }
   if (
     typeof encoded.commit !== "string" ||

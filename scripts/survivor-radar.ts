@@ -171,7 +171,8 @@ export async function runObserve(io: RadarIo, options: ObserveOptions) {
   } else {
     if (!options.repo) throw new Error("GITHUB_REPOSITORY is not set");
     issue = await findManagedIssue(io, options.repo);
-    previous = parseIssueBody(issue?.body);
+    // Only a missing issue baselines; an existing one must parse.
+    previous = issue ? parseIssueBody(issue.body) : null;
   }
 
   const current = await observeUpstream(io);

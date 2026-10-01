@@ -6,8 +6,11 @@ name: "survivoR data radar"
 # it cannot see the rest; this workflow watches all of it and changes nothing
 # in the app. See docs/survivor-data-radar.md.
 #
-# No schedule of its own: it runs after each "Sync survivoR data" run on main,
-# whatever that run's result, so a failed sync still gets a radar pass.
+# It runs after each "Sync survivoR data" run on main, whatever that run's
+# result, so a failed sync still gets a radar pass. A daily 16:00 UTC fallback
+# (two hours after the sync's 14:00) keeps it running if the sync is renamed
+# or GitHub auto-disables that schedule. When both fire on the same day, the
+# second run finds the state already recorded and sends nothing.
 #
 # Activation is deliberate, not a side effect of merging: the triggered run
 # does nothing until the repository variable SURVIVOR_DATA_RADAR is set to
@@ -15,7 +18,8 @@ name: "survivoR data radar"
 # nothing, unless the secrets SMTP_USERNAME and SMTP_PASSWORD and the
 # variable SURVIVOR_RADAR_EMAIL_TO are all set. A manual workflow_dispatch
 # run always executes, as a dry run (observe and report only) unless
-# `dry_run` is unticked.
+# `dry_run` is unticked. Ticking `test_email` sends one fixed test message
+# and forces a dry run, so it never records state.
 #
 # Deliberately never `pull_request`: this job reads the SMTP secrets.
 on:
@@ -23,6 +27,8 @@ on:
     workflows: ["Sync survivoR data"]
     types: [completed]
     branches: [main]
+  schedule:
+    - cron: "0 16 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -30,6 +36,11 @@ on:
         type: boolean
         required: false
         default: true
+      test_email:
+        description: "Send one test email to check the email settings (forces a dry run; records no state)"
+        type: boolean
+        required: false
+        default: false
 
 # Never cancel a run between a delivered email and recording its state.
 concurrency:
@@ -53,7 +64,8 @@ jobs:
       vars.SURVIVOR_DATA_RADAR == 'enabled'
     env:
       RADAR_DIR: ${{ github.workspace }}/.survivor-radar
-      LIVE: ${{ github.event_name == 'workflow_run' || inputs.dry_run == false }}
+      LIVE: ${{ github.event_name == 'workflow_run' || github.event_name == 'schedule' || (inputs.dry_run == false && inputs.test_email != true) }}
+      TEST_EMAIL: ${{ github.event_name == 'workflow_dispatch' && inputs.test_email == true }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
       - uses: actions/checkout@v6
@@ -71,7 +83,7 @@ jobs:
       # not record a baseline or advance past a change it cannot report.
       # Only names are printed, never values.
       - name: Check email configuration
-        if: env.LIVE == 'true'
+        if: env.LIVE == 'true' || env.TEST_EMAIL == 'true'
         shell: bash
         env:
           SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
@@ -86,6 +98,20 @@ jobs:
             echo "::error::survivoR radar email is not configured (missing: ${missing[*]}). Nothing was observed, sent or recorded."
             exit 1
           fi
+
+      # A fixed message: no observation, no state. A failure turns the run red.
+      - name: Send test email
+        if: env.TEST_EMAIL == 'true'
+        uses: dawidd6/action-send-mail@2cea9617b09d79a095af21254fbcb7ae95903dde # v3.12.0
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: "survivoR Radar: test email"
+          body: "This is a test from the survivoR data radar workflow. Email settings work. No survivoR state was recorded."
+          to: ${{ vars.SURVIVOR_RADAR_EMAIL_TO }}
+          from: Grab Your Torch survivoR Radar
 
       - name: Observe survivoR
         id: observe

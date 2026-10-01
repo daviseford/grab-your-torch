@@ -147,6 +147,46 @@ describe("survivor radar commands", () => {
     expect(calls).toEqual(["update 7"]);
   });
 
+  it("baselines only when no managed issue exists at all", async () => {
+    const decision = await runObserve(
+      fakeIo(COMMIT_A, { episodes: [S51_EP1] }, [
+        managedIssue("x", { title: "unrelated" }),
+      ]),
+      { out, repo: REPO },
+    );
+    expect(decision.action).toBe("baseline");
+  });
+
+  describe("an existing managed issue without usable state", () => {
+    const cases: [string, (body: string) => string][] = [
+      ["deleted state block", () => "notes only, block removed"],
+      ["emptied body", () => ""],
+      ["malformed block", (body) => body.replace('{"version"', "{oops")],
+      [
+        "other radar version",
+        (body) => body.replace('"version":1', '"version":2'),
+      ],
+    ];
+    for (const [label, mutate] of cases) {
+      it(`fails closed on a ${label} instead of re-baselining`, async () => {
+        const body = mutate(await baselineBody({ episodes: [S51_EP1] }));
+        fs.rmSync(path.join(out, "decision.json"));
+        fs.rmSync(path.join(out, "next-state.json"));
+        await expect(
+          runObserve(
+            fakeIo(COMMIT_B, { episodes: [S51_EP1, S51_EP2] }, [
+              managedIssue(body),
+            ]),
+            { out, repo: REPO },
+          ),
+        ).rejects.toThrow();
+        // Nothing for the workflow to send or record.
+        expect(exists("decision.json")).toBe(false);
+        expect(exists("next-state.json")).toBe(false);
+      });
+    }
+  });
+
   it("clears stale email text when a re-run decides not to alert", async () => {
     fs.writeFileSync(path.join(out, "subject.txt"), "stale");
     fs.writeFileSync(path.join(out, "body.md"), "stale");
@@ -235,12 +275,31 @@ describe("survivor-data-radar workflow", () => {
     return workflow.slice(start, next === -1 ? undefined : next);
   };
 
-  it("adds no schedule and follows the existing sync on main", () => {
-    expect(workflow).not.toMatch(/^\s*schedule:/m);
+  it("follows the existing sync on main, by its exact workflow name", () => {
     expect(workflow).toMatch(
       /workflow_run:\s*\n\s*workflows: \["Sync survivoR data"\]\s*\n\s*types: \[completed\]\s*\n\s*branches: \[main\]/,
     );
+    // workflow_run matches by name: a renamed sync would silently stop it.
+    const sync = fs.readFileSync(
+      fileURLToPath(
+        new URL(
+          "../../.github/workflows/sync-survivor-data.yml",
+          import.meta.url,
+        ),
+      ),
+      "utf8",
+    );
+    const syncName = sync.match(/^name: "([^"]+)"/m)?.[1];
+    expect(syncName).toBe("Sync survivoR data");
+    expect(workflow).toContain(`workflows: ["${syncName}"]`);
     expect(workflow).not.toMatch(/^\s*pull_request/m);
+  });
+
+  it("has one daily fallback schedule, offset from the 14:00 UTC sync", () => {
+    expect(workflow.match(/- cron:/g)).toHaveLength(1);
+    expect(workflow).toMatch(/schedule:\s*\n\s*- cron: "0 16 \* \* \*"/);
+    // The fallback is a live run, sharing the same concurrency and state.
+    expect(workflow).toContain("github.event_name == 'schedule'");
   });
 
   it("only runs the trigger once activated", () => {
@@ -304,7 +363,24 @@ describe("survivor-data-radar workflow", () => {
   it("is a dry run by default when dispatched by hand", () => {
     expect(workflow).toMatch(/dry_run:[\s\S]{0,200}default: true/);
     expect(workflow).toContain(
-      "LIVE: ${{ github.event_name == 'workflow_run' || inputs.dry_run == false }}",
+      "LIVE: ${{ github.event_name == 'workflow_run' || github.event_name == 'schedule' || (inputs.dry_run == false && inputs.test_email != true) }}",
+    );
+  });
+
+  it("sends a test email only by hand, and never as a live run", () => {
+    expect(workflow).toMatch(/test_email:[\s\S]{0,200}default: false/);
+    expect(workflow).toContain(
+      "TEST_EMAIL: ${{ github.event_name == 'workflow_dispatch' && inputs.test_email == true }}",
+    );
+    const send = step("Send test email");
+    expect(send).toContain("if: env.TEST_EMAIL == 'true'");
+    expect(send).toContain(
+      "uses: dawidd6/action-send-mail@2cea9617b09d79a095af21254fbcb7ae95903dde",
+    );
+    expect(send).toContain("to: ${{ vars.SURVIVOR_RADAR_EMAIL_TO }}");
+    expect(send).not.toContain("continue-on-error");
+    expect(step("Check email configuration")).toContain(
+      "if: env.LIVE == 'true' || env.TEST_EMAIL == 'true'",
     );
   });
 

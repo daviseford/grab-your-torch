@@ -6,7 +6,7 @@ An email when the upstream [survivoR](https://github.com/doehm/survivoR) dataset
 
 `sync-survivor-data.yml` regenerates only the newest season's file and compares it with the committed file. The comparison keeps curated cast fields, so it sees processed app data, not upstream data. A survivoR correction to an older season, or to a table the app does not read (confessionals, viewers, boot mapping and so on), never shows up there. It also sends no email: its output is an auto-merged PR.
 
-The radar fills that gap without a second schedule. It runs after every "Sync survivoR data" run on `main` (`workflow_run`), whatever that run's result.
+The radar fills that gap. It runs after every "Sync survivoR data" run on `main` (`workflow_run`, matched by that exact workflow name), whatever that run's result. A daily 16:00 UTC fallback schedule, two hours after the sync, keeps it running if the sync is renamed or GitHub auto-disables the sync's schedule. On a normal day the fallback finds the state already recorded and sends nothing.
 
 ## What counts as a change
 
@@ -23,11 +23,15 @@ The email lists each changed table under its season, with the row count before a
 | ----------------------------- | ------------------------------- | -------------------------------------------------------- |
 | First live run (no state yet) | No                              | Baseline                                                 |
 | Nothing in scope changed      | No                              | No                                                       |
-| Something changed             | Yes, once                       | After delivery                                           |
+| Something changed             | Yes                             | After delivery                                           |
 | Email failed twice            | No (run fails)                  | No: the next run re-sends, with anything newer folded in |
+| Email sent, recording failed  | Yes (run fails)                 | No: the next run sends the same change again             |
 | Email configuration missing   | No (run fails before observing) | No                                                       |
+| State issue unreadable        | No (run fails)                  | No                                                       |
 
-State lives in a bot-created issue titled `survivoR data radar state`, in a fenced block between `survivor-data-radar-state` markers. Only issues created by `github-actions[bot]` are trusted. Closing the issue is harmless. Deleting the state block (or the issue) makes the next run record a fresh baseline without emailing. A malformed block fails the run instead of re-baselining past a change.
+Delivery is at least once. A change is normally emailed a single time, but the radar prefers a duplicate email to a lost one: if the email goes out and recording the state then fails, the next run sends it again.
+
+State lives in a bot-created issue titled `survivoR data radar state`, in a fenced block between `survivor-data-radar-state` markers. Only issues created by `github-actions[bot]` are trusted. Closing the issue is harmless. Only a missing issue starts a fresh baseline. If the issue exists but its state block is missing, malformed, or from another radar version, every run fails until the block is restored, rather than re-baselining and dropping the changes since the last record. To start over on purpose, retitle or delete the issue; the next run records a new baseline without emailing.
 
 ## Activation
 
@@ -35,8 +39,10 @@ Merging does not activate it. In Settings > Secrets and variables > Actions:
 
 1. Secrets `SMTP_USERNAME` and `SMTP_PASSWORD`: a Gmail address and an app password for it (the transport is `smtp.gmail.com:465`, the same as the AoS Reminders Rules Radar).
 2. Variable `SURVIVOR_RADAR_EMAIL_TO`: the address that receives the emails.
-3. Optional check: run the workflow by hand (Actions > survivoR data radar > Run workflow) with `dry_run` ticked. It reports the decision in the job summary and sends and records nothing.
-4. Variable `SURVIVOR_DATA_RADAR` = `enabled`. The next sync run triggers a live radar run, which records the baseline. Emails start with the first change after that.
+3. Optional checks, by hand (Actions > survivoR data radar > Run workflow):
+   - Tick `test_email` to send one fixed test message to the recipient. It checks the email settings only: the run is forced to a dry run and records nothing.
+   - Leave `dry_run` ticked to see the decision in the job summary. It sends and records nothing.
+4. Variable `SURVIVOR_DATA_RADAR` = `enabled`. The next sync run (or the 16:00 UTC fallback) triggers a live radar run, which records the baseline. Emails start with the first change after that.
 
 To pause, unset `SURVIVOR_DATA_RADAR`. Changes made while paused are reported together on the first run after resuming.
 
