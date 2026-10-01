@@ -54,7 +54,7 @@ This fetches survivoR data once and reuses it across all seasons, which is signi
 
 ## Automated Daily Sync
 
-The survivoR observer (`.github/workflows/survivor-observer.yml`, see `docs/survivor-observer.md`) checks every 30 minutes and does a full run at 14:00 UTC. It:
+The survivoR observer (`.github/workflows/survivor-observer.yml`, see `docs/survivor-observer.md`) checks every two hours and does a full run at 14:00 UTC. It:
 
 1. Runs `yarn sync-season --no-push` at one pinned survivoR commit, which detects seasons with new data
 2. Holds, writing nothing, while survivoR has only part of a newer episode (`scripts/lib/episode-readiness.ts`)
