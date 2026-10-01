@@ -384,6 +384,26 @@ describe("survivor-data-radar workflow", () => {
     );
   });
 
+  it("never observes or touches state on a test email run", () => {
+    // A test email checks delivery only; an upstream or state failure after
+    // it would make the run red for reasons the test is not about.
+    expect(step("Observe survivoR")).toContain("if: env.TEST_EMAIL != 'true'");
+    // Every other step that runs the radar, mails an alert or records state
+    // requires a live run, and a test email run is never live.
+    for (const name of [
+      "Send radar email",
+      "Retry radar email",
+      "Record radar state",
+      "Fail on undelivered email",
+    ]) {
+      expect(step(name)).toContain("env.LIVE == 'true'");
+    }
+    expect(workflow.match(/yarn survivor-radar /g)).toHaveLength(2);
+    expect(step("Observe survivoR")).toContain("yarn survivor-radar observe");
+    expect(step("Record radar state")).toContain("yarn survivor-radar record");
+    expect(workflow).toContain("inputs.test_email != true) }}");
+  });
+
   it("never cancels a run mid-delivery", () => {
     expect(workflow).toMatch(
       /concurrency:\s*\n\s*group: survivor-data-radar\s*\n\s*cancel-in-progress: false/,

@@ -6,7 +6,7 @@ An email when the upstream [survivoR](https://github.com/doehm/survivoR) dataset
 
 `sync-survivor-data.yml` regenerates only the newest season's file and compares it with the committed file. The comparison keeps curated cast fields, so it sees processed app data, not upstream data. A survivoR correction to an older season, or to a table the app does not read (confessionals, viewers, boot mapping and so on), never shows up there. It also sends no email: its output is an auto-merged PR.
 
-The radar fills that gap. It runs after every "Sync survivoR data" run on `main` (`workflow_run`, matched by that exact workflow name), whatever that run's result. A daily 16:00 UTC fallback schedule, two hours after the sync, keeps it running if the sync is renamed or GitHub auto-disables the sync's schedule. On a normal day the fallback finds the state already recorded and sends nothing.
+The radar fills that gap. It runs after every "Sync survivoR data" run on `main` (`workflow_run`, matched by that exact workflow name), whatever that run's result. A daily 16:00 UTC fallback schedule, two hours after the sync, keeps it running if the sync is renamed, disabled by hand, fails before triggering it, or runs late. It does not cover GitHub disabling scheduled workflows after repository inactivity, which stops both. On a normal day the fallback finds the state already recorded and sends nothing.
 
 ## What counts as a change
 
@@ -40,7 +40,7 @@ Merging does not activate it. In Settings > Secrets and variables > Actions:
 1. Secrets `SMTP_USERNAME` and `SMTP_PASSWORD`: a Gmail address and an app password for it (the transport is `smtp.gmail.com:465`, the same as the AoS Reminders Rules Radar).
 2. Variable `SURVIVOR_RADAR_EMAIL_TO`: the address that receives the emails.
 3. Optional checks, by hand (Actions > survivoR data radar > Run workflow):
-   - Tick `test_email` to send one fixed test message to the recipient. It checks the email settings only: the run is forced to a dry run and records nothing.
+   - Tick `test_email` to send one fixed test message to the recipient. It checks the email settings only: the run skips observation and records nothing.
    - Leave `dry_run` ticked to see the decision in the job summary. It sends and records nothing.
 4. Variable `SURVIVOR_DATA_RADAR` = `enabled`. The next sync run (or the 16:00 UTC fallback) triggers a live radar run, which records the baseline. Emails start with the first change after that.
 

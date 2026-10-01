@@ -8,9 +8,11 @@ name: "survivoR data radar"
 #
 # It runs after each "Sync survivoR data" run on main, whatever that run's
 # result, so a failed sync still gets a radar pass. A daily 16:00 UTC fallback
-# (two hours after the sync's 14:00) keeps it running if the sync is renamed
-# or GitHub auto-disables that schedule. When both fire on the same day, the
-# second run finds the state already recorded and sends nothing.
+# (two hours after the sync's 14:00) keeps it running if the sync is renamed,
+# disabled by hand, or runs late. It does not help when GitHub disables
+# scheduled workflows after repository inactivity: that disables both. When
+# both fire on the same day, the second run finds the state already recorded
+# and sends nothing.
 #
 # Activation is deliberate, not a side effect of merging: the triggered run
 # does nothing until the repository variable SURVIVOR_DATA_RADAR is set to
@@ -19,7 +21,7 @@ name: "survivoR data radar"
 # variable SURVIVOR_RADAR_EMAIL_TO are all set. A manual workflow_dispatch
 # run always executes, as a dry run (observe and report only) unless
 # `dry_run` is unticked. Ticking `test_email` sends one fixed test message
-# and forces a dry run, so it never records state.
+# and nothing else: no observation, no email decision, no state.
 #
 # Deliberately never `pull_request`: this job reads the SMTP secrets.
 on:
@@ -115,6 +117,7 @@ jobs:
 
       - name: Observe survivoR
         id: observe
+        if: env.TEST_EMAIL != 'true'
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
