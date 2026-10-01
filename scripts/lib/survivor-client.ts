@@ -17,12 +17,22 @@ import type {
   SurvivorVoteHistory,
 } from "./survivor-types.js";
 
-const BASE_URL =
-  "https://raw.githubusercontent.com/doehm/survivoR/master/dev/json";
+const RAW_BASE_URL = "https://raw.githubusercontent.com/doehm/survivoR";
+
+/**
+ * URL of a survivoR table at a git ref. Defaults to master; pass a commit SHA
+ * to read every table from one consistent upstream snapshot.
+ */
+export function survivorTableUrl(table: SurvivorTable, ref = "master"): string {
+  return `${RAW_BASE_URL}/${ref}/dev/json/${table}.json`;
+}
 
 /** Fetch a survivoR table as JSON. */
-export async function fetchTable<T>(table: SurvivorTable): Promise<T[]> {
-  const url = `${BASE_URL}/${table}.json`;
+export async function fetchTable<T>(
+  table: SurvivorTable,
+  ref?: string,
+): Promise<T[]> {
+  const url = survivorTableUrl(table, ref);
   const res = await fetch(url);
   if (!res.ok) {
     throw new Error(
@@ -77,6 +87,7 @@ export interface SurvivorSeasonData {
  */
 export async function fetchSeasonData(
   seasonNum: number,
+  ref?: string,
 ): Promise<SurvivorSeasonData> {
   console.log(`  Fetching survivoR data for Season ${seasonNum}...`);
 
@@ -91,14 +102,14 @@ export async function fetchSeasonData(
     allTribeMapping,
     allJourneys,
   ] = await Promise.all([
-    fetchTable<SurvivorCastaway>("castaways"),
-    fetchTable<SurvivorEpisode>("episodes"),
-    fetchTable<SurvivorChallengeResult>("challenge_results"),
-    fetchTable<SurvivorVoteHistory>("vote_history"),
-    fetchTable<SurvivorAdvantageDetail>("advantage_details"),
-    fetchTable<SurvivorAdvantageMovement>("advantage_movement"),
-    fetchTable<SurvivorTribeMapping>("tribe_mapping"),
-    fetchTable<SurvivorJourney>("journeys"),
+    fetchTable<SurvivorCastaway>("castaways", ref),
+    fetchTable<SurvivorEpisode>("episodes", ref),
+    fetchTable<SurvivorChallengeResult>("challenge_results", ref),
+    fetchTable<SurvivorVoteHistory>("vote_history", ref),
+    fetchTable<SurvivorAdvantageDetail>("advantage_details", ref),
+    fetchTable<SurvivorAdvantageMovement>("advantage_movement", ref),
+    fetchTable<SurvivorTribeMapping>("tribe_mapping", ref),
+    fetchTable<SurvivorJourney>("journeys", ref),
   ]);
 
   // Filter to the requested season

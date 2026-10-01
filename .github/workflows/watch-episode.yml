@@ -1,0 +1,107 @@
+name: "Watch episode data"
+
+# Bounded, read-only watch for one episode's survivoR data. Every three hours
+# it checks survivoR (pinned to one commit), the season bundle on main, and
+# the public production season and pool documents, then keeps one tracking
+# issue up to date. It never imports, writes Firestore or pushes code:
+# publishing stays a reviewed human step, listed in the issue.
+#
+# Armed by the repository variable EPISODE_WATCH, for example
+#   {"season":51,"episode":2,"deadline":"2026-10-15T14:00:00Z"}
+# With the variable unset the job is skipped. Once the episode is published,
+# or the deadline passes, the workflow disables itself; an expired watch also
+# fails the run so the failure notification goes out.
+#
+# Schedules only run from the default branch, so this starts after merge.
+on:
+  schedule:
+    - cron: '17 */3 * * *' # Every three hours, off the top of the hour
+  workflow_dispatch:
+
+concurrency:
+  group: episode-watch
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+# No secrets. issues: the tracking issue. actions: disabling itself.
+permissions:
+  contents: read
+  issues: write
+  actions: write
+
+jobs:
+  watch:
+    if: vars.EPISODE_WATCH != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Check survivoR and production
+        id: watch
+        env:
+          EPISODE_WATCH: ${{ vars.EPISODE_WATCH }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          yarn tsx scripts/watch-episode.ts
+          {
+            echo "state=$(jq -r '.decision.state' watch-result.json)"
+            echo "alert=$(jq -r '.decision.alert' watch-result.json)"
+            echo "terminal=$(jq -r '.decision.terminal' watch-result.json)"
+            echo "title=$(jq -r '.issueTitle' watch-result.json)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Write job summary
+        if: always() && steps.watch.outcome == 'success'
+        run: cat watch-issue.md >> "$GITHUB_STEP_SUMMARY"
+
+      # One issue per season and episode, found by exact title, so repeated
+      # runs edit it. Opened only once there is something to act on.
+      - name: Update tracking issue
+        if: steps.watch.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATE: ${{ steps.watch.outputs.state }}
+          ALERT: ${{ steps.watch.outputs.alert }}
+          TITLE: ${{ steps.watch.outputs.title }}
+        run: |
+          # Listed, not searched: the search index can lag a fresh issue.
+          NUMBER=$(gh issue list --state open --limit 500 --json number,title \
+            --jq '[.[] | select(.title == env.TITLE)][0].number // empty')
+          if [ -z "$NUMBER" ]; then
+            if [ "$ALERT" = "true" ]; then
+              gh issue create --title "$TITLE" --body-file watch-issue.md
+            fi
+          else
+            gh issue edit "$NUMBER" --body-file watch-issue.md
+            if [ "$STATE" = "published" ]; then
+              gh issue close "$NUMBER" --comment "Published: main, production Firestore and pool standings all show the episode. The watch has disabled itself."
+            fi
+          fi
+
+      - name: Disable the watch
+        if: steps.watch.outputs.terminal == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow disable watch-episode.yml --repo "$GITHUB_REPOSITORY"
+
+      - name: Fail on alert states
+        if: steps.watch.outputs.state == 'expired' || steps.watch.outputs.state == 'inconsistent'
+        env:
+          STATE: ${{ steps.watch.outputs.state }}
+        run: |
+          echo "Episode watch is $STATE; see the tracking issue."
+          exit 1

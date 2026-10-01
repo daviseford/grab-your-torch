@@ -160,3 +160,7 @@ firebase-private-key.json
 autoresearch-results.tsv
 /.claude
 /.playwright-mcp
+
+# Episode watch output (scripts/watch-episode.ts)
+watch-result.json
+watch-issue.md
