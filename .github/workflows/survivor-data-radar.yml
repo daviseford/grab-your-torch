@@ -23,6 +23,10 @@ name: "survivoR data radar"
 # `dry_run` is unticked. Ticking `test_email` sends one fixed test message
 # and nothing else: no observation, no email decision, no state.
 #
+# Being replaced by survivor-observer.yml, which runs the same radar on the
+# same state issue (docs/survivor-observer.md). This job stands down while the
+# repository variable SURVIVOR_OBSERVER is "live".
+#
 # Deliberately never `pull_request`: this job reads the SMTP secrets.
 on:
   workflow_run:
@@ -61,9 +65,13 @@ jobs:
   radar:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Stands down once survivor-observer.yml is live: the observer runs this
+    # same radar, against the same state issue, so the two never both record.
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      vars.SURVIVOR_DATA_RADAR == 'enabled'
+      vars.SURVIVOR_OBSERVER != 'live' && (
+        github.event_name == 'workflow_dispatch' ||
+        vars.SURVIVOR_DATA_RADAR == 'enabled'
+      )
     env:
       RADAR_DIR: ${{ github.workspace }}/.survivor-radar
       LIVE: ${{ github.event_name == 'workflow_run' || github.event_name == 'schedule' || (inputs.dry_run == false && inputs.test_email != true) }}

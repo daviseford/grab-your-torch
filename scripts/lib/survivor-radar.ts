@@ -293,7 +293,7 @@ export function renderBody(
     "",
     "---",
     "",
-    "The daily survivoR sync only imports the newest season. A change to an older season, or to a table the app does not read, needs a manual look. A change is normally emailed once; if recording it fails after delivery, the next run emails it again rather than risk losing it.",
+    "The survivoR sync only imports the newest season. A change to an older season, or to a table the app does not read, needs a manual look. A change is normally emailed once; if recording it fails after delivery, the next run emails it again rather than risk losing it.",
   );
   return `${lines.join("\n").trim()}\n`;
 }
@@ -326,7 +326,7 @@ export function renderIssueBody(state: RadarState): string {
     ),
   };
   const body = [
-    "Managed by `.github/workflows/survivor-data-radar.yml`. Do not edit.",
+    "Managed by `.github/workflows/survivor-observer.yml` (and `survivor-data-radar.yml` until the observer replaces it). Do not edit.",
     "",
     "This issue stores the survivoR data fingerprints the radar last emailed about (or the first baseline). Closing it is harmless. Editing or deleting the state block makes the radar fail until it is restored; to start over from a fresh baseline, retitle or delete this issue. See `docs/survivor-data-radar.md`.",
     "",

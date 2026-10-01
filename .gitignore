@@ -161,5 +161,7 @@ autoresearch-results.tsv
 /.claude
 /.playwright-mcp
 
-# survivoR data radar run artifacts
+# survivoR data radar and observer run artifacts
 .survivor-radar/
+.survivor-observer/
+sync-result.json

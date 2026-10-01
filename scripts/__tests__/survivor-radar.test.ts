@@ -233,6 +233,38 @@ describe("survivor radar commands", () => {
     expect(exists("decision.json")).toBe(false);
   });
 
+  it("reads a pinned commit instead of master when given one", async () => {
+    const base = fakeIo(COMMIT_B, { episodes: [S51_EP1] });
+    const pinned: RadarIo = {
+      ...base,
+      githubGet: async (apiPath) => {
+        expect(apiPath).not.toBe("/repos/doehm/survivoR/commits/master");
+        if (apiPath === `/repos/doehm/survivoR/commits/${COMMIT_B}`) {
+          return { sha: COMMIT_B };
+        }
+        return base.githubGet(apiPath);
+      },
+    };
+    const decision = await runObserve(pinned, {
+      out,
+      stateFile: path.join(out, "none.json"),
+      commit: COMMIT_B,
+    });
+    expect(decision.commit).toBe(COMMIT_B);
+
+    const moved: RadarIo = {
+      ...base,
+      githubGet: async () => ({ sha: COMMIT_A }),
+    };
+    await expect(
+      runObserve(moved, {
+        out,
+        stateFile: path.join(out, "none.json"),
+        commit: COMMIT_B,
+      }),
+    ).rejects.toThrow(/different commit/);
+  });
+
   it("compares against a local state file when given one", async () => {
     const stateFile = path.join(out, "prev.json");
     await runObserve(fakeIo(COMMIT_A, { episodes: [S51_EP1] }), {
@@ -302,9 +334,9 @@ describe("survivor-data-radar workflow", () => {
     expect(workflow).toContain("github.event_name == 'schedule'");
   });
 
-  it("only runs the trigger once activated", () => {
+  it("only runs the trigger once activated, and stands down for the live observer", () => {
     expect(workflow).toMatch(
-      /if: >-\s*\n\s*github\.event_name == 'workflow_dispatch' \|\|\s*\n\s*vars\.SURVIVOR_DATA_RADAR == 'enabled'/,
+      /if: >-\s*\n\s*vars\.SURVIVOR_OBSERVER != 'live' && \(\s*\n\s*github\.event_name == 'workflow_dispatch' \|\|\s*\n\s*vars\.SURVIVOR_DATA_RADAR == 'enabled'\s*\n\s*\)/,
     );
   });
 

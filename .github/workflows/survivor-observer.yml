@@ -1,0 +1,847 @@
+name: "survivoR observer"
+
+# One workflow for everything survivoR: it replaces the daily "Sync survivoR
+# data" import and the "survivoR data radar" email once it is switched to
+# live. See docs/survivor-observer.md.
+#
+# Every 30 minutes a cheap check (no checkout, no install, about ten GitHub
+# API calls) asks whether anything could have changed:
+#   - survivoR's dev/json tree differs from the one the radar last recorded;
+#   - a sync pull request needs ci, has a ci result nobody was told about, or
+#     has an approval on its head commit;
+#   - a merged sync pull request is still waiting to publish.
+# Only then does the full job run: radar (every US table, every season), then
+# the newest season's sync, then the publication gate. A 14:00 UTC run is
+# always full, as the old daily sync was, so transformer changes on main are
+# still picked up when survivoR is quiet.
+#
+# Publication needs all of these on the sync pull request's exact head
+# commit (scripts/lib/survivor-observer.ts):
+#   1. every new episode complete at a pinned survivoR commit, and survivoR
+#      unchanged since (scripts/lib/episode-readiness.ts);
+#   2. only that season's data files changed;
+#   3. the required `ci` check passed;
+#   4. an approval from a person listed in SURVIVOR_SYNC_REVIEWERS who has
+#      write access. Automation does not provide this. Without it the pull
+#      request waits and nothing is published.
+# The merge happens only after a "publishing" email is delivered. Firestore
+# is written only from the merged commit, by the publish job, which then
+# redeploys hosting and recomputes pool standings.
+#
+# Modes, from the repository variable SURVIVOR_OBSERVER:
+#   unset   scheduled runs do nothing; the old sync and radar keep running.
+#   shadow  observe and decide, report in the job summary; no email, no state,
+#           no pull request, no merge, no publish. Runs beside the old pair.
+#   live    full behaviour. The old sync and radar stand down.
+# A manual run is a shadow run unless `dry_run` is unticked, which needs the
+# variable to be `live`.
+#
+# Deliberately never `pull_request`: this reads the SMTP and Firebase secrets.
+on:
+  schedule:
+    - cron: "7,37 * * * *"
+    - cron: "0 14 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Shadow run: observe and decide, but send, record, merge and publish nothing"
+        type: boolean
+        required: false
+        default: true
+      test_email:
+        description: "Send one test email and do nothing else"
+        type: boolean
+        required: false
+        default: false
+
+# Never cancel a run between a delivered email and recording it, or between
+# a merge and its publish.
+concurrency:
+  group: survivor-observer
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions: {}
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      vars.SURVIVOR_OBSERVER == 'live' ||
+      vars.SURVIVOR_OBSERVER == 'shadow'
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      checks: read
+    outputs:
+      mode: ${{ steps.mode.outputs.mode }}
+      full: ${{ steps.fast.outputs.full }}
+      reason: ${{ steps.fast.outputs.reason }}
+    steps:
+      - name: Resolve mode
+        id: mode
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          OBSERVER: ${{ vars.SURVIVOR_OBSERVER }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          TEST_EMAIL: ${{ inputs.test_email }}
+        run: |
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            if [ "$TEST_EMAIL" = "true" ]; then
+              mode=test
+            elif [ "$DRY_RUN" = "false" ]; then
+              if [ "$OBSERVER" != "live" ]; then
+                echo "::error::A live manual run needs SURVIVOR_OBSERVER=live (it is '${OBSERVER}'). Nothing was done."
+                exit 1
+              fi
+              mode=live
+            else
+              mode=shadow
+            fi
+          else
+            mode="$OBSERVER"
+          fi
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "Mode: $mode"
+
+      # Fail closed before observing: a live run that could not email or has
+      # nobody to approve must not record, open, merge or publish anything.
+      # Only names are printed, never values.
+      - name: Check configuration
+        if: steps.mode.outputs.mode == 'live' || steps.mode.outputs.mode == 'test'
+        shell: bash
+        env:
+          MODE: ${{ steps.mode.outputs.mode }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SURVIVOR_RADAR_EMAIL_TO: ${{ vars.SURVIVOR_RADAR_EMAIL_TO }}
+          SURVIVOR_SYNC_REVIEWERS: ${{ vars.SURVIVOR_SYNC_REVIEWERS }}
+          FIREBASE_ADMIN_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_ADMIN_SERVICE_ACCOUNT }}
+        run: |
+          missing=()
+          [ -n "$SMTP_USERNAME" ] || missing+=("secret SMTP_USERNAME")
+          [ -n "$SMTP_PASSWORD" ] || missing+=("secret SMTP_PASSWORD")
+          [ -n "$SURVIVOR_RADAR_EMAIL_TO" ] || missing+=("variable SURVIVOR_RADAR_EMAIL_TO")
+          if [ "$MODE" = "live" ]; then
+            [ -n "$SURVIVOR_SYNC_REVIEWERS" ] || missing+=("variable SURVIVOR_SYNC_REVIEWERS")
+            [ -n "$FIREBASE_ADMIN_SERVICE_ACCOUNT" ] || missing+=("secret FIREBASE_ADMIN_SERVICE_ACCOUNT")
+          fi
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::survivoR observer is not configured (missing: ${missing[*]}). Nothing was observed, sent, recorded or published."
+            exit 1
+          fi
+
+      # The no-change fast path. Any doubt (an API error, no radar state)
+      # means a full run, never a skipped one.
+      - name: Decide whether anything needs a full run
+        id: fast
+        if: steps.mode.outputs.mode != 'test'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          set -uo pipefail
+          full() {
+            echo "full=true" >> "$GITHUB_OUTPUT"
+            echo "reason=$1" >> "$GITHUB_OUTPUT"
+            echo "Full run: $1"
+            exit 0
+          }
+          [ "$EVENT" != "workflow_dispatch" ] || full "started by hand"
+          [ "$SCHEDULE" != "0 14 * * *" ] || full "daily full run"
+
+          tree_at() {
+            gh api "repos/doehm/survivoR/contents/dev?ref=$1" \
+              --jq '.[] | select(.name == "json" and .type == "dir") | .sha'
+          }
+          master=$(gh api repos/doehm/survivoR/commits/master --jq .sha) || full "could not read survivoR"
+          now=$(tree_at "$master") || full "could not read survivoR dev/json"
+          body=$(gh api "repos/$REPO/issues?state=all&creator=github-actions%5Bbot%5D&per_page=100" \
+            --jq '[.[] | select(.title == "survivoR data radar state" and (.pull_request | not))][0].body // ""') \
+            || full "could not read the radar state"
+          recorded=$(printf '%s' "$body" | grep -o '"commit":"[0-9a-f]\{40\}"' | head -n 1 | cut -d'"' -f4)
+          [ -n "$recorded" ] || full "no radar state recorded"
+          then=$(tree_at "$recorded") || full "could not read the recorded survivoR commit"
+          [ -n "$now" ] && [ "$now" = "$then" ] || full "survivoR dev/json changed"
+
+          pending=$(gh api "repos/$REPO/issues?state=closed&labels=observer-publish-pending&per_page=1" --jq length) \
+            || full "could not list pending publishes"
+          [ "$pending" = "0" ] || full "a merged sync is waiting to publish"
+
+          prs=$(gh api "repos/$REPO/pulls?state=open&base=main&per_page=100" \
+            --jq '.[] | select(.head.ref | startswith("auto/survivor-sync-season-")) | "\(.number):\(.head.sha)"') \
+            || full "could not list sync pull requests"
+          for row in $prs; do
+            n=${row%%:*}
+            sha=${row#*:}
+            ci=$(gh api "repos/$REPO/commits/$sha/check-runs?check_name=ci" \
+              --jq '[.check_runs[] | select(.app.slug == "github-actions")] | sort_by(.id) | last | "\(.status):\(.conclusion)"') \
+              || full "could not read ci for PR #$n"
+            case "$ci" in
+              ""|null:null) full "PR #$n has no ci check on its head" ;;
+              completed:*) ;;
+              *) continue ;;
+            esac
+            reviews=$(gh api "repos/$REPO/pulls/$n/reviews?per_page=100" \
+              --jq "[.[] | select(.commit_id == \"$sha\") | .state] | join(\" \")") \
+              || full "could not read PR #$n reviews"
+            case " $reviews " in
+              *" APPROVED "*) [ "$ci" != "completed:success" ] || full "PR #$n has an approval on its head" ;;
+            esac
+            # Every gate outcome for a finished ci run leaves a notice comment
+            # naming the head commit; requested changes wait for the reviewer.
+            case " $reviews " in *" CHANGES_REQUESTED "*) continue ;; esac
+            told=$(gh api "repos/$REPO/issues/$n/comments?per_page=100" \
+              --jq "[.[] | select(.user.login == \"github-actions[bot]\" and (.body | contains(\"$sha\")))] | length") \
+              || full "could not read PR #$n comments"
+            [ "$told" != "0" ] || full "PR #$n has a ci result nobody was told about"
+          done
+
+          echo "full=false" >> "$GITHUB_OUTPUT"
+          echo "reason=nothing changed" >> "$GITHUB_OUTPUT"
+          echo "Nothing changed; skipping the full run."
+
+      - name: Write job summary
+        if: always()
+        shell: bash
+        env:
+          MODE: ${{ steps.mode.outputs.mode }}
+          FULL: ${{ steps.fast.outputs.full }}
+          REASON: ${{ steps.fast.outputs.reason }}
+        run: |
+          {
+            echo "## survivoR observer: check"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Mode | ${MODE:-not resolved} |"
+            echo "| Full run | ${FULL:-no} |"
+            echo "| Why | ${REASON:-} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  test-email:
+    needs: tick
+    if: needs.tick.outputs.mode == 'test'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      # A fixed message: no observation, no state. A failure turns the run red.
+      - name: Send test email
+        uses: dawidd6/action-send-mail@2cea9617b09d79a095af21254fbcb7ae95903dde # v3.12.0
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: "survivoR Observer: test email"
+          body: "This is a test from the survivoR observer workflow. Email settings work. Nothing was observed, recorded or published."
+          to: ${{ vars.SURVIVOR_RADAR_EMAIL_TO }}
+          from: Grab Your Torch survivoR Observer
+
+  observe:
+    needs: tick
+    if: needs.tick.outputs.full == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # No Firebase secret here: this job never writes production.
+    permissions:
+      contents: write # push the bot's sync branch
+      pull-requests: write # open, update, label, merge and close sync PRs
+      issues: write # radar state issue and notice comments
+      actions: write # dispatch ci on the sync branch
+      checks: read
+    env:
+      OUT: ${{ github.workspace }}/.survivor-observer
+      RADAR_DIR: ${{ github.workspace }}/.survivor-radar
+      LIVE: ${{ needs.tick.outputs.mode == 'live' }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    outputs:
+      publish: ${{ steps.merge.outputs.merged == 'true' || steps.gate.outputs.publish_pending == 'true' }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      # One survivoR commit for the whole run: the radar and the sync read the
+      # same snapshot, so the radar never records a commit the sync missed.
+      - name: Pin survivoR
+        id: upstream
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          yarn survivor-observer upstream --out "$OUT"
+          echo "commit=$(jq -r .commit "$OUT/upstream.json")" >> "$GITHUB_OUTPUT"
+
+      # --- Radar: every US table and season, emailed on any change. ---
+
+      - name: Observe survivoR
+        id: observe
+        continue-on-error: true
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMIT: ${{ steps.upstream.outputs.commit }}
+        run: |
+          yarn survivor-radar observe --out "$RADAR_DIR" --commit "$COMMIT"
+          action=$(jq -r '.action' "$RADAR_DIR/decision.json")
+          advanced=$(jq -r '.previousCommit != .commit' "$RADAR_DIR/decision.json")
+          echo "action=$action" >> "$GITHUB_OUTPUT"
+          echo "advanced=$advanced" >> "$GITHUB_OUTPUT"
+          if [ "$action" = "alert" ]; then
+            echo "subject=$(tr -d '\r\n' < "$RADAR_DIR/subject.txt")" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Send radar email
+        id: email
+        if: env.LIVE == 'true' && steps.observe.outputs.action == 'alert'
+        continue-on-error: true
+        uses: dawidd6/action-send-mail@2cea9617b09d79a095af21254fbcb7ae95903dde # v3.12.0
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: ${{ steps.observe.outputs.subject }}
+          body: file://${{ env.RADAR_DIR }}/body.md
+          html_body: file://${{ env.RADAR_DIR }}/body.md
+          convert_markdown: true
+          to: ${{ vars.SURVIVOR_RADAR_EMAIL_TO }}
+          from: Grab Your Torch survivoR Radar
+
+      - name: Wait before retrying the radar email
+        if: env.LIVE == 'true' && steps.observe.outputs.action == 'alert' && steps.email.outcome == 'failure'
+        run: sleep 30
+
+      - name: Retry radar email
+        id: email_retry
+        if: env.LIVE == 'true' && steps.observe.outputs.action == 'alert' && steps.email.outcome == 'failure'
+        continue-on-error: true
+        uses: dawidd6/action-send-mail@2cea9617b09d79a095af21254fbcb7ae95903dde # v3.12.0
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: ${{ steps.observe.outputs.subject }}
+          body: file://${{ env.RADAR_DIR }}/body.md
+          html_body: file://${{ env.RADAR_DIR }}/body.md
+          convert_markdown: true
+          to: ${{ vars.SURVIVOR_RADAR_EMAIL_TO }}
+          from: Grab Your Torch survivoR Radar
+
+      # The state edge moves for a baseline, for a delivered alert, and for a
+      # newer survivoR commit with nothing in scope changed (fingerprints are
+      # identical, so no email is owed; recording the commit lets the fast
+      # path skip it). An undelivered alert leaves the old state in place, so
+      # the next run re-sends it with anything newer folded in.
+      - name: Record radar state
+        id: record
+        continue-on-error: true
+        if: >-
+          env.LIVE == 'true' && (
+            steps.observe.outputs.action == 'baseline' ||
+            (steps.observe.outputs.action == 'unchanged' && steps.observe.outputs.advanced == 'true') ||
+            (steps.observe.outputs.action == 'alert' &&
+              (steps.email.outcome == 'success' || steps.email_retry.outcome == 'success'))
+          )
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTION: ${{ steps.observe.outputs.action }}
+        run: |
+          if ! yarn survivor-radar record --out "$RADAR_DIR"; then
+            if [ "$ACTION" = "alert" ]; then
+              echo "::error::The radar email was delivered but its state was not recorded; the next run will email the same change again."
+            fi
+            exit 1
+          fi
+
+      # --- Sync: the newest season, written locally only. ---
+
+      - name: Sync newest season
+        id: sync
+        continue-on-error: true
+        shell: bash
+        env:
+          COMMIT: ${{ steps.upstream.outputs.commit }}
+        run: |
+          rm -f sync-result.json
+          yarn tsx scripts/sync-season.ts --no-push --ref "$COMMIT"
+
+      - name: Format generated code
+        if: steps.sync.outcome == 'success'
+        run: yarn format
+
+      - name: Parse sync result
+        id: result
+        shell: bash
+        run: |
+          if [ ! -f sync-result.json ]; then
+            echo '{"changed":false,"seasonNum":0,"isNewSeason":false,"error":"sync-result.json not found"}' > sync-result.json
+          fi
+          {
+            echo "changed=$(jq -r '.changed' sync-result.json)"
+            echo "season=$(jq -r '.seasonNum' sync-result.json)"
+            echo "is_new=$(jq -r '.isNewSeason' sync-result.json)"
+            echo "held=$(jq -r '(.held // []) | length > 0' sync-result.json)"
+            echo "error=$(jq -r '.error // "" | gsub("[\r\n]"; " ")' sync-result.json)"
+          } >> "$GITHUB_OUTPUT"
+          cp sync-result.json "$OUT/sync-result.json"
+
+      # Opens or refreshes the sync pull request. Never merges: that is the
+      # gate's job, after review. Pushes only when the content changed, so an
+      # approval on an unchanged head survives a refresh.
+      - name: Open or update the sync pull request
+        id: pr
+        if: >-
+          env.LIVE == 'true' &&
+          steps.result.outputs.changed == 'true' &&
+          steps.result.outputs.error == ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SEASON: ${{ steps.result.outputs.season }}
+          IS_NEW: ${{ steps.result.outputs.is_new }}
+        run: |
+          set -euo pipefail
+          if [ "$IS_NEW" = "true" ]; then
+            BRANCH="auto/survivor-new-season-${SEASON}"
+            TITLE="feat: bootstrap season ${SEASON} from survivoR"
+          else
+            BRANCH="auto/survivor-sync-season-${SEASON}"
+            TITLE="chore: sync season ${SEASON} data from survivoR"
+          fi
+          yarn survivor-observer pr-body --result "$OUT/sync-result.json" --out "$OUT"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git add src/data/
+          git diff --cached --quiet && { echo "No changes to commit"; exit 0; }
+          git commit -m "$TITLE"
+
+          remote_tree=""
+          if git ls-remote --exit-code --heads origin "$BRANCH" > /dev/null; then
+            git fetch origin "$BRANCH"
+            remote_tree=$(git rev-parse "FETCH_HEAD^{tree}")
+          fi
+          if [ "$remote_tree" != "$(git rev-parse 'HEAD^{tree}')" ]; then
+            git push --force origin "$BRANCH"
+          else
+            echo "The branch already has this content; keeping its head."
+          fi
+
+          existing=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+          if [ -z "$existing" ]; then
+            gh pr create --base main --head "$BRANCH" --title "$TITLE" --body-file "$OUT/pr-body.md"
+          else
+            gh pr edit "$existing" --body-file "$OUT/pr-body.md"
+          fi
+
+      # --- Gate: decide, notify, then merge only what passed. ---
+
+      - name: Evaluate the publication gate
+        id: gate
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SURVIVOR_SYNC_REVIEWERS: ${{ vars.SURVIVOR_SYNC_REVIEWERS }}
+        run: |
+          yarn survivor-observer gate --result "$OUT/sync-result.json" --out "$OUT"
+          echo "publish_pending=$(jq -r '.publish | length > 0' "$OUT/gate.json")" >> "$GITHUB_OUTPUT"
+          echo "has_notice=$([ -f "$OUT/notice-subject.txt" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          if [ -f "$OUT/notice-subject.txt" ]; then
+            echo "subject=$(tr -d '\r\n' < "$OUT/notice-subject.txt")" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Dispatch ci and close obsolete pull requests
+        if: env.LIVE == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          for season in $(jq -r '.decisions[] | select(.action == "dispatch-ci") | .season' "$OUT/gate.json"); do
+            echo "Dispatching ci on auto/survivor-sync-season-${season}"
+            gh workflow run ci.yml --ref "auto/survivor-sync-season-${season}"
+          done
+          for pr in $(jq -r '.decisions[] | select(.action == "obsolete") | .pr' "$OUT/gate.json"); do
+            gh pr close "$pr" --delete-branch --comment "main already matches survivoR, so this sync is no longer needed. Closed by the survivoR observer."
+          done
+
+      - name: Send observer email
+        id: notice
+        if: env.LIVE == 'true' && steps.gate.outputs.has_notice == 'true'
+        continue-on-error: true
+        uses: dawidd6/action-send-mail@2cea9617b09d79a095af21254fbcb7ae95903dde # v3.12.0
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: ${{ steps.gate.outputs.subject }}
+          body: file://${{ env.OUT }}/notice-body.md
+          html_body: file://${{ env.OUT }}/notice-body.md
+          convert_markdown: true
+          to: ${{ vars.SURVIVOR_RADAR_EMAIL_TO }}
+          from: Grab Your Torch survivoR Observer
+
+      - name: Wait before retrying the observer email
+        if: env.LIVE == 'true' && steps.gate.outputs.has_notice == 'true' && steps.notice.outcome == 'failure'
+        run: sleep 30
+
+      - name: Retry observer email
+        id: notice_retry
+        if: env.LIVE == 'true' && steps.gate.outputs.has_notice == 'true' && steps.notice.outcome == 'failure'
+        continue-on-error: true
+        uses: dawidd6/action-send-mail@2cea9617b09d79a095af21254fbcb7ae95903dde # v3.12.0
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: ${{ steps.gate.outputs.subject }}
+          body: file://${{ env.OUT }}/notice-body.md
+          html_body: file://${{ env.OUT }}/notice-body.md
+          convert_markdown: true
+          to: ${{ vars.SURVIVOR_RADAR_EMAIL_TO }}
+          from: Grab Your Torch survivoR Observer
+
+      # A notice is recorded only once delivered, so an undelivered one is
+      # re-sent by the next run.
+      - name: Record delivered notices
+        id: notices_recorded
+        if: >-
+          env.LIVE == 'true' && steps.gate.outputs.has_notice == 'true' &&
+          (steps.notice.outcome == 'success' || steps.notice_retry.outcome == 'success')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: yarn survivor-observer record-notices --out "$OUT"
+
+      # Merges only a pull request the gate passed, at the exact head commit
+      # it evaluated, and only once its "publishing" notice was delivered
+      # (this run or an earlier one). The pending label is what the publish
+      # job, and any retry, works from.
+      - name: Merge approved sync pull requests
+        id: merge
+        if: >-
+          env.LIVE == 'true' &&
+          (steps.gate.outputs.has_notice != 'true' || steps.notice.outcome == 'success' || steps.notice_retry.outcome == 'success')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DELIVERED: ${{ steps.notice.outcome == 'success' || steps.notice_retry.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          gh label create observer-publish-pending --color FBCA04 --description "Merged by the survivoR observer; Firestore not yet published" --force
+          gh label create observer-published --color 0E8A16 --description "Published to Firestore by the survivoR observer" --force
+          gh label create observer-publish-failed --color B60205 --description "survivoR observer could not publish; see the run" --force
+          merged=false
+          while IFS=$'\t' read -r pr sha; do
+            [ -n "$pr" ] || continue
+            if jq -e --argjson pr "$pr" '.notices[] | select(.pr == $pr)' "$OUT/gate.json" > /dev/null \
+              && [ "$DELIVERED" != "true" ]; then
+              echo "::warning::PR #$pr passed the gate but its notice was not delivered; not merging."
+              continue
+            fi
+            gh pr edit "$pr" --add-label observer-publish-pending
+            gh pr merge "$pr" --merge --match-head-commit "$sha"
+            echo "Merged PR #$pr at $sha"
+            merged=true
+          done < <(jq -r '.decisions[] | select(.action == "merge") | [.pr, .headSha] | @tsv' "$OUT/gate.json")
+          echo "merged=$merged" >> "$GITHUB_OUTPUT"
+
+      - name: Write job summary
+        if: always()
+        shell: bash
+        env:
+          MODE: ${{ needs.tick.outputs.mode }}
+          REASON: ${{ needs.tick.outputs.reason }}
+          RADAR: ${{ steps.observe.outputs.action }}
+          RADAR_EMAIL: ${{ steps.email.outcome }}
+          RADAR_RETRY: ${{ steps.email_retry.outcome }}
+          RADAR_RECORD: ${{ steps.record.outcome }}
+          SYNC: ${{ steps.sync.outcome }}
+          NOTICE: ${{ steps.notice.outcome }}
+          NOTICE_RETRY: ${{ steps.notice_retry.outcome }}
+        run: |
+          {
+            echo "## survivoR observer"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Mode | ${MODE} |"
+            echo "| Why a full run | ${REASON} |"
+            echo "| survivoR commit | $(jq -r '.upstream.commit // "unknown"' "$OUT/gate.json" 2>/dev/null) |"
+            echo "| Radar decision | ${RADAR:-not reached} |"
+            echo "| Radar email | ${RADAR_EMAIL:-skipped} (retry: ${RADAR_RETRY:-skipped}) |"
+            echo "| Radar state recorded | ${RADAR_RECORD:-skipped} |"
+            echo "| Sync | ${SYNC:-not reached} |"
+            echo "| Observer email | ${NOTICE:-skipped} (retry: ${NOTICE_RETRY:-skipped}) |"
+            if [ -f "$OUT/sync-result.json" ]; then
+              echo ""
+              echo "### Sync"
+              jq -r '"- Season \(.seasonNum): changed \(.changed)" , ((.held // [])[] | "- Held: \(.)"), (if .error then "- Error: \(.error)" else empty end)' "$OUT/sync-result.json"
+            fi
+            if [ -f "$RADAR_DIR/decision.json" ]; then
+              echo ""
+              echo "### Radar changes"
+              jq -r '.changes[] | "- \(.kind): `\(.table)` / \(.group)"' "$RADAR_DIR/decision.json"
+            fi
+            if [ -f "$OUT/gate.json" ]; then
+              echo ""
+              echo "### Gate"
+              jq -r '.decisions[] | "- PR #\(.pr) at `\(.headSha[0:7])`: **\(.action)**. \(.reasons | join("; "))"' "$OUT/gate.json"
+              jq -r '.publish[] | "- Waiting to publish: PR #\(.pr), season \(.season)"' "$OUT/gate.json"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Red runs, after everything that could be done was done. Each failure
+      # left its state where the next run retries it.
+      - name: Fail on any unfinished part
+        if: always()
+        shell: bash
+        env:
+          RADAR: ${{ steps.observe.outcome }}
+          RADAR_ACTION: ${{ steps.observe.outputs.action }}
+          RADAR_EMAIL: ${{ steps.email.outcome }}
+          RADAR_RETRY: ${{ steps.email_retry.outcome }}
+          RADAR_RECORD: ${{ steps.record.outcome }}
+          SYNC_ERROR: ${{ steps.result.outputs.error }}
+          HAS_NOTICE: ${{ steps.gate.outputs.has_notice }}
+          NOTICE: ${{ steps.notice.outcome }}
+          NOTICE_RETRY: ${{ steps.notice_retry.outcome }}
+        run: |
+          failed=0
+          if [ "$RADAR" = "failure" ]; then
+            echo "::error::The radar could not observe survivoR."; failed=1
+          fi
+          if [ "$LIVE" = "true" ] && [ "$RADAR_ACTION" = "alert" ] && [ "$RADAR_EMAIL" != "success" ] && [ "$RADAR_RETRY" != "success" ]; then
+            echo "::error::The radar email failed twice. Its state was not advanced, so the next run sends it again."; failed=1
+          fi
+          if [ "$RADAR_RECORD" = "failure" ]; then
+            echo "::error::The radar state was not recorded."; failed=1
+          fi
+          if [ -n "$SYNC_ERROR" ]; then
+            echo "::error::Sync failed: $SYNC_ERROR"; failed=1
+          fi
+          if [ "$LIVE" = "true" ] && [ "$HAS_NOTICE" = "true" ] && [ "$NOTICE" != "success" ] && [ "$NOTICE_RETRY" != "success" ]; then
+            echo "::error::The observer email failed twice. Nothing was merged for it; the next run sends it again."; failed=1
+          fi
+          exit $failed
+
+  publish:
+    needs: [tick, observe]
+    if: >-
+      always() &&
+      needs.tick.outputs.mode == 'live' &&
+      needs.observe.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write # move the publish labels
+      issues: write # result comment
+      actions: write # dispatch hosting deploy and standings
+    env:
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      # Re-read the labels instead of trusting the observe job: a merge that
+      # GitHub has not finished, or a label someone moved by hand, is
+      # reflected here. Only merged sync PRs whose merge commit is on main
+      # are published, and each season once, from main.
+      - name: Find what to publish
+        id: targets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          prs=""
+          seasons=""
+          for n in $(gh api "repos/$GITHUB_REPOSITORY/issues?state=closed&labels=observer-publish-pending&per_page=100" --jq '.[] | select(.pull_request) | .number'); do
+            read -r ref merge_sha merged < <(gh api "repos/$GITHUB_REPOSITORY/pulls/$n" --jq '"\(.head.ref) \(.merge_commit_sha) \(.merged_at != null)"')
+            case "$ref" in auto/survivor-sync-season-*) ;; *) continue ;; esac
+            [ "$merged" = "true" ] || continue
+            if ! git merge-base --is-ancestor "$merge_sha" HEAD; then
+              echo "::warning::PR #$n merge commit $merge_sha is not on main yet; leaving it pending."
+              continue
+            fi
+            prs="$prs $n"
+            seasons="$seasons ${ref#auto/survivor-sync-season-}"
+          done
+          prs=$(echo $prs)
+          seasons=$(printf '%s\n' $seasons | sort -un | xargs)
+          echo "prs=$prs" >> "$GITHUB_OUTPUT"
+          echo "seasons=$seasons" >> "$GITHUB_OUTPUT"
+          echo "main=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "To publish: PRs [$prs], seasons [$seasons] from main $(git rev-parse --short HEAD)"
+
+      - name: Write Firebase service account key
+        if: steps.targets.outputs.seasons != ''
+        run: |
+          echo '${{ secrets.FIREBASE_ADMIN_SERVICE_ACCOUNT }}' > firebase-private-key.json
+          chmod 600 firebase-private-key.json
+
+      - name: Publish to Firestore
+        id: firestore
+        if: steps.targets.outputs.seasons != ''
+        continue-on-error: true
+        shell: bash
+        env:
+          SEASONS: ${{ steps.targets.outputs.seasons }}
+          VITE_FIREBASE_DATABASE_URL: ${{ vars.VITE_FIREBASE_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          for season in $SEASONS; do
+            yarn tsx scripts/publish-season.ts "$season"
+          done
+
+      - name: Remove Firebase service account key
+        if: always()
+        run: rm -f firebase-private-key.json
+
+      # Labels move before any email, so the recorded state is right even if
+      # the email then fails.
+      - name: Record the publish result
+        id: labels
+        if: steps.targets.outputs.prs != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PRS: ${{ steps.targets.outputs.prs }}
+          OK: ${{ steps.firestore.outcome == 'success' }}
+          MAIN: ${{ steps.targets.outputs.main }}
+        run: |
+          set -euo pipefail
+          for pr in $PRS; do
+            if [ "$OK" = "true" ]; then
+              gh pr edit "$pr" --remove-label observer-publish-pending --add-label observer-published
+              gh pr comment "$pr" --body "Published to Firestore from main at \`$MAIN\` by the survivoR observer ($RUN_URL). Hosting redeploy and pool standings were started."
+            else
+              gh pr edit "$pr" --remove-label observer-publish-pending --add-label observer-publish-failed
+              gh pr comment "$pr" --body "The survivoR observer merged this but could not publish it to Firestore ($RUN_URL). Production still has the previous data. To retry, fix the cause and move the label back to \`observer-publish-pending\`."
+            fi
+          done
+
+      # Hosting is redeployed and standings recomputed only after Firestore
+      # has the data. A merge by the workflow token triggers neither by itself.
+      - name: Redeploy hosting and recompute standings
+        id: downstream
+        if: steps.firestore.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SEASONS: ${{ steps.targets.outputs.seasons }}
+        run: |
+          set -euo pipefail
+          gh workflow run firebase-hosting-merge.yml --ref main
+          for season in $SEASONS; do
+            gh workflow run recompute-pool-standings.yml --ref main -f pool="$season"
+          done
+
+      - name: Write the result email
+        id: result_email
+        if: steps.targets.outputs.prs != ''
+        shell: bash
+        env:
+          PRS: ${{ steps.targets.outputs.prs }}
+          SEASONS: ${{ steps.targets.outputs.seasons }}
+          FIRESTORE: ${{ steps.firestore.outcome }}
+          DOWNSTREAM: ${{ steps.downstream.outcome }}
+          MAIN: ${{ steps.targets.outputs.main }}
+        run: |
+          if [ "$FIRESTORE" = "success" ]; then
+            subject="survivoR Observer: published Season ${SEASONS}"
+            {
+              echo "# Published"
+              echo ""
+              echo "Season ${SEASONS} is in Firestore, from main at \`$MAIN\` (PR #${PRS})."
+              echo ""
+              if [ "$DOWNSTREAM" = "success" ]; then
+                echo "The hosting redeploy and the pool standings recompute were started."
+              else
+                echo "**Starting the hosting redeploy or the standings recompute failed.** Run them by hand from the Actions tab."
+              fi
+            } > publish-email.md
+          else
+            subject="survivoR Observer: publishing Season ${SEASONS} FAILED"
+            {
+              echo "# Publish failed"
+              echo ""
+              echo "PR #${PRS} is merged, but Firestore was not updated. Production still shows the previous data. The pull request is labelled \`observer-publish-failed\`; fix the cause, then move the label back to \`observer-publish-pending\` to retry."
+            } > publish-email.md
+          fi
+          echo "" >> publish-email.md
+          echo "Workflow run: $RUN_URL" >> publish-email.md
+          echo "subject=$subject" >> "$GITHUB_OUTPUT"
+
+      - name: Send the result email
+        id: publish_email
+        if: steps.targets.outputs.prs != ''
+        continue-on-error: true
+        uses: dawidd6/action-send-mail@2cea9617b09d79a095af21254fbcb7ae95903dde # v3.12.0
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: ${{ steps.result_email.outputs.subject }}
+          body: file://publish-email.md
+          html_body: file://publish-email.md
+          convert_markdown: true
+          to: ${{ vars.SURVIVOR_RADAR_EMAIL_TO }}
+          from: Grab Your Torch survivoR Observer
+
+      - name: Fail on an unfinished publish
+        if: always()
+        shell: bash
+        env:
+          FIRESTORE: ${{ steps.firestore.outcome }}
+          DOWNSTREAM: ${{ steps.downstream.outcome }}
+          EMAIL: ${{ steps.publish_email.outcome }}
+          PRS: ${{ steps.targets.outputs.prs }}
+        run: |
+          failed=0
+          [ "$FIRESTORE" != "failure" ] || { echo "::error::Publishing to Firestore failed."; failed=1; }
+          [ "$DOWNSTREAM" != "failure" ] || { echo "::error::Starting the hosting redeploy or standings recompute failed."; failed=1; }
+          if [ -n "$PRS" ] && [ "$EMAIL" != "success" ]; then
+            echo "::error::The publish result email was not delivered."; failed=1
+          fi
+          exit $failed

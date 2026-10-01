@@ -17,6 +17,10 @@ on:
     # Matches the sync workflow by its `name:`, not its filename. If
     # sync-survivor-data.yml ever renames itself, this list must change with it
     # or the primary trigger silently stops firing.
+    # The survivoR observer (survivor-observer.yml) does not trigger this by
+    # name: it dispatches this workflow itself, only after it has published a
+    # season to Firestore. This trigger stays for the old sync until it is
+    # retired (docs/survivor-observer.md).
     workflows: ["Sync survivoR data"]
     types: [completed]
   schedule:
