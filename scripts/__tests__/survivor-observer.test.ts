@@ -56,6 +56,7 @@ interface FakeState {
   checkRuns?: unknown[];
   pending?: unknown[];
   pulls?: Record<number, unknown>;
+  prComments?: Record<number, unknown[]>;
 }
 
 /** A fake GitHub. Every path the gate reads must be listed here. */
@@ -111,6 +112,10 @@ function fakeIo(state: FakeState = {}): Pick<GithubIo, "get"> & {
       if (p === `/repos/${REPO}/issues/300/comments`) {
         return state.comments ?? [];
       }
+      const comments = p.match(
+        /^\/repos\/[^/]+\/[^/]+\/issues\/(\d+)\/comments$/,
+      );
+      if (comments) return state.prComments?.[Number(comments[1])] ?? [];
       if (
         p ===
         `/repos/${REPO}/issues?state=closed&labels=${LABEL_PUBLISH_PENDING}&sort=created&direction=asc`
@@ -226,12 +231,25 @@ describe("runGate", () => {
           { number: 291 }, // an issue, not a pull request
           { number: 292, pull_request: {} },
         ],
+        prComments: {
+          290: [
+            {
+              body: noticeComment({
+                key: `publishing:${HEAD}`,
+                subject: "s",
+                body: "b",
+              }),
+              user: { login: BOT_LOGIN },
+            },
+          ],
+        },
         pulls: {
           290: pull({
             number: 290,
             state: "closed",
             merged_at: "2026-10-01T00:00:00Z",
             merge_commit_sha: "e".repeat(40),
+            merged_by: { login: BOT_LOGIN },
           }),
           292: pull({ number: 292, state: "closed", merged_at: null }),
         },
@@ -240,6 +258,10 @@ describe("runGate", () => {
     );
     expect(report.publish).toEqual([
       { pr: 290, season: 51, mergeSha: "e".repeat(40) },
+    ]);
+    expect(report.pending.map((v) => [v.pr, v.kind])).toEqual([
+      [290, "publish"],
+      [292, "unlabel"],
     ]);
   });
 });
@@ -279,7 +301,7 @@ describe("survivor-observer workflow", () => {
       /schedule:\s*\n\s*- cron: "7,37 \* \* \* \*"\s*\n\s*- cron: "0 14 \* \* \*"/,
     );
     expect(workflow).not.toMatch(/^\s*pull_request/m);
-    expect(workflow).not.toMatch(/workflow_run/);
+    expect(workflow).not.toMatch(/^\s*workflow_run:/m);
     expect(step("Decide whether anything needs a full run")).toContain(
       '[ "$SCHEDULE" != "0 14 * * *" ] || full "daily full run"',
     );
@@ -327,6 +349,56 @@ describe("survivor-observer workflow", () => {
     );
   });
 
+  it("retries a failed run on the next check, and reads every page", () => {
+    const fast = step("Decide whether anything needs a full run");
+    // C6: a failed run (sync error, undelivered email) does not wait for 14:00.
+    expect(fast).toContain('full "the previous run failed"');
+    expect(jobOf(workflow, "tick")).toContain("actions: read");
+    // C5/K5: the radar issue, reviews and comments over every page.
+    for (const api of [
+      "issues?state=all&creator=github-actions%5Bbot%5D&sort=created&direction=asc",
+      "pulls/$n/reviews",
+      "issues/$n/comments",
+      "issues?state=closed&labels=observer-publish-pending",
+    ]) {
+      expect(fast).toContain(`gh api --paginate "repos/$REPO/${api}`);
+    }
+    // K3: only a merged pull request keeps the check going full.
+    expect(fast).toContain("select(.pull_request.merged_at != null)");
+  });
+
+  it("goes full on an approval only from a listed reviewer, and not past a ci-failure notice", () => {
+    const fast = step("Decide whether anything needs a full run");
+    // C4: an approval matters only from a listed login, and not once the
+    // gate has reported this head blocked.
+    expect(fast).toContain('case "$reviewers" in *" $login "*) full');
+    expect(fast).toContain("grep -q '^blocked-'");
+    // C7: a ci-failure notice does not stand for the review notice once ci
+    // passes on a rerun.
+    expect(fast).toContain("grep -v '^blocked-ci$' | grep -q .");
+  });
+
+  it("keeps the reviewed head when only main moved (C3)", () => {
+    const pr = step("Open or update the sync pull request");
+    expect(pr).toContain('DATA="src/data/season_${SEASON}/"');
+    expect(pr).toContain('git diff --quiet FETCH_HEAD HEAD -- "$DATA"');
+    expect(pr).not.toContain("^{tree}");
+    expect(pr).toContain('gh pr ready "$number"');
+  });
+
+  it("cleans up stray publish labels and refuses unproven ones (K2, K3)", () => {
+    const cleanup = step("Dispatch ci and close obsolete pull requests");
+    expect(cleanup).toContain('select(.kind == "unlabel")');
+    expect(cleanup).toContain('select(.kind == "reject")');
+    expect(cleanup).toContain("--add-label observer-publish-failed");
+  });
+
+  it("needs the database URL a live publish uses (K4)", () => {
+    expect(step("Check configuration")).toContain(
+      '[ -n "$VITE_FIREBASE_DATABASE_URL" ]',
+    );
+  });
+
   it("pins one survivoR commit for the radar and the sync", () => {
     expect(step("Observe survivoR")).toContain('--commit "$COMMIT"');
     expect(step("Sync newest season")).toContain(
@@ -358,7 +430,7 @@ describe("survivor-observer workflow", () => {
   it("never writes Firestore from the observe job", () => {
     const observe = jobOf(workflow, "observe");
     expect(observe).not.toContain("FIREBASE_ADMIN_SERVICE_ACCOUNT");
-    expect(observe).not.toContain("publish-season");
+    expect(observe).not.toMatch(/^\s*yarn tsx scripts\/publish-season/m);
     expect(observe).not.toMatch(/sync-season\.ts(?! --no-push)/);
   });
 
@@ -371,7 +443,19 @@ describe("survivor-observer workflow", () => {
     expect(merge).toContain("env.LIVE == 'true'");
     expect(merge).toContain('select(.action == "merge")');
     expect(merge).toContain('--match-head-commit "$sha"');
-    expect(merge).toContain('[ "$DELIVERED" != "true" ]');
+    expect(merge).toContain('[ "$RECORDED" != "true" ]');
+    // A fresh gate pass right before merging (K1: review, ci or survivoR
+    // may have changed since the first pass).
+    expect(merge).toContain(
+      'yarn -s survivor-observer gate --result "$OUT/sync-result.json" --out "$OUT/recheck"',
+    );
+    expect(merge.indexOf('--out "$OUT/recheck"')).toBeLessThan(
+      merge.indexOf("gh pr merge"),
+    );
+    // A refused merge drops the pending label again.
+    expect(merge).toMatch(
+      /if ! gh pr merge[^\n]*\n\s*gh pr edit "\$pr" --remove-label observer-publish-pending/,
+    );
     // Label before merging, so a merge is never left untracked.
     expect(merge.indexOf("--add-label observer-publish-pending")).toBeLessThan(
       merge.indexOf("gh pr merge"),
@@ -382,8 +466,8 @@ describe("survivor-observer workflow", () => {
     expect(step("Record delivered notices")).toMatch(
       /steps\.notice\.outcome == 'success' \|\| steps\.notice_retry\.outcome == 'success'/,
     );
-    expect(step("Merge approved sync pull requests")).toMatch(
-      /steps\.gate\.outputs\.has_notice != 'true' \|\| steps\.notice\.outcome == 'success' \|\| steps\.notice_retry\.outcome == 'success'/,
+    expect(step("Merge approved sync pull requests")).toContain(
+      "(steps.gate.outputs.has_notice != 'true' || steps.notices_recorded.outcome == 'success')",
     );
     expect(workflow.indexOf("- name: Retry observer email")).toBeLessThan(
       workflow.indexOf("- name: Merge approved sync pull requests"),
@@ -395,6 +479,11 @@ describe("survivor-observer workflow", () => {
     expect(publish).toContain("needs.tick.outputs.mode == 'live'");
     expect(publish).toContain("ref: main");
     expect(publish).toContain('git merge-base --is-ancestor "$merge_sha" HEAD');
+    // K2: targets come from the provenance check, not from the label alone.
+    expect(step("Find what to publish")).toContain(
+      "yarn -s survivor-observer publish-targets --out .publish",
+    );
+    expect(step("Find what to publish")).not.toContain("labels=");
     expect(step("Publish to Firestore")).toContain(
       'yarn tsx scripts/publish-season.ts "$season"',
     );
@@ -435,6 +524,8 @@ describe("cutover from the old sync and radar", () => {
     expect(sync).toMatch(/push:\s*\n\s*branches: \[main\]\s*\n\s*paths:/);
     expect(sync).toContain("yarn tsx scripts/sync-season.ts --no-push");
     expect(sync).not.toContain("gh pr merge");
+    // C2: a draft, so nobody merges it by hand into a site/Firestore split.
+    expect(sync).toContain("gh pr create --draft");
     expect(sync).not.toContain("FIREBASE_ADMIN_SERVICE_ACCOUNT");
   });
 

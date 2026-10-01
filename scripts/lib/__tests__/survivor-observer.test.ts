@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   BOT_LOGIN,
   evaluateGate,
+  judgePending,
   noticeComment,
   parseMarker,
   parseReviewers,
@@ -157,8 +158,25 @@ describe("evaluateGate", () => {
     });
 
     it("closes a pull request main already matches", () => {
-      const d = evaluateGate(passing({ sync: { ...sync, changed: false } }));
+      const d = evaluateGate(
+        passing({ sync: { ...sync, changed: false, unchanged: true } }),
+      );
       expect(d.action).toBe("obsolete");
+    });
+
+    it("never closes on a sync that compared nothing", () => {
+      // e.g. a transient empty castaways read: changed false, no comparison.
+      const d = evaluateGate(
+        passing({
+          sync: {
+            changed: false,
+            seasonNum: 51,
+            isNewSeason: false,
+            warnings: ["No castaways found in survivoR for season 51"],
+          },
+        }),
+      );
+      expect(d.action).toBe("wait");
     });
 
     it("ignores a pull request for a season this run did not sync", () => {
@@ -278,8 +296,13 @@ describe("evaluateGate", () => {
       ).toBe("wait");
       expect(
         evaluateGate(passing({ permissions: { daviseford: "read" } })).action,
-      ).toBe("wait");
-      expect(evaluateGate(passing({ permissions: {} })).action).toBe("wait");
+      ).toBe("blocked");
+    });
+
+    it("blocks, with a notice, an approval from a listed reviewer without write access", () => {
+      const d = evaluateGate(passing({ permissions: { daviseford: "read" } }));
+      expect(d.action).toBe("blocked");
+      expect(d.notice?.key).toBe(`blocked-review:${HEAD}`);
     });
 
     it("never counts the bot's own approval", () => {
@@ -408,5 +431,54 @@ describe("parseReviewers", () => {
       "teammate",
     ]);
     expect(parseReviewers(undefined)).toEqual([]);
+  });
+});
+
+describe("judgePending", () => {
+  const merged = {
+    number: 300,
+    headRef: "auto/survivor-sync-season-51",
+    headSha: HEAD,
+    mergedAt: "2026-10-02T00:00:00Z",
+    mergeSha: "e".repeat(40),
+    mergedBy: BOT_LOGIN,
+  };
+  const recorded = [
+    noticeComment({ key: `publishing:${HEAD}`, subject: "s", body: "b" }),
+  ];
+
+  it("publishes only what the observer merged after its publishing notice", () => {
+    expect(judgePending(merged, recorded)).toEqual({
+      kind: "publish",
+      pr: 300,
+      season: 51,
+      mergeSha: "e".repeat(40),
+    });
+  });
+
+  it("refuses a hand-labelled or hand-merged pull request", () => {
+    expect(judgePending(merged, []).kind).toBe("reject");
+    expect(
+      judgePending(merged, [
+        noticeComment({
+          key: `publishing:${OLD_HEAD}`,
+          subject: "s",
+          body: "b",
+        }),
+      ]).kind,
+    ).toBe("reject");
+    expect(
+      judgePending({ ...merged, mergedBy: "daviseford" }, recorded).kind,
+    ).toBe("reject");
+    expect(
+      judgePending({ ...merged, headRef: "feat/other" }, recorded).kind,
+    ).toBe("reject");
+  });
+
+  it("drops the label from a pull request that never merged", () => {
+    expect(
+      judgePending({ ...merged, mergedAt: null, mergeSha: null }, recorded)
+        .kind,
+    ).toBe("unlabel");
   });
 });

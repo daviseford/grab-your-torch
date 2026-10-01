@@ -14,6 +14,8 @@ import {
  * - d4a75af (45 minutes earlier): US51 added without challenge_description.
  * - ba77948 (2026-05-03): US50 Episode 10 with its challenge rows missing,
  *   and Episode 11 only in tribe_mapping. Rows before Episode 9 are trimmed.
+ * - 403f4a4 (2026-04-23): US50 Episode 9 complete, tribe_mapping already at
+ *   Episode 10. Rows before Episode 8 are trimmed.
  */
 function load(name: string): ReadinessData {
   const raw = JSON.parse(
@@ -58,11 +60,26 @@ describe("assessEpisodeReadiness on real survivoR snapshots", () => {
     expect(r.status).toBe("partial");
     expect(r.missing).toContain("challenge_results: no rows");
     const after9 = assessNewEpisodes(data, 50, 9);
+    // Episode 11 exists only in tribe_mapping, which runs one episode ahead
+    // and so never counts as a new episode.
     expect(after9.map((e) => [e.episodeNum, e.status])).toEqual([
       [10, "partial"],
-      [11, "partial"],
     ]);
-    expect(heldReasons(after9)).toHaveLength(2);
+    expect(heldReasons(after9)).toHaveLength(1);
+  });
+
+  it("imports US50 Episode 9 although tribe_mapping already lists Episode 10", () => {
+    // survivoR 403f4a4 ("ADD US50E9"): tribe_mapping runs one episode ahead
+    // during a season. Counting it as a new episode would hold every import.
+    const data = load("us50-403f4a4");
+    expect(
+      Math.max(...data.tribeMapping.map((t) => Math.round(t.episode))),
+    ).toBe(10);
+    const added = assessNewEpisodes(data, 50, 8);
+    expect(added.map((e) => [e.episodeNum, e.status, e.missing])).toEqual([
+      [9, "complete", []],
+    ]);
+    expect(assessNewEpisodes(data, 50, 9)).toEqual([]);
   });
 
   it("reports an episode survivoR has not started as absent", () => {
@@ -252,6 +269,17 @@ describe("assessEpisodeReadiness rules", () => {
     const data = withEpisode2();
     for (const c of data.challengeResults) {
       if (Math.round(c.episode) === 2) c.tribe_status = "Merged";
+    }
+    expect(assessEpisodeReadiness(data, 51, 2).missing).toEqual([
+      "tribe_mapping: the merge appears in challenge_results but not here",
+    ]);
+  });
+
+  it("holds a merge while the season has no tribe_mapping at all", () => {
+    const data = withEpisode2();
+    expect(data.tribeMapping).toEqual([]);
+    for (const c of data.challengeResults) {
+      if (Math.round(c.episode) === 2) c.tribe_status = "Mergatory";
     }
     expect(assessEpisodeReadiness(data, 51, 2).missing).toEqual([
       "tribe_mapping: the merge appears in challenge_results but not here",

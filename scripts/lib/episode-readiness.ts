@@ -304,9 +304,14 @@ function reviewNotes(
 }
 
 /**
- * Every episode number above `afterEpisode` that has a row in any scoring
- * table, ascending. Used to find what an import would add, including an
- * episode that so far exists only in a table other than `episodes`.
+ * Every episode number above `afterEpisode` that has a row in a table that
+ * records what happened in an episode, ascending. Used to find what an import
+ * would add, including an episode that so far exists only in a table other
+ * than `episodes`.
+ *
+ * `tribe_mapping` is left out: during a season it lists the tribes for the
+ * episode after the newest one (US50 at survivoR 403f4a4 has episodes to 9
+ * and tribe_mapping to 10), so counting it would hold every import.
  */
 export function upstreamEpisodesAfter(
   data: ReadinessData,
@@ -318,7 +323,6 @@ export function upstreamEpisodesAfter(
     data.challengeDescription,
     data.voteHistory,
     data.castaways,
-    data.tribeMapping,
     data.advantageMovement,
     data.journeys,
   ];

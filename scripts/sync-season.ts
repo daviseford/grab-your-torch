@@ -46,6 +46,11 @@ import { validateSeasonData } from "./lib/validate-season.js";
 
 interface SyncResult {
   changed: boolean;
+  /**
+   * Set only when the regenerated file was compared with the committed one
+   * and matched. `changed: false` alone can also mean "nothing to read".
+   */
+  unchanged?: boolean;
   seasonNum: number;
   isNewSeason: boolean;
   error?: string;
@@ -189,8 +194,10 @@ async function main(): Promise<void> {
     if (unchanged) {
       const result: SyncResult = {
         changed: false,
+        unchanged: true,
         seasonNum,
         isNewSeason: false,
+        upstreamRef: ref,
       };
       writeResult(RESULT_PATH, result);
       console.log("\nPhase 3: No changes detected. Exiting.");

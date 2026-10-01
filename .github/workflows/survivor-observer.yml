@@ -74,6 +74,7 @@ jobs:
       vars.SURVIVOR_OBSERVER == 'live' ||
       vars.SURVIVOR_OBSERVER == 'shadow'
     permissions:
+      actions: read # earlier runs of this workflow
       contents: read
       issues: read
       pull-requests: read
@@ -123,6 +124,7 @@ jobs:
           SURVIVOR_RADAR_EMAIL_TO: ${{ vars.SURVIVOR_RADAR_EMAIL_TO }}
           SURVIVOR_SYNC_REVIEWERS: ${{ vars.SURVIVOR_SYNC_REVIEWERS }}
           FIREBASE_ADMIN_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_ADMIN_SERVICE_ACCOUNT }}
+          VITE_FIREBASE_DATABASE_URL: ${{ vars.VITE_FIREBASE_DATABASE_URL }}
         run: |
           missing=()
           [ -n "$SMTP_USERNAME" ] || missing+=("secret SMTP_USERNAME")
@@ -131,6 +133,7 @@ jobs:
           if [ "$MODE" = "live" ]; then
             [ -n "$SURVIVOR_SYNC_REVIEWERS" ] || missing+=("variable SURVIVOR_SYNC_REVIEWERS")
             [ -n "$FIREBASE_ADMIN_SERVICE_ACCOUNT" ] || missing+=("secret FIREBASE_ADMIN_SERVICE_ACCOUNT")
+            [ -n "$VITE_FIREBASE_DATABASE_URL" ] || missing+=("variable VITE_FIREBASE_DATABASE_URL")
           fi
           if [ ${#missing[@]} -gt 0 ]; then
             echo "::error::survivoR observer is not configured (missing: ${missing[*]}). Nothing was observed, sent, recorded or published."
@@ -148,6 +151,8 @@ jobs:
           REPO: ${{ github.repository }}
           EVENT: ${{ github.event_name }}
           SCHEDULE: ${{ github.event.schedule }}
+          RUN_ID: ${{ github.run_id }}
+          SURVIVOR_SYNC_REVIEWERS: ${{ vars.SURVIVOR_SYNC_REVIEWERS }}
         run: |
           set -uo pipefail
           full() {
@@ -159,25 +164,37 @@ jobs:
           [ "$EVENT" != "workflow_dispatch" ] || full "started by hand"
           [ "$SCHEDULE" != "0 14 * * *" ] || full "daily full run"
 
+          # A failed run (a sync error, an undelivered email) retries on the
+          # next check, not at 14:00.
+          workflow=$(gh api "repos/$REPO/actions/runs/$RUN_ID" --jq .workflow_id) || full "could not read this run"
+          last=$(gh api "repos/$REPO/actions/workflows/$workflow/runs?status=completed&per_page=5" \
+            --jq "[.workflow_runs[] | select(.id != $RUN_ID)][0].conclusion // \"none\"") \
+            || full "could not read earlier runs"
+          [ "$last" != "failure" ] || full "the previous run failed"
+
           tree_at() {
             gh api "repos/doehm/survivoR/contents/dev?ref=$1" \
               --jq '.[] | select(.name == "json" and .type == "dir") | .sha'
           }
           master=$(gh api repos/doehm/survivoR/commits/master --jq .sha) || full "could not read survivoR"
           now=$(tree_at "$master") || full "could not read survivoR dev/json"
-          body=$(gh api "repos/$REPO/issues?state=all&creator=github-actions%5Bbot%5D&per_page=100" \
-            --jq '[.[] | select(.title == "survivoR data radar state" and (.pull_request | not))][0].body // ""') \
-            || full "could not read the radar state"
-          recorded=$(printf '%s' "$body" | grep -o '"commit":"[0-9a-f]\{40\}"' | head -n 1 | cut -d'"' -f4)
+          # Every page, oldest first, the same issue the radar itself finds.
+          recorded=$(gh api --paginate "repos/$REPO/issues?state=all&creator=github-actions%5Bbot%5D&sort=created&direction=asc&per_page=100" \
+            --jq '.[] | select(.title == "survivoR data radar state" and (.pull_request | not)) | .body // "" | (capture("\"commit\":\"(?<c>[0-9a-f]{40})\"").c // "")' \
+            | sed -n 1p) || full "could not read the radar state"
           [ -n "$recorded" ] || full "no radar state recorded"
           then=$(tree_at "$recorded") || full "could not read the recorded survivoR commit"
           [ -n "$now" ] && [ "$now" = "$then" ] || full "survivoR dev/json changed"
 
-          pending=$(gh api "repos/$REPO/issues?state=closed&labels=observer-publish-pending&per_page=1" --jq length) \
+          # Only a merged pull request can publish; a closed, unmerged one
+          # with the label is cleaned up by the next full run, not retried.
+          pending=$(gh api --paginate "repos/$REPO/issues?state=closed&labels=observer-publish-pending&per_page=100" \
+            --jq '.[] | select(.pull_request.merged_at != null) | .number' | wc -l) \
             || full "could not list pending publishes"
           [ "$pending" = "0" ] || full "a merged sync is waiting to publish"
 
-          prs=$(gh api "repos/$REPO/pulls?state=open&base=main&per_page=100" \
+          reviewers=" $(echo "$SURVIVOR_SYNC_REVIEWERS" | tr ',@' '  ' | tr 'A-Z' 'a-z' | xargs) "
+          prs=$(gh api --paginate "repos/$REPO/pulls?state=open&base=main&per_page=100" \
             --jq '.[] | select(.head.ref | startswith("auto/survivor-sync-season-")) | "\(.number):\(.head.sha)"') \
             || full "could not list sync pull requests"
           for row in $prs; do
@@ -191,19 +208,31 @@ jobs:
               completed:*) ;;
               *) continue ;;
             esac
-            reviews=$(gh api "repos/$REPO/pulls/$n/reviews?per_page=100" \
-              --jq "[.[] | select(.commit_id == \"$sha\") | .state] | join(\" \")") \
+            # Each reviewer's latest review on the head commit.
+            reviews=$(gh api --paginate "repos/$REPO/pulls/$n/reviews?per_page=100" \
+              --jq ".[] | select(.commit_id == \"$sha\" and .state != \"COMMENTED\") | \"\(.user.login | ascii_downcase) \(.state)\"" \
+              | awk '{ latest[$1] = $2 } END { for (l in latest) print l, latest[l] }') \
               || full "could not read PR #$n reviews"
-            case " $reviews " in
-              *" APPROVED "*) [ "$ci" != "completed:success" ] || full "PR #$n has an approval on its head" ;;
-            esac
-            # Every gate outcome for a finished ci run leaves a notice comment
-            # naming the head commit; requested changes wait for the reviewer.
-            case " $reviews " in *" CHANGES_REQUESTED "*) continue ;; esac
-            told=$(gh api "repos/$REPO/issues/$n/comments?per_page=100" \
-              --jq "[.[] | select(.user.login == \"github-actions[bot]\" and (.body | contains(\"$sha\")))] | length") \
+            notices=$(gh api --paginate "repos/$REPO/issues/$n/comments?per_page=100" \
+              --jq ".[] | select(.user.login == \"github-actions[bot]\") | .body | capture(\"survivor-observer:notice (?<k>[a-z-]+):$sha\").k // empty") \
               || full "could not read PR #$n comments"
-            [ "$told" != "0" ] || full "PR #$n has a ci result nobody was told about"
+            case " $(echo $reviews) " in *" CHANGES_REQUESTED "*) continue ;; esac
+            # An approval from a listed reviewer is worth a full run unless
+            # the gate already reported this head as blocked.
+            if [ "$ci" = "completed:success" ] && ! printf '%s\n' "$notices" | grep -q '^blocked-'; then
+              while read -r login state; do
+                [ "$state" = "APPROVED" ] || continue
+                case "$reviewers" in *" $login "*) full "PR #$n has an approval on its head" ;; esac
+              done <<< "$reviews"
+            fi
+            # Every gate outcome for a finished ci run leaves a notice naming
+            # the head. A ci-failure notice does not count once ci passes.
+            if [ "$ci" = "completed:success" ]; then
+              printf '%s\n' "$notices" | grep -v '^blocked-ci$' | grep -q . \
+                || full "PR #$n has a ci result nobody was told about"
+            else
+              [ -n "$notices" ] || full "PR #$n has a ci result nobody was told about"
+            fi
           done
 
           echo "full=false" >> "$GITHUB_OUTPUT"
@@ -410,8 +439,10 @@ jobs:
           cp sync-result.json "$OUT/sync-result.json"
 
       # Opens or refreshes the sync pull request. Never merges: that is the
-      # gate's job, after review. Pushes only when the content changed, so an
-      # approval on an unchanged head survives a refresh.
+      # gate's job, after review. Pushes only when the season's data changed,
+      # so main moving on elsewhere keeps the reviewed head, its ci run and
+      # its approval. A draft opened by the old sync is adopted and marked
+      # ready, since the observer now owns it.
       - name: Open or update the sync pull request
         id: pr
         if: >-
@@ -428,9 +459,11 @@ jobs:
           if [ "$IS_NEW" = "true" ]; then
             BRANCH="auto/survivor-new-season-${SEASON}"
             TITLE="feat: bootstrap season ${SEASON} from survivoR"
+            DATA="src/data/"
           else
             BRANCH="auto/survivor-sync-season-${SEASON}"
             TITLE="chore: sync season ${SEASON} data from survivoR"
+            DATA="src/data/season_${SEASON}/"
           fi
           yarn survivor-observer pr-body --result "$OUT/sync-result.json" --out "$OUT"
 
@@ -441,22 +474,26 @@ jobs:
           git diff --cached --quiet && { echo "No changes to commit"; exit 0; }
           git commit -m "$TITLE"
 
-          remote_tree=""
+          same=false
           if git ls-remote --exit-code --heads origin "$BRANCH" > /dev/null; then
             git fetch origin "$BRANCH"
-            remote_tree=$(git rev-parse "FETCH_HEAD^{tree}")
+            if git diff --quiet FETCH_HEAD HEAD -- "$DATA"; then same=true; fi
           fi
-          if [ "$remote_tree" != "$(git rev-parse 'HEAD^{tree}')" ]; then
-            git push --force origin "$BRANCH"
+          if [ "$same" = "true" ]; then
+            echo "The branch already has this season data; keeping its head."
           else
-            echo "The branch already has this content; keeping its head."
+            git push --force origin "$BRANCH"
           fi
 
-          existing=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+          existing=$(gh pr list --head "$BRANCH" --state open --json number,isDraft --jq '.[0] // empty')
           if [ -z "$existing" ]; then
             gh pr create --base main --head "$BRANCH" --title "$TITLE" --body-file "$OUT/pr-body.md"
           else
-            gh pr edit "$existing" --body-file "$OUT/pr-body.md"
+            number=$(jq -r .number <<< "$existing")
+            gh pr edit "$number" --body-file "$OUT/pr-body.md"
+            if [ "$(jq -r .isDraft <<< "$existing")" = "true" ] && [ "$IS_NEW" != "true" ]; then
+              gh pr ready "$number"
+            fi
           fi
 
       # --- Gate: decide, notify, then merge only what passed. ---
@@ -489,6 +526,16 @@ jobs:
           for pr in $(jq -r '.decisions[] | select(.action == "obsolete") | .pr' "$OUT/gate.json"); do
             gh pr close "$pr" --delete-branch --comment "main already matches survivoR, so this sync is no longer needed. Closed by the survivoR observer."
           done
+          # A pending label on a pull request that never merged is dropped. One
+          # on a merge the observer did not make is refused, never published.
+          for pr in $(jq -r '.pending[] | select(.kind == "unlabel") | .pr' "$OUT/gate.json"); do
+            gh pr edit "$pr" --remove-label observer-publish-pending
+          done
+          while IFS=$'\t' read -r pr reason; do
+            [ -n "$pr" ] || continue
+            gh pr edit "$pr" --remove-label observer-publish-pending --add-label observer-publish-failed
+            gh pr comment "$pr" --body "The survivoR observer will not publish this: $reason. Only a pull request the observer merged after its own gate can be published. Publish by hand with \`yarn tsx scripts/publish-season.ts <season>\` if that is intended."
+          done < <(jq -r '.pending[] | select(.kind == "reject") | [.pr, .reason] | @tsv' "$OUT/gate.json")
 
       - name: Send observer email
         id: notice
@@ -540,37 +587,55 @@ jobs:
         run: yarn survivor-observer record-notices --out "$OUT"
 
       # Merges only a pull request the gate passed, at the exact head commit
-      # it evaluated, and only once its "publishing" notice was delivered
-      # (this run or an earlier one). The pending label is what the publish
-      # job, and any retry, works from.
+      # it evaluated, and only once its "publishing" notice was delivered and
+      # recorded (this run or an earlier one): that record is what the
+      # publish job checks. Just before merging, the gate runs again on fresh
+      # data, so a review, ci or survivoR change since the first pass stops
+      # the merge. The pending label is what the publish job works from.
       - name: Merge approved sync pull requests
         id: merge
         if: >-
           env.LIVE == 'true' &&
-          (steps.gate.outputs.has_notice != 'true' || steps.notice.outcome == 'success' || steps.notice_retry.outcome == 'success')
+          (steps.gate.outputs.has_notice != 'true' || steps.notices_recorded.outcome == 'success')
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DELIVERED: ${{ steps.notice.outcome == 'success' || steps.notice_retry.outcome == 'success' }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SURVIVOR_SYNC_REVIEWERS: ${{ vars.SURVIVOR_SYNC_REVIEWERS }}
+          RECORDED: ${{ steps.notices_recorded.outcome == 'success' }}
         run: |
           set -euo pipefail
           gh label create observer-publish-pending --color FBCA04 --description "Merged by the survivoR observer; Firestore not yet published" --force
           gh label create observer-published --color 0E8A16 --description "Published to Firestore by the survivoR observer" --force
           gh label create observer-publish-failed --color B60205 --description "survivoR observer could not publish; see the run" --force
           merged=false
+          failed=0
           while IFS=$'\t' read -r pr sha; do
             [ -n "$pr" ] || continue
             if jq -e --argjson pr "$pr" '.notices[] | select(.pr == $pr)' "$OUT/gate.json" > /dev/null \
-              && [ "$DELIVERED" != "true" ]; then
-              echo "::warning::PR #$pr passed the gate but its notice was not delivered; not merging."
+              && [ "$RECORDED" != "true" ]; then
+              echo "::warning::PR #$pr passed the gate but its notice was not delivered and recorded; not merging."
+              continue
+            fi
+            yarn -s survivor-observer gate --result "$OUT/sync-result.json" --out "$OUT/recheck" > /dev/null
+            if ! jq -e --argjson pr "$pr" --arg sha "$sha" \
+              '.decisions[] | select(.pr == $pr and .action == "merge" and .headSha == $sha)' \
+              "$OUT/recheck/gate.json" > /dev/null; then
+              echo "::warning::PR #$pr no longer passes the gate on a fresh check; not merging."
               continue
             fi
             gh pr edit "$pr" --add-label observer-publish-pending
-            gh pr merge "$pr" --merge --match-head-commit "$sha"
+            if ! gh pr merge "$pr" --merge --match-head-commit "$sha"; then
+              gh pr edit "$pr" --remove-label observer-publish-pending
+              echo "::error::Merging PR #$pr was refused; it stays open and unpublished."
+              failed=1
+              continue
+            fi
             echo "Merged PR #$pr at $sha"
             merged=true
           done < <(jq -r '.decisions[] | select(.action == "merge") | [.pr, .headSha] | @tsv' "$OUT/gate.json")
           echo "merged=$merged" >> "$GITHUB_OUTPUT"
+          exit $failed
 
       - name: Write job summary
         if: always()
@@ -689,22 +754,24 @@ jobs:
         id: targets
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          # Only pull requests the observer itself merged, after recording
+          # its publishing notice for that head (scripts/lib/survivor-observer.ts
+          # judgePending). A label added by hand is not enough.
+          yarn -s survivor-observer publish-targets --out .publish
           prs=""
           seasons=""
-          for n in $(gh api "repos/$GITHUB_REPOSITORY/issues?state=closed&labels=observer-publish-pending&per_page=100" --jq '.[] | select(.pull_request) | .number'); do
-            read -r ref merge_sha merged < <(gh api "repos/$GITHUB_REPOSITORY/pulls/$n" --jq '"\(.head.ref) \(.merge_commit_sha) \(.merged_at != null)"')
-            case "$ref" in auto/survivor-sync-season-*) ;; *) continue ;; esac
-            [ "$merged" = "true" ] || continue
+          while IFS=$'\t' read -r n season merge_sha; do
+            [ -n "$n" ] || continue
             if ! git merge-base --is-ancestor "$merge_sha" HEAD; then
               echo "::warning::PR #$n merge commit $merge_sha is not on main yet; leaving it pending."
               continue
             fi
             prs="$prs $n"
-            seasons="$seasons ${ref#auto/survivor-sync-season-}"
-          done
+            seasons="$seasons $season"
+          done < <(jq -r '.publish[] | [.pr, .season, .mergeSha] | @tsv' .publish/publish-targets.json)
           prs=$(echo $prs)
           seasons=$(printf '%s\n' $seasons | sort -un | xargs)
           echo "prs=$prs" >> "$GITHUB_OUTPUT"

@@ -6,6 +6,7 @@
  *   yarn survivor-observer pr-body --result <file> --out <dir>
  *   yarn survivor-observer gate --result <file> --out <dir>
  *   yarn survivor-observer record-notices --out <dir>
+ *   yarn survivor-observer publish-targets --out <dir>
  *
  * `upstream` resolves survivoR master to a commit and the git tree of its
  * dev/json, and writes upstream.json. The sync then reads every table at
@@ -23,6 +24,10 @@
  * comments. The workflow runs it only after the notice email was delivered,
  * so a notice is re-sent until it is (the same rule as the radar's state).
  *
+ * `publish-targets` lists merged pull requests labelled for publishing and
+ * judges each (lib/survivor-observer.ts judgePending): only one the observer
+ * merged, after recording its "publishing" notice, may be published.
+ *
  * GitHub access uses GITHUB_TOKEN and GITHUB_REPOSITORY.
  */
 
@@ -34,15 +39,16 @@ import {
   OBSERVER_MARKER_VERSION,
   SYNC_BRANCH_PREFIX,
   evaluateGate,
+  judgePending,
   noticeComment,
   parseReviewers,
   recordedNoticeKeys,
   renderNoticeEmail,
   renderSyncPrBody,
-  seasonOfBranch,
   type CheckRun,
   type GateDecision,
   type Notice,
+  type PendingVerdict,
   type PullRequest,
   type Review,
   type SyncResult,
@@ -108,6 +114,7 @@ interface ApiPull {
   mergeable?: boolean | null;
   merge_commit_sha?: string | null;
   merged_at?: string | null;
+  merged_by?: { login: string } | null;
   user: { login: string };
   base: { ref: string };
   head: { ref: string; sha: string; repo: { full_name: string } | null };
@@ -134,7 +141,9 @@ export interface GateReport {
   decisions: GateDecision[];
   /** Notices not yet recorded on their pull request, to email now. */
   notices: (Notice & { pr: number })[];
-  /** Merged pull requests labelled for publishing, oldest first. */
+  /** Every closed pull request labelled for publishing, judged. */
+  pending: PendingVerdict[];
+  /** The pending ones the observer itself merged, oldest first. */
   publish: { pr: number; season: number; mergeSha: string }[];
 }
 
@@ -224,36 +233,75 @@ export async function runGate(
     });
     decisions.push(decision);
     if (decision.notice) {
-      const comments = (
-        await listAll<{ body: string; user: { login: string } | null }>(
-          io,
-          `/repos/${repo}/issues/${pr.number}/comments`,
-        )
-      )
-        .filter((c) => c.user?.login === BOT_LOGIN)
-        .map((c) => c.body);
+      const comments = await botComments(io, repo, pr.number);
       if (!recordedNoticeKeys(comments).has(decision.notice.key)) {
         notices.push({ ...decision.notice, pr: pr.number });
       }
     }
   }
 
-  const pending = (
+  const pending = await readPending(io, repo);
+  return {
+    upstream,
+    decisions,
+    notices,
+    pending,
+    publish: publishable(pending),
+  };
+}
+
+async function botComments(
+  io: Pick<GithubIo, "get">,
+  repo: string,
+  pr: number,
+): Promise<string[]> {
+  return (
+    await listAll<{ body: string; user: { login: string } | null }>(
+      io,
+      `/repos/${repo}/issues/${pr}/comments`,
+    )
+  )
+    .filter((c) => c.user?.login === BOT_LOGIN)
+    .map((c) => c.body);
+}
+
+/** Every closed pull request labelled for publishing, judged for provenance. */
+export async function readPending(
+  io: Pick<GithubIo, "get">,
+  repo: string,
+): Promise<PendingVerdict[]> {
+  const labelled = (
     await listAll<{ number: number; pull_request?: unknown }>(
       io,
       `/repos/${repo}/issues?state=closed&labels=${LABEL_PUBLISH_PENDING}&sort=created&direction=asc`,
     )
   ).filter((i) => i.pull_request);
-  const publish: GateReport["publish"] = [];
-  for (const issue of pending) {
+  const verdicts: PendingVerdict[] = [];
+  for (const issue of labelled) {
     const p = (await io.get(`/repos/${repo}/pulls/${issue.number}`)) as ApiPull;
-    const season = seasonOfBranch(p.head.ref);
-    if (p.merged_at && p.merge_commit_sha && season !== null) {
-      publish.push({ pr: p.number, season, mergeSha: p.merge_commit_sha });
-    }
+    verdicts.push(
+      judgePending(
+        {
+          number: p.number,
+          headRef: p.head.ref,
+          headSha: p.head.sha,
+          mergedAt: p.merged_at ?? null,
+          mergeSha: p.merge_commit_sha ?? null,
+          mergedBy: p.merged_by?.login ?? null,
+        },
+        await botComments(io, repo, p.number),
+      ),
+    );
   }
-  return { upstream, decisions, notices, publish };
+  return verdicts;
 }
+
+const publishable = (verdicts: PendingVerdict[]): GateReport["publish"] =>
+  verdicts.flatMap((v) =>
+    v.kind === "publish"
+      ? [{ pr: v.pr, season: v.season, mergeSha: v.mergeSha }]
+      : [],
+  );
 
 function argValue(args: string[], flag: string): string | undefined {
   const index = args.indexOf(flag);
@@ -380,6 +428,22 @@ async function main(): Promise<void> {
     }
     for (const p of report.publish) {
       console.log(`Publish pending: PR #${p.pr}, season ${p.season}`);
+    }
+    return;
+  }
+
+  if (command === "publish-targets") {
+    if (!repo) throw new Error("GITHUB_REPOSITORY is not set");
+    const pending = await readPending(liveIo, repo);
+    fs.writeFileSync(
+      path.join(out, "publish-targets.json"),
+      `${JSON.stringify({ pending, publish: publishable(pending) }, null, 2)}
+`,
+    );
+    for (const v of pending) {
+      console.log(
+        `PR #${v.pr}: ${v.kind}${"reason" in v ? ` (${v.reason})` : ""}`,
+      );
     }
     return;
   }

@@ -7,9 +7,10 @@ name: "Sync survivoR data"
 # review. Once the observer is live this job stands down; set the variable
 # back to "shadow" (or delete it) to roll back to this workflow.
 #
-# Merging a pull request from this workflow does not publish it. After
-# merging, publish with `yarn tsx scripts/publish-season.ts <season>`, or let
-# the live observer adopt the open pull request instead.
+# Its pull requests open as drafts. Merging one by hand would redeploy the
+# site with the new episode while Firestore kept the old data, so they are
+# meant to be adopted by the observer once it is live (it marks them ready
+# and runs its gate). See docs/survivor-observer.md.
 
 on:
   # main only: the job checks out main, so a run from another branch would
@@ -142,11 +143,12 @@ jobs:
             if [ "$IS_NEW" = "true" ]; then
               PR_BODY="${PR_BODY}\n\n### Note\nPlayer images are not available during automated bootstrap. Run \`yarn new-season ${SEASON} --force\` locally to backfill images and bios from the wiki."
             fi
-            PR_BODY="${PR_BODY}\n\n**Not published.** Firestore was not touched. Review this, merge it, then run \`yarn tsx scripts/publish-season.ts ${SEASON}\` (or let the live survivoR observer take it over)."
+            PR_BODY="${PR_BODY}\n\n**Not published, and a draft on purpose.** Firestore was not touched. Do not merge this by hand: merging redeploys the site without updating Firestore. Switch the survivoR observer to live and it adopts this pull request, runs ci, and publishes it after an approval. See docs/survivor-observer.md."
             PR_BODY="${PR_BODY}\n\n---\n*This PR was created automatically by the [survivoR data sync workflow](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}).*"
 
-            # Never merged automatically: a person reviews every import.
-            gh pr create --title "$PR_TITLE" --body "$(echo -e "$PR_BODY")" --base main
+            # Never merged automatically, and a draft so it is not merged by
+            # hand either: the live observer adopts it.
+            gh pr create --draft --title "$PR_TITLE" --body "$(echo -e "$PR_BODY")" --base main
           else
             echo "PR #${EXISTING_PR} already exists for branch ${BRANCH}"
           fi

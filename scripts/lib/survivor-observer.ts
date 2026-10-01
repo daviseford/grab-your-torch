@@ -52,6 +52,8 @@ export interface SyncMarker {
 /** The subset of scripts/sync-season.ts's sync-result.json used here. */
 export interface SyncResult {
   changed: boolean;
+  /** The regenerated file matched main; see scripts/sync-season.ts. */
+  unchanged?: boolean;
   seasonNum: number;
   isNewSeason: boolean;
   error?: string;
@@ -339,10 +341,17 @@ export function evaluateGate(input: GateInput): GateDecision {
       },
     );
   }
+  // Close only on a positive comparison. A transient empty read (no
+  // castaways, say) also reports changed: false, and must not close a pull
+  // request someone may be reviewing.
   if (!sync.changed) {
-    return decision("obsolete", [
-      "main already matches survivoR; this pull request is no longer needed",
-    ]);
+    return sync.unchanged && sync.upstreamRef
+      ? decision("obsolete", [
+          "main already matches survivoR; this pull request is no longer needed",
+        ])
+      : decision("wait", [
+          "this run's sync read nothing to compare; leaving the pull request open",
+        ]);
   }
 
   const marker = parseMarker(pr.body);
@@ -420,6 +429,24 @@ export function evaluateGate(input: GateInput): GateDecision {
       r.login !== BOT_LOGIN &&
       WRITE_PERMISSIONS.has(input.permissions[r.login] ?? ""),
   );
+  const powerless = [...latest.values()].find(
+    (r) =>
+      r.state === "APPROVED" &&
+      r.commitId === pr.headSha &&
+      allowed.has(r.login.toLowerCase()) &&
+      !WRITE_PERMISSIONS.has(input.permissions[r.login] ?? ""),
+  );
+  if (!approval && powerless) {
+    return decision(
+      "blocked",
+      [`${powerless.login} approved but has no write access`],
+      blockedNotice(
+        pr,
+        "review",
+        `${powerless.login} approved, but is listed in SURVIVOR_SYNC_REVIEWERS without write access to the repository, so the approval does not count.`,
+      ),
+    );
+  }
   if (!approval) {
     const reasons = [
       input.allowedReviewers.length
@@ -518,4 +545,53 @@ export function renderNoticeEmail(
     ...(runUrl ? [`Workflow run: ${runUrl}`, ""] : []),
   ].join("\n");
   return { subject, body };
+}
+
+/** A closed pull request carrying the publish-pending label. */
+export interface PendingPull {
+  number: number;
+  headRef: string;
+  headSha: string;
+  mergedAt: string | null;
+  mergeSha: string | null;
+  mergedBy: string | null;
+}
+
+export type PendingVerdict =
+  | { kind: "publish"; pr: number; season: number; mergeSha: string }
+  | { kind: "unlabel"; pr: number; reason: string }
+  | { kind: "reject"; pr: number; reason: string };
+
+/**
+ * Whether a labelled pull request may be published. A label alone is not
+ * enough, since anyone with triage access can add one: the observer must have
+ * merged it, after recording its "publishing" notice for the exact head it
+ * merged. A closed pull request that never merged just loses the label.
+ */
+export function judgePending(
+  p: PendingPull,
+  botComments: string[],
+): PendingVerdict {
+  const season = seasonOfBranch(p.headRef);
+  if (!p.mergedAt || !p.mergeSha) {
+    return { kind: "unlabel", pr: p.number, reason: "closed without merging" };
+  }
+  if (season === null) {
+    return { kind: "reject", pr: p.number, reason: "not a sync branch" };
+  }
+  if (p.mergedBy !== BOT_LOGIN) {
+    return {
+      kind: "reject",
+      pr: p.number,
+      reason: `merged by ${p.mergedBy ?? "unknown"}, not by the observer`,
+    };
+  }
+  if (!recordedNoticeKeys(botComments).has(`publishing:${p.headSha}`)) {
+    return {
+      kind: "reject",
+      pr: p.number,
+      reason: "no recorded publishing notice for the merged head",
+    };
+  }
+  return { kind: "publish", pr: p.number, season, mergeSha: p.mergeSha };
 }
