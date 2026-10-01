@@ -354,9 +354,9 @@ describe("survivor-observer workflow", () => {
   const workflow = readWorkflow("survivor-observer.yml");
   const step = stepOf(workflow);
 
-  it("ticks every 30 minutes with one daily full run, and never on PRs", () => {
+  it("ticks every two hours with one daily full run, and never on PRs", () => {
     expect(workflow).toMatch(
-      /schedule:\s*\n\s*- cron: "7,37 \* \* \* \*"\s*\n\s*- cron: "0 14 \* \* \*"/,
+      /schedule:\s*\n\s*- cron: "7 1-23\/2 \* \* \*"\s*\n\s*- cron: "0 14 \* \* \*"/,
     );
     expect(workflow).not.toMatch(/^\s*pull_request/m);
     expect(workflow).not.toMatch(/^\s*workflow_run:/m);

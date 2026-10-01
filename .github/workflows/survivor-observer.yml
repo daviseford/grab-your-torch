@@ -4,7 +4,7 @@ name: "survivoR observer"
 # data" import and the "survivoR data radar" email once it is switched to
 # live. See docs/survivor-observer.md.
 #
-# Every 30 minutes a cheap check (no checkout, no install, about ten GitHub
+# Every two hours a cheap check (no checkout, no install, about ten GitHub
 # API calls) asks whether anything could have changed:
 #   - survivoR's dev/json tree differs from the one the radar last recorded;
 #   - a sync pull request needs ci, has a ci result nobody was told about, or
@@ -13,7 +13,9 @@ name: "survivoR observer"
 # Only then does the full job run: radar (every US table, every season), then
 # the newest season's sync, then the publication gate. A 14:00 UTC run is
 # always full, as the old daily sync was, so transformer changes on main are
-# still picked up when survivoR is quiet.
+# still picked up when survivoR is quiet. The cheap check runs at odd hours
+# (01:07, 03:07, ... 23:07 UTC) so it never lands within a few minutes of the
+# 14:00 full run.
 #
 # Publication needs all of these on the sync pull request's exact head
 # commit (scripts/lib/survivor-observer.ts):
@@ -39,7 +41,7 @@ name: "survivoR observer"
 # Deliberately never `pull_request`: this reads the SMTP and Firebase secrets.
 on:
   schedule:
-    - cron: "7,37 * * * *"
+    - cron: "7 1-23/2 * * *"
     - cron: "0 14 * * *"
   workflow_dispatch:
     inputs:
@@ -596,7 +598,7 @@ jobs:
         run: yarn survivor-observer record-notices --out "$OUT"
 
       # A sync pull request merged around the gate (from the GitHub button)
-      # is labelled once its alert is recorded, which also stops the 30-minute
+      # is labelled once its alert is recorded, which also stops the cheap
       # check from reconsidering it. It is never published.
       - name: Label hand-merged sync pull requests
         if: env.LIVE == 'true'
