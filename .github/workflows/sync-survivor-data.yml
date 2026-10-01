@@ -1,7 +1,22 @@
 name: "Sync survivoR data"
 
+# Being replaced by survivor-observer.yml (docs/survivor-observer.md). Until
+# the repository variable SURVIVOR_OBSERVER is "live" this keeps running
+# daily, in a safe mode: it holds partial episodes, never writes Firestore,
+# and never merges its own pull request, so nothing reaches players without
+# review. Once the observer is live this job stands down; set the variable
+# back to "shadow" (or delete it) to roll back to this workflow.
+#
+# Its pull requests open as drafts. Merging one by hand would redeploy the
+# site with the new episode while Firestore kept the old data, so they are
+# meant to be adopted by the observer once it is live (it marks them ready
+# and runs its gate). See docs/survivor-observer.md.
+
 on:
+  # main only: the job checks out main, so a run from another branch would
+  # pair that branch's workflow with main's scripts.
   push:
+    branches: [main]
     paths:
       - '.github/workflows/sync-survivor-data.yml'
   schedule:
@@ -23,6 +38,7 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    if: vars.SURVIVOR_OBSERVER != 'live'
     steps:
       - uses: actions/checkout@v6
         with:
@@ -38,15 +54,9 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
-      - name: Write Firebase service account key
-        run: |
-          echo '${{ secrets.FIREBASE_ADMIN_SERVICE_ACCOUNT }}' > firebase-private-key.json
-          chmod 600 firebase-private-key.json
-
+      # --no-push: production is written only after review, never here.
       - name: Run sync script
-        env:
-          VITE_FIREBASE_DATABASE_URL: ${{ vars.VITE_FIREBASE_DATABASE_URL }}
-        run: yarn tsx scripts/sync-season.ts
+        run: yarn tsx scripts/sync-season.ts --no-push
 
       - name: Format generated code
         run: yarn format
@@ -63,6 +73,7 @@ jobs:
           fi
 
           CHANGED=$(jq -r '.changed' sync-result.json)
+          HELD=$(jq -r '(.held // []) | join("; ")' sync-result.json)
           SEASON=$(jq -r '.seasonNum' sync-result.json)
           IS_NEW=$(jq -r '.isNewSeason' sync-result.json)
           ERROR=$(jq -r '.error // empty' sync-result.json)
@@ -83,6 +94,7 @@ jobs:
           echo "challenges=$CHALLENGES" >> "$GITHUB_OUTPUT"
           echo "eliminations=$ELIMINATIONS" >> "$GITHUB_OUTPUT"
           echo "events=$EVENTS" >> "$GITHUB_OUTPUT"
+          echo "held=$HELD" >> "$GITHUB_OUTPUT"
 
       - name: Create or update PR
         if: steps.result.outputs.changed == 'true' && steps.result.outputs.error == ''
@@ -104,18 +116,6 @@ jobs:
             PR_TITLE="chore: sync season ${SEASON} data from survivoR"
             COMMIT_MSG="chore: sync season ${SEASON} data from survivoR"
           fi
-
-          # GitHub rejects --auto on a PR that is already mergeable ("Pull
-          # request is in clean status"), which happens when no required status
-          # check is pending. Fall back to merging outright so the sync run does
-          # not fail on what is really a success.
-          enable_auto_merge() {
-            if gh pr merge "$1" --auto --merge; then
-              return 0
-            fi
-            echo "Auto-merge unavailable for $1; merging directly."
-            gh pr merge "$1" --merge
-          }
 
           # Configure git
           git config user.name "github-actions[bot]"
@@ -143,19 +143,14 @@ jobs:
             if [ "$IS_NEW" = "true" ]; then
               PR_BODY="${PR_BODY}\n\n### Note\nPlayer images are not available during automated bootstrap. Run \`yarn new-season ${SEASON} --force\` locally to backfill images and bios from the wiki."
             fi
+            PR_BODY="${PR_BODY}\n\n**Not published, and a draft on purpose.** Firestore was not touched. Do not merge this by hand: merging redeploys the site without updating Firestore. Switch the survivoR observer to live and it adopts this pull request, runs ci, and publishes it after an approval. See docs/survivor-observer.md."
             PR_BODY="${PR_BODY}\n\n---\n*This PR was created automatically by the [survivoR data sync workflow](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}).*"
 
-            PR_URL=$(gh pr create --title "$PR_TITLE" --body "$(echo -e "$PR_BODY")" --base main)
-            # Auto-merge episode updates; new season bootstraps need manual review
-            if [ "$IS_NEW" != "true" ]; then
-              enable_auto_merge "$PR_URL"
-            fi
+            # Never merged automatically, and a draft so it is not merged by
+            # hand either: the live observer adopts it.
+            gh pr create --draft --title "$PR_TITLE" --body "$(echo -e "$PR_BODY")" --base main
           else
             echo "PR #${EXISTING_PR} already exists for branch ${BRANCH}"
-            # Re-enable auto-merge in case force-push reset it
-            if [ "$IS_NEW" != "true" ]; then
-              enable_auto_merge "$EXISTING_PR"
-            fi
           fi
 
       - name: Write job summary
@@ -169,6 +164,7 @@ jobs:
           CHALLENGES: ${{ steps.result.outputs.challenges }}
           ELIMINATIONS: ${{ steps.result.outputs.eliminations }}
           EVENTS: ${{ steps.result.outputs.events }}
+          HELD: ${{ steps.result.outputs.held }}
         run: |
           {
             echo "## survivoR Data Sync"
@@ -178,6 +174,9 @@ jobs:
             echo "| Season | ${SEASON:-unknown} |"
             echo "| Changes found | ${CHANGED:-unknown} |"
             echo "| Firestore pushed | ${FIRESTORE:-false} |"
+            if [ -n "$HELD" ]; then
+              echo "| Held (episode not finished upstream) | ${HELD} |"
+            fi
 
             if [ "$CHANGED" = "true" ]; then
               echo "| Episodes | ${EPISODES} |"

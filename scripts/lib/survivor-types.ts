@@ -82,6 +82,8 @@ export interface SurvivorVoteHistory extends SurvivorBaseRecord {
   vote: string;
   vote_event?: string;
   vote_event_outcome?: string;
+  /** Why the castaway was safe at this vote: "Individual", "Hidden" (an idol), etc. */
+  immunity?: string | null;
   nullified: boolean;
   tie: boolean;
   voted_out: string;
@@ -142,11 +144,23 @@ export interface SurvivorJourney extends SurvivorBaseRecord {
   event?: string; // "Risked vote", "Did not risk vote", etc. (S44+ only)
 }
 
+/**
+ * challenge_description.json — one row per challenge. Not transformed into
+ * app data; the episode readiness gate reads it as survivoR's own list of an
+ * episode's challenges (see episode-readiness.ts).
+ */
+export interface SurvivorChallengeDescription extends SurvivorBaseRecord {
+  episode: number;
+  challenge_id: number;
+  challenge_type: string;
+}
+
 /** Table names available from survivoR */
 export type SurvivorTable =
   | "castaways"
   | "episodes"
   | "challenge_results"
+  | "challenge_description"
   | "vote_history"
   | "advantage_details"
   | "advantage_movement"

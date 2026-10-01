@@ -2,7 +2,7 @@
  * survivoR data radar: email when the upstream survivoR dataset changes.
  *
  * Usage:
- *   yarn survivor-radar observe --out <dir> [--state-file <file>]
+ *   yarn survivor-radar observe --out <dir> [--state-file <file>] [--commit <sha>]
  *   yarn survivor-radar record --out <dir>
  *
  * `observe` reads every table in survivoR's dev/json at the current master
@@ -55,16 +55,24 @@ export interface RadarIo {
   fetchRaw: (commit: string, filePath: string) => Promise<string>;
 }
 
-/** Resolve survivoR master to a commit, then fingerprint every table there. */
+/**
+ * Resolve survivoR master (or a pinned commit) to a commit, then fingerprint
+ * every table there. The survivoR observer pins the commit its sync reads, so
+ * the radar state never records a commit the sync has not seen.
+ */
 export async function observeUpstream(
   io: RadarIo,
   now: Date = new Date(),
+  ref: string = UPSTREAM_BRANCH,
 ): Promise<RadarState> {
-  const head = (await io.githubGet(
-    `/repos/${UPSTREAM}/commits/${UPSTREAM_BRANCH}`,
-  )) as { sha?: string };
+  const head = (await io.githubGet(`/repos/${UPSTREAM}/commits/${ref}`)) as {
+    sha?: string;
+  };
   if (!head.sha || !/^[0-9a-f]{40}$/.test(head.sha)) {
-    throw new Error("Could not resolve the survivoR master commit");
+    throw new Error(`Could not resolve the survivoR ${ref} commit`);
+  }
+  if (ref !== UPSTREAM_BRANCH && head.sha !== ref) {
+    throw new Error(`survivoR resolved ${ref} to a different commit`);
   }
   const listing = (await io.githubGet(
     `/repos/${UPSTREAM}/contents/${UPSTREAM_DIR}?ref=${head.sha}`,
@@ -151,6 +159,8 @@ export interface ObserveOptions {
   repo?: string;
   stateFile?: string;
   runUrl?: string;
+  /** Read survivoR at this commit instead of master. */
+  commit?: string;
 }
 
 /** Observe, decide, and write the decision artifacts into `out`. */
@@ -175,7 +185,7 @@ export async function runObserve(io: RadarIo, options: ObserveOptions) {
     previous = issue ? parseIssueBody(issue.body) : null;
   }
 
-  const current = await observeUpstream(io);
+  const current = await observeUpstream(io, new Date(), options.commit);
   const decision = decide(previous, current);
 
   writeFile(
@@ -297,7 +307,7 @@ async function main(): Promise<void> {
   const out = argValue(args, "--out");
   if (!out || (command !== "observe" && command !== "record")) {
     throw new Error(
-      "Usage: survivor-radar observe --out <dir> [--state-file <file>] | record --out <dir>",
+      "Usage: survivor-radar observe --out <dir> [--state-file <file>] [--commit <sha>] | record --out <dir>",
     );
   }
   const repo = process.env.GITHUB_REPOSITORY;
@@ -306,6 +316,7 @@ async function main(): Promise<void> {
       out,
       repo,
       stateFile: argValue(args, "--state-file"),
+      commit: argValue(args, "--commit"),
       runUrl: process.env.RUN_URL,
     });
     console.log(`Radar decision: ${decision.action} (${decision.reason})`);

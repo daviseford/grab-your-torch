@@ -54,16 +54,19 @@ This fetches survivoR data once and reuses it across all seasons, which is signi
 
 ## Automated Daily Sync
 
-A GitHub Action (`.github/workflows/sync-survivor-data.yml`) runs daily at 14:00 UTC. It:
+The survivoR observer (`.github/workflows/survivor-observer.yml`, see `docs/survivor-observer.md`) checks every 30 minutes and does a full run at 14:00 UTC. It:
 
-1. Runs `yarn sync-season` which detects seasons with new data in survivoR
-2. Validates the generated data (monotonicity, ID integrity, duplicates)
-3. Creates or updates a PR with the changes
-4. Pushes updated data to Firestore
+1. Runs `yarn sync-season --no-push` at one pinned survivoR commit, which detects seasons with new data
+2. Holds, writing nothing, while survivoR has only part of a newer episode (`scripts/lib/episode-readiness.ts`)
+3. Validates the generated data (monotonicity, ID integrity, duplicates)
+4. Creates or updates a PR with the changes
+5. After `ci` passes and a listed reviewer approves the PR's latest commit, merges it and pushes the data to Firestore from `main`
+
+Until the observer is switched to live, the older daily `.github/workflows/sync-survivor-data.yml` does steps 1 to 4 and stops there: it no longer pushes to Firestore or merges its own PR.
 
 The sync regenerates only the results exports (episodes, challenges, eliminations, events and vote history). It keeps every field of a castaway already in the committed file, such as images, professions, bios, nicknames and hand-corrected ages or hometowns, and fills from survivoR only the fields a castaway lacks. When survivoR disagrees with a committed value, the committed value stays and the sync logs the difference and adds it to the `warnings` in `sync-result.json`. New castaways are written from survivoR. If the cast block has a field or value the sync cannot carry over, the sync fails rather than drop it. The rules live in `scripts/lib/curated-cast.ts`.
 
-This means active seasons are kept in sync automatically — no manual updates needed during a season's airing. See [CI Auto-Sync Pipeline — How It Works, How to Test It, and Lessons Learned](solutions/workflow-issues/ci-auto-sync-pipeline-validation-and-formatting-fix.md) for architecture details, testing strategies, and known gotchas.
+This means active seasons are kept in sync with one manual step per update, the review. See [CI Auto-Sync Pipeline — How It Works, How to Test It, and Lessons Learned](solutions/workflow-issues/ci-auto-sync-pipeline-validation-and-formatting-fix.md) for architecture details, testing strategies, and known gotchas.
 
 ## What Gets Generated
 

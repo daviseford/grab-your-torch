@@ -5,6 +5,10 @@ on:
     branches: [main]
   push:
     branches: [main]
+  # The survivoR observer dispatches this on its sync branch: a push by the
+  # workflow token starts no pull_request run, and `ci` is a required check.
+  # Only people and workflows with write access can dispatch it.
+  workflow_dispatch:
 
 # Only the latest run per ref matters; cancel superseded ones.
 concurrency:
@@ -67,7 +71,7 @@ jobs:
       # cannot read repository variables — they still build, just with
       # empty config, which is enough to validate that the build compiles.
       - name: Verify Firebase config
-        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         run: ./.github/scripts/check-firebase-env.sh
         env:
           VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
@@ -88,11 +92,11 @@ jobs:
       # issue any request at all -- the spec's positive control would fail on
       # an app that never connected.
       - name: Install Playwright (chromium)
-        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         run: yarn playwright install --with-deps chromium
 
       - name: Test signed-out public reads
-        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         run: yarn e2e:pool-public
         env:
           VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}

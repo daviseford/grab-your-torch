@@ -2,6 +2,8 @@
 
 An email when the upstream [survivoR](https://github.com/doehm/survivoR) dataset changes: a new episode, a new season, or a correction to any historical US record. It is a notifier only. It changes nothing in the app, the repo, Firestore or the Realtime Database.
 
+The survivoR observer (`docs/survivor-observer.md`) runs this same radar, on the same state issue, as the first step of every full run. While the repository variable `SURVIVOR_OBSERVER` is `live`, the radar workflow described below stands down. Everything on this page about fingerprints, delivery and state applies to both.
+
 ## Why the daily sync is not enough
 
 `sync-survivor-data.yml` regenerates only the newest season's file and compares it with the committed file. The comparison keeps curated cast fields, so it sees processed app data, not upstream data. A survivoR correction to an older season, or to a table the app does not read (confessionals, viewers, boot mapping and so on), never shows up there. It also sends no email: its output is an auto-merged PR.

@@ -5,7 +5,14 @@
  * data for the active season, validates, pushes to Firestore, and writes
  * a structured result file for the GitHub Actions workflow to consume.
  *
- * Usage: yarn tsx scripts/sync-season.ts
+ * An episode newer than the committed bundle is imported only once survivoR
+ * has every scoring input it can be checked for (lib/episode-readiness.ts).
+ * Until then the run holds: it writes and pushes nothing and reports the gap.
+ *
+ * Usage: yarn tsx scripts/sync-season.ts [--no-push] [--ref <commit>]
+ *   --no-push  write the season file only; publication happens after review
+ *              (scripts/publish-season.ts, run by the survivoR observer)
+ *   --ref      read every survivoR table at this upstream commit, not master
  */
 
 import * as fs from "fs";
@@ -15,23 +22,48 @@ import {
   registerSeason,
 } from "./lib/codegen.js";
 import { regenerateSeasonFile } from "./lib/curated-cast.js";
-import { pushSeasonToFirestore } from "./lib/firebase-push.js";
+import {
+  assessNewEpisodes,
+  heldReasons,
+  type EpisodeReadiness,
+} from "./lib/episode-readiness.js";
 import { planSeasonFileWrite } from "./lib/season-file-change.js";
 import { readLocalSeasonImg } from "./lib/season-img.js";
-import { fetchSeasonData, fetchTable } from "./lib/survivor-client.js";
+import {
+  fetchSeasonData,
+  fetchTable,
+  filterBySeason,
+} from "./lib/survivor-client.js";
 import {
   transformPlayers,
   transformResults,
 } from "./lib/survivor-transformer.js";
-import type { SurvivorCastaway } from "./lib/survivor-types.js";
+import type {
+  SurvivorCastaway,
+  SurvivorChallengeDescription,
+} from "./lib/survivor-types.js";
 import { validateSeasonData } from "./lib/validate-season.js";
 
 interface SyncResult {
   changed: boolean;
+  /**
+   * Set only when the regenerated file was compared with the committed one
+   * and matched. `changed: false` alone can also mean "nothing to read".
+   */
+  unchanged?: boolean;
   seasonNum: number;
   isNewSeason: boolean;
   error?: string;
   firestorePushed?: boolean;
+  /** The survivoR commit read, when --ref pinned one. */
+  upstreamRef?: string;
+  /** Newer episodes survivoR has only partly published; nothing was written. */
+  held?: string[];
+  /** Readiness of each episode this import adds; all complete when written. */
+  newEpisodes?: Pick<
+    EpisodeReadiness,
+    "episodeNum" | "status" | "reviewNotes" | "counts"
+  >[];
   summary?: {
     episodes: number;
     challenges: number;
@@ -67,13 +99,24 @@ function countEpisodes(content: string): number {
 const PROJECT_ROOT = path.resolve(import.meta.dirname, "..");
 const RESULT_PATH = path.join(PROJECT_ROOT, "sync-result.json");
 
+function argValue(flag: string): string | undefined {
+  const index = process.argv.indexOf(flag);
+  return index === -1 ? undefined : process.argv[index + 1];
+}
+
 async function main(): Promise<void> {
+  const noPush = process.argv.includes("--no-push");
+  const ref = argValue("--ref");
+  if (ref !== undefined && !/^[0-9a-f]{40}$/.test(ref)) {
+    throw new Error(`--ref must be a full survivoR commit SHA, got "${ref}"`);
+  }
   const seasonsFilePath = path.join(PROJECT_ROOT, "src", "data", "seasons.ts");
 
   // Phase 1: Detect — find active season and check for new seasons
   console.log("Phase 1: Detecting active season...");
 
-  const allCastaways = await fetchTable<SurvivorCastaway>("castaways");
+  if (ref) console.log(`  Reading survivoR at commit ${ref}`);
+  const allCastaways = await fetchTable<SurvivorCastaway>("castaways", ref);
   const usCastaways = allCastaways.filter((c) => c.version === "US");
   const survivorSeasons = [...new Set(usCastaways.map((c) => c.season))].sort(
     (a, b) => a - b,
@@ -99,7 +142,7 @@ async function main(): Promise<void> {
   // Phase 2: Fetch + Generate
   console.log(`\nPhase 2: Fetching survivoR data for season ${seasonNum}...`);
 
-  const seasonData = await fetchSeasonData(seasonNum);
+  const seasonData = await fetchSeasonData(seasonNum, ref);
   if (seasonData.castaways.length === 0) {
     const result: SyncResult = {
       changed: false,
@@ -151,8 +194,10 @@ async function main(): Promise<void> {
     if (unchanged) {
       const result: SyncResult = {
         changed: false,
+        unchanged: true,
         seasonNum,
         isNewSeason: false,
+        upstreamRef: ref,
       };
       writeResult(RESULT_PATH, result);
       console.log("\nPhase 3: No changes detected. Exiting.");
@@ -165,12 +210,46 @@ async function main(): Promise<void> {
     );
   }
 
-  // Phase 4: Validate
-  console.log("\nPhase 4: Validating data...");
   const existingEpisodeCount =
     isNewSeason || !existingContent
       ? undefined
       : countEpisodes(existingContent);
+
+  // Hold rather than import half an episode: survivoR fills its tables over
+  // one or more commits, and a partial episode would publish wrong scores.
+  // The transformer imports every upstream row, so one unfinished episode
+  // holds the whole import.
+  let newEpisodes: EpisodeReadiness[] = [];
+  if (existingEpisodeCount !== undefined) {
+    const challengeDescription = filterBySeason(
+      await fetchTable<SurvivorChallengeDescription>(
+        "challenge_description",
+        ref,
+      ),
+      seasonNum,
+    );
+    newEpisodes = assessNewEpisodes(
+      { ...seasonData, challengeDescription },
+      seasonNum,
+      existingEpisodeCount,
+    );
+    const held = heldReasons(newEpisodes);
+    if (held.length > 0) {
+      writeResult(RESULT_PATH, {
+        changed: false,
+        seasonNum,
+        isNewSeason: false,
+        upstreamRef: ref,
+        held,
+      });
+      console.log("\nHolding: survivoR has not finished these episodes:");
+      for (const h of held) console.log(`  - ${h}`);
+      return;
+    }
+  }
+
+  // Phase 4: Validate
+  console.log("\nPhase 4: Validating data...");
   const existingCastaways = existingContent
     ? extractExistingCastawayLookup(existingContent)
     : undefined;
@@ -227,13 +306,19 @@ async function main(): Promise<void> {
   let firestorePushed = false;
   let firestoreError: string | undefined;
 
-  try {
-    await pushSeasonToFirestore(seasonNum, false, seasonImg);
-    firestorePushed = true;
-    console.log("  Firestore push successful.");
-  } catch (err) {
-    firestoreError = err instanceof Error ? err.message : String(err);
-    console.error(`  Firestore push failed: ${firestoreError}`);
+  if (noPush) {
+    console.log("  --no-push: Firestore not touched.");
+  } else {
+    try {
+      // Imported here so --no-push runs without the Admin SDK key.
+      const { pushSeasonToFirestore } = await import("./lib/firebase-push.js");
+      await pushSeasonToFirestore(seasonNum, false, seasonImg);
+      firestorePushed = true;
+      console.log("  Firestore push successful.");
+    } catch (err) {
+      firestoreError = err instanceof Error ? err.message : String(err);
+      console.error(`  Firestore push failed: ${firestoreError}`);
+    }
   }
 
   const result: SyncResult = {
@@ -241,6 +326,15 @@ async function main(): Promise<void> {
     seasonNum,
     isNewSeason,
     firestorePushed,
+    upstreamRef: ref,
+    newEpisodes: newEpisodes.map(
+      ({ episodeNum, status, reviewNotes, counts }) => ({
+        episodeNum,
+        status,
+        reviewNotes,
+        counts,
+      }),
+    ),
     error: firestoreError
       ? `Firestore push failed: ${firestoreError}`
       : undefined,
