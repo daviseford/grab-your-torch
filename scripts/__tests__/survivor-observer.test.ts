@@ -431,6 +431,8 @@ describe("cutover from the old sync and radar", () => {
   it("the old sync stands down when live, and never publishes or merges", () => {
     const sync = readWorkflow("sync-survivor-data.yml");
     expect(sync).toContain("if: vars.SURVIVOR_OBSERVER != 'live'");
+    // It checks out main, so only main may start it on a workflow edit.
+    expect(sync).toMatch(/push:\s*\n\s*branches: \[main\]\s*\n\s*paths:/);
     expect(sync).toContain("yarn tsx scripts/sync-season.ts --no-push");
     expect(sync).not.toContain("gh pr merge");
     expect(sync).not.toContain("FIREBASE_ADMIN_SERVICE_ACCOUNT");

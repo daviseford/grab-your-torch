@@ -12,7 +12,10 @@ name: "Sync survivoR data"
 # the live observer adopt the open pull request instead.
 
 on:
+  # main only: the job checks out main, so a run from another branch would
+  # pair that branch's workflow with main's scripts.
   push:
+    branches: [main]
     paths:
       - '.github/workflows/sync-survivor-data.yml'
   schedule:
