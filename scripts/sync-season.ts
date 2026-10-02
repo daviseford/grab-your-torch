@@ -21,7 +21,10 @@ import {
   extractExistingCastawayLookup,
   registerSeason,
 } from "./lib/codegen.js";
-import { regenerateSeasonFile } from "./lib/curated-cast.js";
+import {
+  holdUnconfirmedRenames,
+  regenerateSeasonFile,
+} from "./lib/curated-cast.js";
 import {
   assessNewEpisodes,
   heldReasons,
@@ -40,6 +43,7 @@ import {
 } from "./lib/survivor-transformer.js";
 import type {
   SurvivorCastaway,
+  SurvivorCastawayDetails,
   SurvivorChallengeDescription,
 } from "./lib/survivor-types.js";
 import { validateSeasonData } from "./lib/validate-season.js";
@@ -155,15 +159,28 @@ async function main(): Promise<void> {
     return;
   }
 
-  const playerData = transformPlayers(seasonData, seasonNum);
-  const resultsData = transformResults(seasonData, seasonNum);
-
   const seasonKey = `season_${seasonNum}`;
   const seasonDir = path.join(PROJECT_ROOT, "src", "data", seasonKey);
   const seasonFilePath = path.join(seasonDir, "index.ts");
   const existingContent = fs.existsSync(seasonFilePath)
     ? fs.readFileSync(seasonFilePath, "utf-8")
     : undefined;
+
+  // A committed name changes only when survivoR's person table agrees.
+  let renameNotes: string[] = [];
+  if (existingContent !== undefined) {
+    const held = holdUnconfirmedRenames(
+      seasonData.castaways,
+      extractExistingCastawayLookup(existingContent),
+      await fetchTable<SurvivorCastawayDetails>("castaway_details", ref),
+    );
+    seasonData.castaways = held.castaways;
+    renameNotes = held.notes;
+    for (const note of renameNotes) console.log(`  ${note}`);
+  }
+
+  const playerData = transformPlayers(seasonData, seasonNum);
+  const resultsData = transformResults(seasonData, seasonNum);
 
   // Keep the committed cast (images, professions, bios, nicknames and any
   // hand correction) and regenerate only the results; see lib/curated-cast.ts.
@@ -345,7 +362,7 @@ async function main(): Promise<void> {
       events: resultsData.events.length,
       voteHistory: resultsData.voteHistory.length,
     },
-    warnings: [...validation.warnings, ...keptDifferences],
+    warnings: [...renameNotes, ...validation.warnings, ...keptDifferences],
   };
   writeResult(RESULT_PATH, result);
 

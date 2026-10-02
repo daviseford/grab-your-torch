@@ -155,6 +155,16 @@ export interface SurvivorChallengeDescription extends SurvivorBaseRecord {
   challenge_type: string;
 }
 
+/**
+ * castaway_details.json: one row per person across every season and
+ * version, with no `version` or `season` column. Only the columns the sync
+ * reads are typed.
+ */
+export interface SurvivorCastawayDetails {
+  castaway_id: string;
+  full_name: string | null;
+}
+
 /** Table names available from survivoR */
 export type SurvivorTable =
   | "castaways"
@@ -165,4 +175,5 @@ export type SurvivorTable =
   | "advantage_details"
   | "advantage_movement"
   | "tribe_mapping"
-  | "journeys";
+  | "journeys"
+  | "castaway_details";
