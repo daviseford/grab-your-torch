@@ -4,6 +4,7 @@ import * as prettier from "prettier";
 import { describe, expect, it } from "vitest";
 import type { MergedPlayer } from "../codegen";
 import {
+  holdUnconfirmedRenames,
   keepCuratedCast,
   readCommittedCast,
   regenerateSeasonFile,
@@ -341,5 +342,53 @@ describe("keepCuratedCast", () => {
       "US0002",
       "US0003",
     ]);
+  });
+});
+
+describe("holdUnconfirmedRenames", () => {
+  const row = (castaway_id: string, full_name: string, castaway: string) =>
+    ({
+      version: "US",
+      version_season: "US51",
+      season: 51,
+      castaway_id,
+      full_name,
+      castaway,
+      age: 30,
+      city: "London",
+      state: "Ontario",
+    }) as SurvivorCastaway;
+  const committed = [{ castawayId: "US0760", fullName: "Danny Kilby" }];
+
+  it("keeps the committed name when castaway_details still has it (survivoR@6b2bcdc)", () => {
+    const { castaways, notes } = holdUnconfirmedRenames(
+      [row("US0760", "Kilby Kilby", "Kilby")],
+      committed,
+      [{ castaway_id: "US0760", full_name: "Danny Kilby" }],
+    );
+
+    expect(castaways).toEqual([row("US0760", "Danny Kilby", "Kilby")]);
+    expect(notes).toEqual([
+      'US0760: kept full_name "Danny Kilby"; survivoR castaways has "Kilby Kilby" but castaway_details still has "Danny Kilby"',
+    ]);
+  });
+
+  it("takes a rename castaway_details agrees with or does not contradict", () => {
+    const rows = [
+      row("US0760", "Dan Kilby", "Dan"),
+      row("US0761", "Devin Way", "Devin"),
+      row("US0999", "New Person", "New"),
+    ];
+    const { castaways, notes } = holdUnconfirmedRenames(
+      rows,
+      [...committed, { castawayId: "US0761", fullName: "Devin W" }],
+      [
+        { castaway_id: "US0760", full_name: "Dan Kilby" },
+        { castaway_id: "US0761", full_name: null },
+      ],
+    );
+
+    expect(castaways).toEqual(rows);
+    expect(notes).toEqual([]);
   });
 });

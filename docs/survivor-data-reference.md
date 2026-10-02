@@ -203,6 +203,8 @@ survivoR uses preferred/stage names rather than full legal names:
 
 The `castaway_details.json` table has `full_name_detailed` which may include the legal name, but it lacks `version`/`season` fields (it's a global lookup).
 
+The sync reads one column of it, `full_name`, as a check on renames. When `castaways.json` changes the `full_name` of a castaway already in the committed season file, but `castaway_details.json` still has the committed name for that `castaway_id`, the sync keeps the committed name and lists it under the pull request's warnings (`holdUnconfirmedRenames` in `scripts/lib/curated-cast.ts`). This is how survivoR@`6b2bcdc` turned US0760's edited short name "Kilby" into a `castaways` full name of "Kilby Kilby" while `castaway_details` kept "Danny Kilby". A rename both tables agree on still comes through.
+
 ## Pre-Premiere Cast Bootstrap (Provisional IDs)
 
 survivoR only publishes a season once episodes air, but CBS announces the cast a few weeks earlier and the Survivor Wiki season page carries the full castaway table by then. `yarn new-season <N> --wiki-cast` reads that table (`scripts/lib/wiki-cast.ts`) when survivoR has no rows and shapes it like `castaways.json`, so the rest of the pipeline runs unchanged.

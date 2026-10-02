@@ -10,7 +10,9 @@
  *
  * Field authority, applied per castaway already in the committed file:
  * - castaway_id and full_name come from survivoR. validateSeasonData already
- *   refuses an id change and reports a rename.
+ *   refuses an id change and reports a rename. A rename in `castaways` that
+ *   survivoR's own person table, `castaway_details`, does not share is held
+ *   back first (see holdUnconfirmedRenames).
  * - Every other field keeps its committed value. survivoR only fills a field
  *   the committed castaway does not have. When survivoR disagrees with a
  *   committed value, the committed value stays and the difference is
@@ -27,6 +29,10 @@ import {
   mergeScrapedPlayers,
   type MergedPlayer,
 } from "./codegen.js";
+import type {
+  SurvivorCastaway,
+  SurvivorCastawayDetails,
+} from "./survivor-types.js";
 import type { ScrapeResult, ScrapeResultsOutput } from "./types.js";
 
 /** Player fields in a season file, mapped to the MergedPlayer key they fill. */
@@ -275,6 +281,43 @@ export function keepCuratedCast(
 
   const added = fromSource.filter((p) => !committedIds.has(p.castawayId));
   return { cast: [...kept, ...added], keptDifferences };
+}
+
+/**
+ * Keep a committed full name that survivoR's `castaways` table changed but its
+ * `castaway_details` table, the one row per person, still carries.
+ *
+ * survivoR can derive a season's full_name from an edited short name: at
+ * doehm/survivoR@6b2bcdc, US0760's short name became "Kilby" and `castaways`
+ * read "Kilby Kilby" while `castaway_details` kept "Danny Kilby". A rename
+ * both tables agree on, or one the person table does not contradict, still
+ * comes from survivoR as before.
+ */
+export function holdUnconfirmedRenames(
+  castaways: SurvivorCastaway[],
+  committed: ReadonlyArray<{ castawayId: string; fullName: string }>,
+  details: readonly SurvivorCastawayDetails[],
+): { castaways: SurvivorCastaway[]; notes: string[] } {
+  const committedNames = new Map(
+    committed.map((c) => [c.castawayId, c.fullName]),
+  );
+  const personNames = new Map(details.map((d) => [d.castaway_id, d.full_name]));
+  const notes: string[] = [];
+  const held = castaways.map((c) => {
+    const committedName = committedNames.get(c.castaway_id);
+    if (
+      committedName === undefined ||
+      committedName === c.full_name ||
+      personNames.get(c.castaway_id) !== committedName
+    ) {
+      return c;
+    }
+    notes.push(
+      `${c.castaway_id}: kept full_name "${committedName}"; survivoR castaways has "${c.full_name}" but castaway_details still has "${committedName}"`,
+    );
+    return { ...c, full_name: committedName };
+  });
+  return { castaways: held, notes };
 }
 
 /** The `//` comment lines a file opens with, if any. */
