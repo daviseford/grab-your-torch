@@ -1,3 +1,10 @@
+import { execFile } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import {
   PropBetQuestionKeys,
@@ -960,4 +967,107 @@ describe("purity", () => {
     // planRecompute takes RecomputeInput, which has no db member at all.
     expect("db" in (input() as object)).toBe(false);
   });
+});
+
+/* ------------------------------------------------------------------ *
+ * Running the script
+ *
+ * The scheduled workflow runs this file on a Linux runner. A direct-run guard
+ * that never matches there makes every run exit 0 having done nothing, so
+ * these start the real script in a child process and assert on what main()
+ * printed, not on the guard alone.
+ * ------------------------------------------------------------------ */
+
+describe("running the script", () => {
+  const SCRIPT = fileURLToPath(
+    new URL("../recompute-pool-standings.ts", import.meta.url),
+  );
+  const REPO = path.resolve(path.dirname(SCRIPT), "..");
+  const TSX_CLI = createRequire(import.meta.url).resolve("tsx/cli");
+  const run = promisify(execFile);
+
+  /** Exit code and output of `tsx <entry> ...args`, as the workflow runs it. */
+  const cli = async (entry: string, args: string[]) => {
+    // Keep a test run out of the CI job summary.
+    const env = { ...process.env };
+    delete env.GITHUB_STEP_SUMMARY;
+    try {
+      const { stdout, stderr } = await run(
+        process.execPath,
+        [TSX_CLI, entry, ...args],
+        { cwd: REPO, env, timeout: 90_000 },
+      );
+      return { code: 0, stdout, stderr };
+    } catch (error) {
+      const failed = error as {
+        code?: number;
+        stdout?: string;
+        stderr?: string;
+      };
+      return {
+        code: failed.code ?? -1,
+        stdout: failed.stdout ?? "",
+        stderr: failed.stderr ?? "",
+      };
+    }
+  };
+
+  const withFixture = async <T>(fn: (file: string) => Promise<T>) => {
+    const dir = mkdtempSync(path.join(tmpdir(), "standings-cli-"));
+    const file = path.join(dir, "fixture.json");
+    writeFileSync(file, JSON.stringify(fixtureTree(2, 3)));
+    try {
+      return await fn(file);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+
+  it("runs main() when started directly, refusing a missing pool", async () => {
+    const { code, stderr } = await cli(SCRIPT, []);
+    expect(stderr).toContain("Refusing to run: no pool given");
+    expect(code).toBe(1);
+  }, 120_000);
+
+  it("forwards its arguments and dry-runs a fixture without writing", async () => {
+    const { code, stdout } = await withFixture((file) =>
+      cli(SCRIPT, ["99", "--fixture", file]),
+    );
+    expect(code).toBe(0);
+    expect(stdout).toContain(`Recomputing ${POOL_ID} from the fixture`);
+    expect(stdout).toMatch(/Entrants:\s+2\r?\n/);
+    expect(stdout).toMatch(/Newest episode:\s+3\r?\n/);
+    expect(stdout).toContain(`set    pools/${POOL_ID}/standings/episode_3`);
+    expect(stdout).toContain("[DRY RUN] Nothing was written.");
+    expect(stdout).not.toContain("Published");
+  }, 120_000);
+
+  it("keeps --write behind its gate, refusing it with a fixture", async () => {
+    const { code, stdout, stderr } = await withFixture((file) =>
+      cli(SCRIPT, [POOL_ID, "--fixture", file, "--write"]),
+    );
+    expect(code).toBe(1);
+    expect(stderr).toContain("--fixture and --write cannot be combined");
+    // Refused before any database was opened.
+    expect(stdout).not.toContain("Firebase project");
+    expect(stdout).not.toContain("Recomputing");
+  }, 120_000);
+
+  it("does nothing when imported by another script", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "standings-import-"));
+    const importer = path.join(dir, "importer.mts");
+    writeFileSync(
+      importer,
+      `await import(${JSON.stringify(pathToFileURL(SCRIPT).href)});\n` +
+        `console.log("imported");\n`,
+    );
+    try {
+      const { code, stdout, stderr } = await cli(importer, []);
+      expect(code).toBe(0);
+      expect(stdout.trim()).toBe("imported");
+      expect(stderr).not.toContain("Refusing to run");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 120_000);
 });
