@@ -43,6 +43,7 @@ import type {
   ReadableDb,
   ReadableNode,
 } from "./snapshot-firestore.js";
+import { isDirectRun } from "./survivor-radar.js";
 
 import {
   buildJobMetrics,
@@ -473,12 +474,10 @@ async function main(): Promise<void> {
   );
 }
 
-const isDirectRun =
-  process.argv[1] &&
-  import.meta.url ===
-    new URL(`file:///${process.argv[1].replace(/\\/g, "/")}`).href;
-
-if (isDirectRun) {
+// See scripts/recompute-castaway-adp.ts for why this uses pathToFileURL: the
+// hand-built file:/// URL it replaces never matched on the Linux runner, so the
+// scheduled job exited 0 without running.
+if (isDirectRun(import.meta.url, process.argv[1])) {
   main()
     .then(() => process.exit(0))
     .catch((err) => {
