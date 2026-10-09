@@ -33,12 +33,48 @@
  * advantage visible in `vote_history` with no matching play) had exceptions
  * in nine real episodes of Seasons 43 to 50, so they are review notes for the
  * person approving the import, never a reason to hold or to pass.
+ *
+ * Waivers. `READINESS_WAIVERS` lists the few times the owner chose to import
+ * an episode despite one named hard rule failing. Each covers one episode at
+ * one inspected survivoR commit and lifts only that one reason; every other
+ * rule still holds the episode, and a read at any other commit (or at master)
+ * gets no waiver at all.
  */
 
 import type { SurvivorSeasonData } from "./survivor-client.js";
 import type { SurvivorChallengeDescription } from "./survivor-types.js";
 
 export type EpisodeReadinessStatus = "absent" | "partial" | "complete";
+
+/** An owner-authorized exception to one hard rule; see "Waivers" above. */
+export interface ReadinessWaiver {
+  seasonNum: number;
+  episodeNum: number;
+  /** The full survivoR commit whose rows were inspected. */
+  upstreamRef: string;
+  /** The one `missing` reason lifted, exactly as reported. */
+  missing: string;
+  /** The episode's challenge ids in `challenge_results` when inspected. */
+  challengeIds: number[];
+  reason: string;
+}
+
+export const READINESS_WAIVERS: readonly ReadinessWaiver[] = [
+  {
+    // survivoR has every scoring row for Episode 3 but no challenge_description
+    // row for its one listed challenge (4, immunity and reward). The owner
+    // chose to publish the available scores on 2026-10-09 rather than wait. The
+    // missing row would have confirmed that challenge 4 was the episode's only
+    // one.
+    seasonNum: 51,
+    episodeNum: 3,
+    upstreamRef: "2b8c3a32ed7b2b59e24105b0a89b3322eb1b1b0a",
+    missing: "challenge_description: no rows",
+    challengeIds: [4],
+    reason:
+      "owner chose to publish before survivoR described challenge 4 (2026-10-09)",
+  },
+];
 
 /** Season data plus the tables only the readiness gate reads. */
 export interface ReadinessData extends SurvivorSeasonData {
@@ -51,6 +87,8 @@ export interface EpisodeReadiness {
   status: EpisodeReadinessStatus;
   /** Why the episode is not complete; empty when it is. */
   missing: string[];
+  /** Reasons lifted by a waiver in `READINESS_WAIVERS`; usually empty. */
+  waived: string[];
   /**
    * Things a reviewer should check by hand. They never change the status:
    * see "What cannot be proven" above.
@@ -88,6 +126,8 @@ export function assessEpisodeReadiness(
   data: ReadinessData,
   seasonNum: number,
   episodeNum: number,
+  upstreamRef?: string,
+  waivers: readonly ReadinessWaiver[] = READINESS_WAIVERS,
 ): EpisodeReadiness {
   const onEpisode = <T extends { episode?: number | null }>(rows: T[]) =>
     rows.filter((r) => episodeOf(r) === episodeNum);
@@ -121,6 +161,7 @@ export function assessEpisodeReadiness(
       episodeNum,
       status: "absent",
       missing: [`no survivoR rows for episode ${episodeNum}`],
+      waived: [],
       reviewNotes: [],
       counts,
     };
@@ -239,12 +280,32 @@ export function assessEpisodeReadiness(
     );
   }
 
+  const waiver = waivers.find(
+    (w) =>
+      w.seasonNum === seasonNum &&
+      w.episodeNum === episodeNum &&
+      upstreamRef !== undefined &&
+      w.upstreamRef === upstreamRef &&
+      missing.includes(w.missing) &&
+      [...resultIds].sort((a, b) => a - b).join() ===
+        [...w.challengeIds].sort((a, b) => a - b).join(),
+  );
+  const waived = waiver ? [waiver.missing] : [];
+  const stillMissing = missing.filter((m) => !waived.includes(m));
+  const notes = reviewNotes(data, episodeNum, voteRows, counts);
+  if (waiver) {
+    notes.unshift(
+      `waived "${waiver.missing}" at survivoR ${waiver.upstreamRef.slice(0, 7)}: ${waiver.reason}`,
+    );
+  }
+
   return {
     seasonNum,
     episodeNum,
-    status: missing.length === 0 ? "complete" : "partial",
-    missing,
-    reviewNotes: reviewNotes(data, episodeNum, voteRows, counts),
+    status: stillMissing.length === 0 ? "complete" : "partial",
+    missing: stillMissing,
+    waived,
+    reviewNotes: notes,
     counts,
   };
 }
@@ -341,9 +402,10 @@ export function assessNewEpisodes(
   data: ReadinessData,
   seasonNum: number,
   committedEpisodes: number,
+  upstreamRef?: string,
 ): EpisodeReadiness[] {
   return upstreamEpisodesAfter(data, committedEpisodes).map((ep) =>
-    assessEpisodeReadiness(data, seasonNum, ep),
+    assessEpisodeReadiness(data, seasonNum, ep, upstreamRef),
   );
 }
 

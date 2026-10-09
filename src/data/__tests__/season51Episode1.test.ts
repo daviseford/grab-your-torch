@@ -105,7 +105,7 @@ describe("season 51 episode 2", () => {
   ];
 
   it("is the second aired episode, not a finale and not the merge", () => {
-    expect(SEASON_51_EPISODES).toHaveLength(2);
+    expect(SEASON_51_EPISODES.length).toBeGreaterThanOrEqual(2);
     expect(SEASON_51_EPISODES[1]).toMatchObject({
       id: "episode_2",
       order: 2,
@@ -183,5 +183,126 @@ describe("season 51 episode 2", () => {
     );
     expect(savuStillIn).toHaveLength(9);
     for (const id of savuStillIn) expect(totals[id]).toBe(0);
+  });
+});
+
+/**
+ * Season 51 episode 3 as published in doehm/survivoR@2b8c3a3, imported under
+ * the one waiver in scripts/lib/episode-readiness.ts: survivoR has no
+ * challenge_description row for its challenge (4), so nothing confirms it was
+ * the episode's only one. Savu (the seven castaways below) won the combined
+ * immunity and reward challenge; Rob Antonson quit on day 6; Patt Cannaday was
+ * voted out 6 to 5 over Danny Kilby; Carter Krull received Rob's idol; Devin
+ * Way and Brady Booker found extra votes, and Brady gave his to Maggie Nestor.
+ * survivoR has no journey for the episode.
+ */
+describe("season 51 episode 3", () => {
+  const SAVU = [
+    "US0753",
+    "US0759",
+    "US0762",
+    "US0764",
+    "US0766",
+    "US0769",
+    "US0772",
+  ];
+
+  it("is the third aired episode, not a finale and not the merge", () => {
+    expect(SEASON_51_EPISODES[2]).toMatchObject({
+      id: "episode_3",
+      order: 3,
+      name: "What I'm Smellin' Is Stinky",
+      air_date: "2026-10-07",
+      finale: false,
+      merge_occurs: false,
+    });
+  });
+
+  it("credits Savu's immunity and reward win, the quit and the boot", () => {
+    const challenges = inEpisode(SEASON_51_CHALLENGES, 3);
+    expect(challenges.map((c) => c.variant)).toEqual([
+      "team_immunity",
+      "team_reward",
+    ]);
+    for (const c of challenges) {
+      expect([...c.winning_castaways].sort()).toEqual(SAVU);
+    }
+    expect(
+      inEpisode(SEASON_51_ELIMINATIONS, 3).map((e) => [
+        e.castaway_id,
+        e.order,
+        e.variant,
+      ]),
+    ).toEqual([
+      ["US0771", 3, "quitter"],
+      ["US0770", 4, "tribal"],
+    ]);
+  });
+
+  it("records the advantage events and the 6 to 5 vote", () => {
+    expect(
+      inEpisode(SEASON_51_EVENTS, 3).map((e) => [e.castaway_id, e.action]),
+    ).toEqual([
+      ["US0758", "win_idol"],
+      ["US0761", "find_extra_vote"],
+      ["US0757", "find_extra_vote"],
+      ["US0767", "win_other_advantage"],
+    ]);
+
+    const votes = inEpisode(SEASON_51_VOTE_HISTORY, 3);
+    expect(votes).toHaveLength(11);
+    const tally = new Map<string, number>();
+    for (const v of votes) {
+      expect(v.voted_out_castaway_id).toBe("US0770");
+      expect(v.nullified).toBe(false);
+      tally.set(
+        v.target_castaway_id,
+        (tally.get(v.target_castaway_id) ?? 0) + 1,
+      );
+    }
+    expect(Object.fromEntries(tally)).toEqual({ US0770: 6, US0760: 5 });
+  });
+
+  it("scores the episode under the existing rules", () => {
+    const totals = Object.fromEntries(
+      SEASON_51_PLAYERS.map((p) => [
+        p.castaway_id,
+        getEnhancedSurvivorPoints(
+          Object.values(SEASON_51_CHALLENGES),
+          Object.values(SEASON_51_ELIMINATIONS),
+          Object.values(SEASON_51_EVENTS),
+          3,
+          p.castaway_id as CastawayId,
+        ).total,
+      ]),
+    );
+    const points = (action: string) =>
+      BASE_PLAYER_SCORING.find((r) => r.action === action)!.fixed_value!;
+
+    for (const id of SAVU) {
+      expect(totals[id]).toBe(points("team_immunity") + points("team_reward"));
+    }
+    expect(totals.US0758).toBe(points("win_idol"));
+    expect(totals.US0761).toBe(points("find_extra_vote"));
+    expect(totals.US0757).toBe(points("find_extra_vote"));
+    expect(totals.US0767).toBe(points("win_other_advantage"));
+    // The quit comes first; the boot is the episode's second elimination.
+    expect(totals.US0771).toBe(3 + points("quitter"));
+    expect(totals.US0770).toBe(3.5);
+
+    const scored = new Set([
+      ...SAVU,
+      "US0758",
+      "US0761",
+      "US0757",
+      "US0767",
+      "US0771",
+      "US0770",
+    ]);
+    const others = SEASON_51_PLAYERS.map((p) => p.castaway_id).filter(
+      (id) => !scored.has(id),
+    );
+    expect(others).toHaveLength(8);
+    for (const id of others) expect(totals[id]).toBe(0);
   });
 });
