@@ -229,3 +229,121 @@ describe("drafts: the real lifecycle still works", () => {
     );
   });
 });
+
+describe("drafts: picks and finishing follow the turn order", () => {
+  const MALLORY = "uid_mallory";
+  const draft = (uid: string) => dbAs(uid).ref(`drafts/${DRAFT_ID}`);
+
+  /** A live four-pick snake draft: Alice, Bob, Bob, Alice. Pick 1 is next. */
+  const startDraft = async () => {
+    await assertSucceeds(draft(ALICE).set(lobby()));
+    await assertSucceeds(
+      draft(BOB)
+        .child(`participants/${BOB}`)
+        .set({ uid: BOB, displayName: "Bob" }),
+    );
+    await assertSucceeds(
+      draft(ALICE).update({
+        pick_order_uids: { "0": ALICE, "1": BOB },
+        turns: { "1": ALICE, "2": BOB, "3": BOB, "4": ALICE },
+        total_players: 4,
+        "state/started": true,
+        "state/current_pick_number": 1,
+      }),
+    );
+  };
+
+  it("a non-participant cannot finish a lobby or a live draft", async () => {
+    await assertSucceeds(draft(ALICE).set(lobby()));
+    await assertFails(draft(MALLORY).child("state/finished").set(true));
+    await testEnv.clearDatabase();
+    await startDraft();
+    await assertFails(draft(MALLORY).child("state/finished").set(true));
+  });
+
+  it("a participant cannot finish the draft before the last pick", async () => {
+    await startDraft();
+    await assertFails(draft(ALICE).child("state/finished").set(true));
+    await assertFails(draft(BOB).child("state/finished").set(true));
+    // Not even alongside a real pick that is not the last one.
+    await assertFails(
+      draft(ALICE).update({
+        "draft_picks/1": pick(1, ALICE, "US9001"),
+        "state/current_pick_number": 2,
+        "state/finished": true,
+      }),
+    );
+  });
+
+  it("a participant cannot fill another player's slot or a future slot", async () => {
+    await startDraft();
+    // Pick 1 is Alice's. Bob can write neither it nor his own later slots.
+    await assertFails(
+      draft(BOB)
+        .child("draft_picks/1")
+        .set(pick(1, BOB, "US9001")),
+    );
+    await assertFails(
+      draft(BOB)
+        .child("draft_picks/2")
+        .set(pick(2, BOB, "US9002")),
+    );
+    // Alice cannot jump ahead to her next turn either.
+    await assertFails(
+      draft(ALICE)
+        .child("draft_picks/4")
+        .set(pick(4, ALICE, "US9004")),
+    );
+    await assertFails(
+      draft(MALLORY)
+        .child("draft_picks/1")
+        .set(pick(1, MALLORY, "US9001")),
+    );
+  });
+
+  it("a pick cannot be recorded under someone else's name", async () => {
+    await startDraft();
+    await assertFails(
+      draft(ALICE).update({
+        "draft_picks/1": pick(1, BOB, "US9001"),
+        "state/current_pick_number": 2,
+      }),
+    );
+  });
+
+  it("a non-participant cannot finish a draft whose last pick is in", async () => {
+    await startDraft();
+    const turns = [ALICE, BOB, BOB, ALICE];
+    for (const [index, uid] of turns.entries()) {
+      const order = index + 1;
+      await assertSucceeds(
+        draft(uid).update({
+          [`draft_picks/${order}`]: pick(order, uid, `US900${order}`),
+          "state/current_pick_number": order + 1,
+        }),
+      );
+    }
+    await assertFails(draft(MALLORY).child("state/finished").set(true));
+    await assertSucceeds(draft(BOB).child("state/finished").set(true));
+  });
+
+  it("a draft cannot finish with its last slot empty", async () => {
+    await startDraft();
+    const turns = [ALICE, BOB, BOB];
+    for (const [index, uid] of turns.entries()) {
+      const order = index + 1;
+      await assertSucceeds(
+        draft(uid).update({
+          [`draft_picks/${order}`]: pick(order, uid, `US900${order}`),
+          "state/current_pick_number": order + 1,
+        }),
+      );
+    }
+    await assertFails(
+      draft(ALICE).update({
+        "state/current_pick_number": 5,
+        "state/finished": true,
+      }),
+    );
+  });
+});
