@@ -205,26 +205,6 @@
   max-width: 760px;
 }
 
-/* ---------- Ranks (draft order and reveal example) ---------- */
-
-.rank {
-  display: inline-grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--mantine-radius-sm);
-  background: var(--mantine-color-league-6);
-  color: var(--mantine-color-white);
-  font-family: var(--mantine-headings-font-family);
-  font-weight: 700;
-  font-size: 1.0625rem;
-}
-
-.rankFirst {
-  background: var(--mantine-color-gold-4);
-  color: var(--mantine-color-navy-9);
-}
-
 /* ---------- How it works: three plain steps ---------- */
 .steps {
   list-style: none;
@@ -379,14 +359,6 @@
   color: var(--mantine-color-dimmed);
 }
 
-/* ---------- Draft: a short pick order ---------- */
-
-.pickRank {
-  width: 28px;
-  height: 28px;
-  font-size: 0.8125rem;
-}
-
 /* ---------- Jump back in: open drafts as plain rows ---------- */
 .resumeList {
   list-style: none;
@@ -451,15 +423,6 @@
   color: var(--mantine-color-dark-1);
 }
 
-.exampleTotal small {
-  margin-left: 3px;
-  font-size: 0.625rem;
-  letter-spacing: var(--gyt-label-tracking);
-  text-transform: uppercase;
-  color: var(--mantine-color-dimmed);
-  font-weight: 500;
-}
-
 /* ---------- Draft example: the real board inside a plate ---------- */
 .draftExample {
   margin: 0;
@@ -486,9 +449,4 @@
     padding-left: var(--mantine-spacing-md);
     padding-right: var(--mantine-spacing-md);
   }
-}
-
-.exampleCaption {
-  font-size: var(--mantine-font-size-sm);
-  color: var(--mantine-color-dimmed);
 }

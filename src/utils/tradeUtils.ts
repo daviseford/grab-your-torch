@@ -190,23 +190,13 @@ export type Acquisition = {
 };
 
 /**
- * Castaways currently sitting on a roster other than their drafter's, so the
- * UI can say "acquired" where it would otherwise say "drafted".
+ * Castaways sitting on a roster other than their drafter's as of `episode`, so
+ * the UI can say "acquired" where it would otherwise say "drafted". Only
+ * trades whose cutoff has been reached count, so the marker appears when the
+ * roster swap does and not an episode early.
  *
  * A castaway traded away and later traded back is absent: their drafter owns
  * them again, so nothing distinguishes them from a pick that never moved.
- */
-export function getAcquisitions(
-  draftPicks: DraftPick[],
-  trades: Trade[],
-): Record<CastawayId, Acquisition> {
-  return getAcquisitionsAtEpisode(draftPicks, trades, Infinity);
-}
-
-/**
- * Acquisitions as of `episode`: only trades whose cutoff has been reached
- * count, so the "acquired" marker appears when the roster swap does and not an
- * episode early.
  */
 export function getAcquisitionsAtEpisode(
   draftPicks: DraftPick[],

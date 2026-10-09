@@ -9,6 +9,7 @@ import type {
 } from "../types";
 import { filterEpisodesByMax, filterRecordByEpisode } from "./episodeFilter";
 import { getParticipantName } from "./misc";
+import { rankOfTotal } from "./myStats";
 import { getPropBetScoresByUser } from "./propBetUtils";
 import { getSeasonPointsByCastaway } from "./seasonPoints";
 import { getOwnedCastawaysAtEpisode } from "./tradeUtils";
@@ -130,11 +131,9 @@ export const rankCompetitionStandings = (
     ),
     total: totals[uid] ?? 0,
   }));
+  const allTotals = entries.map((entry) => entry.total);
   return entries
-    .map((entry) => ({
-      ...entry,
-      rank: 1 + entries.filter((other) => other.total > entry.total).length,
-    }))
+    .map((entry) => ({ ...entry, rank: rankOfTotal(allTotals, entry.total) }))
     .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
 };
 

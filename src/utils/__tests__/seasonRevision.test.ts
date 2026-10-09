@@ -11,7 +11,6 @@ import {
   buildSeasonRevisionStamp,
   computeSeasonDataRevision,
   removeById,
-  removeEpisode,
   upsertById,
   upsertEpisode,
 } from "../seasonRevision";
@@ -195,7 +194,9 @@ describe("admin CRUD paths bump the data revision", () => {
     };
     const removed = {
       ...before,
-      episodes: removeEpisode(before.episodes, "episode_2"),
+      episodes: before.episodes.filter(
+        (e) => (e as { id?: string }).id !== "episode_2",
+      ),
     };
 
     const baseRevision = buildSeasonRevisionStamp(before).data_revision;

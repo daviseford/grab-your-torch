@@ -1,7 +1,7 @@
 /**
  * Generates TypeScript season data files from scraped JSON merged with existing data.
- * Only rewrites the player section (imports through SEASON_XX_PLAYERS export).
- * Everything after the player export is copied verbatim from the existing file.
+ * `generateFullSeasonFile` writes the whole file; existing player images are
+ * carried over from the committed file when one is given.
  */
 
 import * as fs from "fs";
@@ -96,38 +96,6 @@ export function extractExistingPlayers(
   }
 
   return players;
-}
-
-/**
- * Find the boundary line after the SEASON_XX_PLAYERS export.
- * Returns the index of the character AFTER the satisfies line + semicolon.
- */
-export function findPlayerSectionEnd(
-  fileContent: string,
-  seasonNum: number,
-): number {
-  // Look for the satisfies line that ends the players array
-  const patterns = [
-    `] satisfies Player<CastawayIdType, SeasonNumber>[];`,
-    `] satisfies Player<PlayerName, SeasonNumber>[];`,
-    `] satisfies Player<PlayerName, ${seasonNum}>[];`,
-  ];
-
-  for (const pattern of patterns) {
-    const idx = fileContent.indexOf(pattern);
-    if (idx !== -1) {
-      return idx + pattern.length;
-    }
-  }
-
-  // Fallback: look for generic satisfies pattern
-  const satisfiesRegex = /\]\s*satisfies\s*Player<[^>]+>\[\];/;
-  const fallbackMatch = satisfiesRegex.exec(fileContent);
-  if (fallbackMatch) {
-    return fallbackMatch.index + fallbackMatch[0].length;
-  }
-
-  return -1;
 }
 
 /**
@@ -260,22 +228,6 @@ export function mergeScrapedPlayers(
 }
 
 /**
- * Generate the player section of a season data file.
- */
-export function generatePlayerSection(
-  seasonNum: number,
-  scrapedPlayers: ScrapedPlayer[],
-  existingPlayers: ExistingPlayerData[],
-  imgConstant: { constLine: string; prefix: string } | null,
-): string {
-  return renderPlayerSection(
-    seasonNum,
-    mergeScrapedPlayers(scrapedPlayers, existingPlayers),
-    imgConstant,
-  );
-}
-
-/**
  * Render the player section (CastawayIds, types, buildPlayer, lookup and
  * SEASON_XX_PLAYERS) for castaways that are already merged.
  */
@@ -345,96 +297,6 @@ export function renderPlayerSection(
   lines.push(`] satisfies Player<CastawayIdType, SeasonNumber>[];`);
 
   return lines.join("\n");
-}
-
-/**
- * Find the start of the player section in the existing file.
- * Looks for the const Players or const Season_X_Players array.
- */
-export function findPlayerSectionStart(fileContent: string): number {
-  // Match: "// eslint-disable-next-line" comment before const Players/Season_*_Players
-  const eslintComment = fileContent.indexOf(
-    "// eslint-disable-next-line @typescript-eslint/no-unused-vars",
-  );
-  if (eslintComment !== -1) {
-    // Find the start of this line
-    const lineStart = fileContent.lastIndexOf("\n", eslintComment);
-    return lineStart === -1 ? eslintComment : lineStart + 1;
-  }
-
-  // Fallback: find const CastawayIds, const Players, or const Season_*_Players
-  const patterns = [
-    /^const CastawayIds\s*=/m,
-    /^const Players\s*=/m,
-    /^const Season_\d+_Players\s*=/m,
-  ];
-  for (const pattern of patterns) {
-    const match = pattern.exec(fileContent);
-    if (match) return match.index;
-  }
-
-  return -1;
-}
-
-/**
- * Generate a complete updated season data file.
- * Finds the player section (from const Players array to satisfies line),
- * replaces it, and preserves everything before and after.
- */
-export function generateSeasonFile(
-  seasonNum: number,
-  scrapeResultPath: string,
-  existingFilePath: string,
-): string {
-  // Read inputs
-  const scrapeData: ScrapeResult = JSON.parse(
-    fs.readFileSync(scrapeResultPath, "utf-8"),
-  );
-  const existingContent = fs.readFileSync(existingFilePath, "utf-8");
-
-  // Extract existing player data
-  const existingPlayers = extractExistingPlayers(existingContent);
-
-  // Detect IMG constant pattern
-  const imgConstant = detectImgConstant(existingContent);
-
-  // Find the player section boundaries
-  const startIndex = findPlayerSectionStart(existingContent);
-  if (startIndex === -1) {
-    throw new Error(
-      `Could not find player section start in ${existingFilePath}`,
-    );
-  }
-
-  const endIndex = findPlayerSectionEnd(existingContent, seasonNum);
-  if (endIndex === -1) {
-    throw new Error(`Could not find player section end in ${existingFilePath}`);
-  }
-
-  // Get the parts before and after the player section
-  let beforePlayers = existingContent.slice(0, startIndex);
-  let afterPlayers = existingContent.slice(endIndex);
-
-  // Normalize old type names throughout (e.g., S9_Players → PlayerName, SeasonNum → SeasonNumber)
-  const typeReplacements: [RegExp, string][] = [
-    [/\bS9_Players\b/g, "PlayerName"],
-    [/\bSeasonNum\b/g, "SeasonNumber"],
-    [/\bSeason_9_Players\b/g, "PlayerName"],
-  ];
-  for (const [pattern, replacement] of typeReplacements) {
-    beforePlayers = beforePlayers.replace(pattern, replacement);
-    afterPlayers = afterPlayers.replace(pattern, replacement);
-  }
-
-  // Generate new player section (without imports — they're in beforePlayers)
-  const playerSection = generatePlayerSection(
-    seasonNum,
-    scrapeData.players,
-    existingPlayers,
-    imgConstant,
-  );
-
-  return beforePlayers + playerSection + afterPlayers;
 }
 
 // ---------------------------------------------------------------------------

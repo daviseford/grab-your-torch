@@ -4,6 +4,7 @@ import { useCompetitionMeta } from "../../hooks/useCompetitionMeta";
 import { useScoringCalculations } from "../../hooks/useScoringCalculations";
 import { useUser } from "../../hooks/useUser";
 import { getParticipantName } from "../../utils/misc";
+import { rankOfTotal } from "../../utils/myStats";
 import classes from "./ParticipantScoreboard.module.css";
 import shared from "./ScoringTables.module.css";
 
@@ -48,15 +49,14 @@ export const ParticipantScoreboard = () => {
     })
     .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
 
-  const rankOf = (total: number) =>
-    1 + entries.filter((entry) => entry.total > total).length;
+  const allTotals = entries.map((entry) => entry.total);
   const hasPoints = entries.some((entry) => entry.total !== 0);
 
   return (
     <section className={classes.root} aria-label="Scoreboard">
       <ul className={classes.list} role="list">
         {entries.map((entry) => {
-          const rank = rankOf(entry.total);
+          const rank = rankOfTotal(allTotals, entry.total);
           const isFirst = rank === 1 && hasPoints;
           const isMe = entry.uid === slimUser?.uid;
           const roster = survivorsByUserUid[entry.uid] ?? [];

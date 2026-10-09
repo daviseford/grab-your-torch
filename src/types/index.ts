@@ -194,23 +194,6 @@ export type DraftPick = {
   player_name: string;
 };
 
-export type PropBet = {
-  id: `propbet_${string}`;
-
-  season_id: Season["id"];
-  season_num: number;
-  draft_id: Draft["id"];
-
-  description: string;
-  point_value: number;
-  answers: {
-    participant_uid: string;
-    answer: string;
-  }[];
-  correct_answer: string;
-  finished: boolean;
-};
-
 export type Competition = {
   id: `competition_${string}`;
   competition_name: string;
@@ -388,8 +371,6 @@ export const GameProgressActions = [
   "medically_evacuated",
   "quitter",
 ] as const;
-
-export type GameProgressAction = (typeof GameProgressActions)[number];
 
 export const PlayerActions = [
   ...ChallengeWinActions,

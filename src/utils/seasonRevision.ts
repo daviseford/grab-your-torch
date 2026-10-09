@@ -91,10 +91,3 @@ export function upsertEpisode(
     ? episodes.map((e) => ((e as Episode)?.id === episode.id ? episode : e))
     : [...episodes, episode];
 }
-
-export function removeEpisode(
-  episodes: readonly unknown[],
-  id: Episode["id"],
-): unknown[] {
-  return episodes.filter((e) => (e as Episode)?.id !== id);
-}

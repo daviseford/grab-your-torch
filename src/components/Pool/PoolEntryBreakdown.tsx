@@ -51,9 +51,10 @@ export const PoolEntryBreakdown = ({
   if (isLoading || !scores) return null;
 
   if (scores.kind === "awaiting-data") {
-    // Season 51's normal state today: no season document, no episodes, no
-    // results. Scoring has not started, which is a different thing from
-    // everyone having scored nothing, so this is never a table of zeros.
+    // A pool season before its first scored episode: no season document or
+    // no episodes, and no results. Scoring has not started, which is a
+    // different thing from everyone having scored nothing, so this is never
+    // a table of zeros.
     return (
       <EmptySlate title="Scoring starts after the first episode">
         Your entry is saved. Points appear here week by week once the premiere

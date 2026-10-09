@@ -263,11 +263,11 @@ code, so a scheduled or hand-run job cannot slip through during the window:
 - the ADP job, whose writes each re-read the ledger in their own transaction
   and refuse if the cutover state moved since the job planned (for instance
   a cutover began while it computed);
-- `seed-competition`, which refuses while a cutover is in progress;
-- the legacy `migrate-to-castaway-id --upload`, which refuses once any
-  cutover has begun or finished. The #279 decision (publishing Season
-  51 results) is still held only by the disabled sync workflow. Once the
-  cutover is finalized, pushing a remapped bundle is allowed again.
+- `seed-competition`, which refuses while a cutover is in progress.
+
+The #279 decision (publishing Season 51 results) is still held only by the
+disabled sync workflow. Once the cutover is finalized, pushing a remapped
+bundle is allowed again.
 
 ### Live drafts
 

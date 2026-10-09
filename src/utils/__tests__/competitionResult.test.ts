@@ -15,6 +15,8 @@ import {
   rankCompetitionStandings,
   type CompetitionSeasonData,
 } from "../competitionResult";
+import { rankOfTotal } from "../myStats";
+import { rankPoolEntries } from "../poolRanking";
 import { getPropBetScoresByUser } from "../propBetUtils";
 
 const ALICE = "US0001" as CastawayId;
@@ -140,6 +142,31 @@ describe("rankCompetitionStandings", () => {
       ["Ben", 1],
       ["Cy", 3],
     ]);
+  });
+
+  it("agrees with rankOfTotal, unlike the dense pool ranking", () => {
+    const totals = { u1: 10, u2: 10, u3: 4 };
+    const competition = makeCompetition({
+      participant_uids: ["u1", "u2", "u3"],
+      participants: [
+        ...makeCompetition().participants,
+        { uid: "u3", displayName: "Cy", email: "", isAdmin: false },
+      ],
+    });
+    const standings = rankCompetitionStandings(competition, totals);
+    const values = Object.values(totals);
+    expect(standings.map((s) => s.rank)).toEqual(
+      standings.map((s) => rankOfTotal(values, s.total)),
+    );
+    expect(standings.map((s) => s.rank)).toEqual([1, 1, 3]);
+
+    // Pool standings rank densely on purpose: the next total after a tie is 2.
+    const pool = rankPoolEntries(
+      Object.keys(totals).map((uid) => ({ uid, handle: uid, picks: [] })),
+      {},
+      totals,
+    );
+    expect(pool.map((row) => row.rank)).toEqual([1, 1, 2]);
   });
 
   it("scores a participant with no total as zero", () => {
