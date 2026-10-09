@@ -487,4 +487,48 @@ describe("transformResults", { timeout: 60000 }, () => {
       ).toHaveLength(0);
     }
   });
+
+  describe("S51 advantage handovers (Gave and Holding)", () => {
+    // survivoR 07ce166 recorded the Episode 3 handovers as "Received" only;
+    // 2b8c3a3 added "Gave" by the giver and "Holding" rows at each vote.
+    const BEFORE_GAVE = "07ce1660d8312f8e2882244c36dc24fca597998a";
+    const WITH_GAVE = "2b8c3a32ed7b2b59e24105b0a89b3322eb1b1b0a";
+    const episode3 = (data: SurvivorSeasonData) =>
+      transformResults(data, 51)
+        .events.filter((e) => e.episodeNum === 3)
+        .map((e) => `${e.castawayId}:${e.action}`);
+
+    it("scores each handover once, for the recipient only", async () => {
+      const withGave = await fetchSeasonData(51, WITH_GAVE);
+      const lifecycle = withGave.advantageMovement.map((m) => m.event);
+      expect(lifecycle).toContain("Gave");
+      expect(lifecycle).toContain("Holding");
+
+      expect(episode3(withGave)).toEqual([
+        "US0758:win_idol",
+        "US0761:find_extra_vote",
+        "US0757:find_extra_vote",
+        "US0767:win_other_advantage",
+      ]);
+      // Recipient scoring is what it was before survivoR added the new rows.
+      expect(episode3(withGave)).toEqual(
+        episode3(await fetchSeasonData(51, BEFORE_GAVE)),
+      );
+    });
+
+    it("still fails closed on an advantage event it does not know", async () => {
+      const data = await fetchSeasonData(51, WITH_GAVE);
+      const gave = data.advantageMovement.find((m) => m.event === "Gave")!;
+      const withUnknown = {
+        ...data,
+        advantageMovement: [
+          ...data.advantageMovement,
+          { ...gave, sequence_id: 99, event: "Swapped" },
+        ],
+      };
+      expect(() => transformResults(withUnknown, 51)).toThrow(
+        'Unknown advantage event "Swapped"',
+      );
+    });
+  });
 });
