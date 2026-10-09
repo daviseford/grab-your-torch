@@ -77,8 +77,8 @@ export const usePoolEntryScores = (
     if (access !== "breakdown" || !entry) return undefined;
     return projectPoolEntryScores({
       picks: entry.picks,
-      // Season 51 has no season document in Firestore at all, so this is the
-      // empty list today and the projection answers "awaiting-data" rather
+      // Before a pool season has a season document (or any episodes), this is
+      // the empty list and the projection answers "awaiting-data" rather
       // than rendering a table of zeros (KTD8).
       episodes: season?.episodes ?? [],
       challenges: Object.values(challenges),

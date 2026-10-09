@@ -18,7 +18,7 @@ import {
   formatPremiereDate,
   getSeasonAirStatus,
 } from "../utils/seasonAirStatus";
-import { SEASON_ERAS, type SeasonEraId } from "./SeasonEras";
+import { getSeasonEra, SEASON_ERAS, type SeasonEraId } from "./SeasonEras";
 import classes from "./Seasons.module.css";
 import { SeasonTile } from "./SeasonTile";
 
@@ -44,9 +44,7 @@ function matchesSearch(meta: SeasonMeta, query: string): boolean {
 }
 
 function matchesEra(meta: SeasonMeta, filter: EraFilter): boolean {
-  if (filter === "all") return true;
-  const era = SEASON_ERAS.find((e) => e.id === filter);
-  return !!era && meta.order >= era.min && meta.order <= era.max;
+  return filter === "all" || getSeasonEra(meta.order).id === filter;
 }
 
 export const Seasons = () => {

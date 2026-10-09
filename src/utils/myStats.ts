@@ -75,7 +75,11 @@ export const PODIUM_MIN_FIELD = 4;
 export const SMALL_SAMPLE_FINISHED = 3;
 export const PROP_BET_MIN_RESOLVED = 5;
 
-/** Rank convention shared with ParticipantScoreboard and the pool standings. */
+/**
+ * Competition ranking (1, 1, 3): ties share a rank and the next rank skips.
+ * Shared by My Stats, `rankCompetitionStandings` and ParticipantScoreboard.
+ * Pool standings deliberately rank densely instead (see `rankPoolEntries`).
+ */
 export const rankOfTotal = (totals: number[], total: number): number =>
   1 + totals.filter((t) => t > total).length;
 

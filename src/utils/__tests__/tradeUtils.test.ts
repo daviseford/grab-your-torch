@@ -10,7 +10,6 @@ import {
 } from "../../types";
 import {
   getAcquisitionLabel,
-  getAcquisitions,
   getAcquisitionsAtEpisode,
   getCurrentOwners,
   getDrafters,
@@ -409,7 +408,7 @@ describe("getAcquisitionsAtEpisode", () => {
   });
 });
 
-describe("getDrafters / getAcquisitions", () => {
+describe("getDrafters / getAcquisitionsAtEpisode after every trade", () => {
   const picks = [makePick(C1, ALICE), makePick(C2, BOB)];
   const aliceToBob = makeTrade({
     offered_by_uid: ALICE,
@@ -429,14 +428,18 @@ describe("getDrafters / getAcquisitions", () => {
   });
 
   it("reports nothing acquired when no trade has been accepted", () => {
-    expect(getAcquisitions(picks, [])).toEqual({});
+    expect(getAcquisitionsAtEpisode(picks, [], Infinity)).toEqual({});
     expect(
-      getAcquisitions(picks, [{ ...aliceToBob, status: "pending" }]),
+      getAcquisitionsAtEpisode(
+        picks,
+        [{ ...aliceToBob, status: "pending" }],
+        Infinity,
+      ),
     ).toEqual({});
   });
 
   it("names the current owner and who they came from", () => {
-    expect(getAcquisitions(picks, [aliceToBob])).toEqual({
+    expect(getAcquisitionsAtEpisode(picks, [aliceToBob], Infinity)).toEqual({
       [C1]: { uid: BOB, fromUid: ALICE },
       [C2]: { uid: ALICE, fromUid: BOB },
     });
@@ -451,7 +454,11 @@ describe("getDrafters / getAcquisitions", () => {
       status: "accepted",
       effective_episode: 8,
     });
-    const acquisitions = getAcquisitions(picks, [aliceToBob, backToAlice]);
+    const acquisitions = getAcquisitionsAtEpisode(
+      picks,
+      [aliceToBob, backToAlice],
+      Infinity,
+    );
 
     expect(acquisitions[C1]).toBeUndefined();
     expect(acquisitions[C2]).toEqual({ uid: ALICE, fromUid: BOB });
@@ -467,7 +474,9 @@ describe("getDrafters / getAcquisitions", () => {
       effective_episode: 9,
     });
 
-    expect(getAcquisitions(picks, [aliceToBob, bobToCarol])[C1]).toEqual({
+    expect(
+      getAcquisitionsAtEpisode(picks, [aliceToBob, bobToCarol], Infinity)[C1],
+    ).toEqual({
       uid: CAROL,
       fromUid: BOB,
     });

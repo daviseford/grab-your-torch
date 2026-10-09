@@ -324,8 +324,11 @@ export function checkBoundaries(
 ): Violation[] {
   const violations: Violation[] = [];
   for (const rule of rules) {
-    const allowed = new Set((rule.allow ?? []).map((a) => `${a.from} ${a.to}`));
-    const isAllowed = (from: string, to: string) => allowed.has(`${from} ${to}`);
+    const allowed = new Set(
+      (rule.allow ?? []).map((a) => `${a.from}\u0000${a.to}`),
+    );
+    const isAllowed = (from: string, to: string) =>
+      allowed.has(`${from}\u0000${to}`);
     const sources = [...graph.keys()].filter((f) => matchesAny(f, rule.from));
     for (const source of sources) {
       if (rule.mode === "direct") {

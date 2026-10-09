@@ -180,11 +180,10 @@ export const loadPoolStandingsInputs = async (
 /* ------------------------------------------------------------------ *
  * A fixture database
  *
- * The job cannot be run end to end against real data yet, by design: Season
- * 51 has no season document in Firestore. So the fixture is the proof. This
- * builds a read-only view over a plain JSON tree in the same shape a
- * `snapshot-firestore` backup walks, and it is the exact code path the read
- * accounting in the tests measures.
+ * `--fixture` runs the job without Firebase. This builds a read-only view
+ * over a plain JSON tree in the same shape a `snapshot-firestore` backup
+ * walks, and it is the exact code path the read accounting in the tests
+ * measures.
  * ------------------------------------------------------------------ */
 
 const asNode = (value: unknown): ReadableNode =>

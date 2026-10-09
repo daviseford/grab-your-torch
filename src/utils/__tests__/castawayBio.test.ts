@@ -1,9 +1,27 @@
 import { describe, expect, it } from "vitest";
+import { SEASON_51_BIOS } from "../../data/castawayBios";
 import { SEASON_51_PLAYERS } from "../../data/season_51";
 import type { Player } from "../../types";
 import { getCastawayBio, rosterGenderBreakdown } from "../castawayBio";
 
 describe("castaway bios", () => {
+  it("gives every bundled Season 51 castaway a curated bio and gender", () => {
+    for (const player of SEASON_51_PLAYERS) {
+      const bio = getCastawayBio(player);
+      expect(bio.sources, player.full_name).toBeDefined();
+      expect(bio.gender, player.full_name).toMatch(/^(Male|Female)$/);
+    }
+  });
+
+  it("has no curated Season 51 bio without a bundled castaway", () => {
+    const bundled = new Set<string>(
+      SEASON_51_PLAYERS.map((p) => p.castaway_id),
+    );
+    expect(
+      Object.keys(SEASON_51_BIOS).filter((id) => !bundled.has(id)),
+    ).toEqual([]);
+  });
+
   it("uses canonical IDs when a returning castaway has changed their name", () => {
     const amber = {
       ...SEASON_51_PLAYERS[0],
@@ -14,25 +32,18 @@ describe("castaway bios", () => {
     } satisfies Player;
     expect(rosterGenderBreakdown([amber])).toBe("0 male · 1 female");
   });
-  it("keeps Jelly's curated bio under survivoR's name for her", () => {
-    // The bundle carries either name, before or after the id remap.
-    const bundled = SEASON_51_PLAYERS.find((p) =>
-      ["Jelly Loblack", "Angelica Loblack"].includes(p.full_name),
-    )!;
-    const jelly = {
+  it("keeps Jelly's curated bio under either of her names", () => {
+    const bundled = SEASON_51_PLAYERS.find((p) => p.castaway_id === "US0756")!;
+    const jelly = { ...bundled, full_name: "Jelly Loblack" } satisfies Player;
+    const angelica = {
       ...bundled,
-      castaway_id: "US0761",
-      full_name: "Jelly Loblack",
-    } satisfies Player;
-    const renamed = {
-      ...bundled,
-      castaway_id: "US0756",
       full_name: "Angelica Loblack",
     } satisfies Player;
-    expect(getCastawayBio(renamed).sources).toEqual(
-      getCastawayBio(jelly).sources,
-    );
-    expect(getCastawayBio(renamed).sources).toBeDefined();
+    expect(getCastawayBio(angelica)).toEqual(getCastawayBio(jelly));
+    expect(getCastawayBio(angelica)).toMatchObject({
+      gender: "Female",
+      hobbies: expect.any(String),
+    });
   });
   it("counts the screenshot roster using documented genders", () => {
     const names = [
@@ -63,10 +74,18 @@ describe("castaway bios", () => {
     expect(rosterGenderBreakdown([])).toBe("");
   });
 
-  it("does not attach a provisional ID's biography to another person", () => {
-    const changed = { ...SEASON_51_PLAYERS[0], full_name: "Different Person" };
-    expect(getCastawayBio(changed).hobbies).toBeUndefined();
-    expect(getCastawayBio(changed).gender).toBeUndefined();
+  it("keys Season 51 bios by castaway_id, not by name", () => {
+    const renamed = { ...SEASON_51_PLAYERS[0], full_name: "Different Name" };
+    expect(getCastawayBio(renamed)).toEqual(
+      getCastawayBio(SEASON_51_PLAYERS[0]),
+    );
+    const otherSeason = {
+      ...SEASON_51_PLAYERS[0],
+      season_num: 52,
+      season_id: "season_52",
+    } satisfies Player;
+    expect(getCastawayBio(otherSeason).hobbies).toBeUndefined();
+    expect(getCastawayBio(otherSeason).gender).toBeUndefined();
   });
 
   it("keeps hometown separate from birthplace and current residence", () => {

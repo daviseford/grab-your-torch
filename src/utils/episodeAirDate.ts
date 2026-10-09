@@ -172,20 +172,3 @@ export function getCompetitionAwaitingDataEpisode({
 
   return getAwaitingDataEpisode(season, latestDataEpisode, now);
 }
-
-/**
- * The next episode scheduled to air after today, or null when the season
- * has no future-dated episodes.
- */
-export function getNextAiringEpisode(
-  season: Season,
-  now: Date = new Date(),
-): Episode | null {
-  const broadcastDate = toBroadcastDateTime(now).date;
-  return (
-    [...(season.episodes ?? [])]
-      .sort(byOrder)
-      .find((ep) => ep.air_date !== undefined && ep.air_date > broadcastDate) ??
-    null
-  );
-}

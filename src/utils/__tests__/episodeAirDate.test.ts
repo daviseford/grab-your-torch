@@ -11,7 +11,6 @@ import {
   getAwaitingDataEpisode,
   getCompetitionAwaitingDataEpisode,
   getLatestDataEpisode,
-  getNextAiringEpisode,
 } from "../episodeAirDate";
 
 // Keep scheduling cases stable when the real season is marked complete.
@@ -318,29 +317,5 @@ describe("getCompetitionAwaitingDataEpisode", () => {
   it("does not show the banner after the competition or season ends", () => {
     expect(getResult({ finished: true })).toBeNull();
     expect(getResult({ hasWinner: true })).toBeNull();
-  });
-});
-
-describe("getNextAiringEpisode", () => {
-  it("returns the first future-dated episode", () => {
-    const season = makeSeason([
-      makeEpisode(1, "2026-02-25"),
-      makeEpisode(2, "2026-03-18"),
-      makeEpisode(3, "2026-03-25"),
-    ]);
-    expect(getNextAiringEpisode(season, BEFORE_BROADCAST)?.order).toBe(2);
-  });
-
-  it("returns null when no episodes are future-dated", () => {
-    const season = makeSeason([
-      makeEpisode(1, "2026-02-25"),
-      makeEpisode(2, "2026-03-11"),
-    ]);
-    expect(getNextAiringEpisode(season, BEFORE_BROADCAST)).toBeNull();
-  });
-
-  it("returns null when episodes have no air dates", () => {
-    const season = makeSeason([makeEpisode(1), makeEpisode(2)]);
-    expect(getNextAiringEpisode(season, BEFORE_BROADCAST)).toBeNull();
   });
 });

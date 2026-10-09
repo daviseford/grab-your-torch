@@ -24,17 +24,24 @@ describe("getSeasonEra", () => {
   it("places every band boundary in its own era", () => {
     const ids = SEASON_ERAS.map((era) => era.id);
     expect(
-      [1, 8, 9, 20, 21, 33, 34, 50].map((n) => getSeasonEra(n).id),
+      [1, 8, 9, 20, 21, 33, 34, 51].map((n) => getSeasonEra(n).id),
     ).toEqual([ids[0], ids[0], ids[1], ids[1], ids[2], ids[2], ids[3], ids[3]]);
   });
 
-  it("treats seasons past the last band as the newest era", () => {
-    expect(getSeasonEra(51).id).toBe("new");
+  it("puts seasons not registered yet in the open-ended newest era", () => {
+    for (const n of [52, 60, 100]) {
+      const era = getSeasonEra(n);
+      expect(era.id, `season ${n}`).toBe("new");
+      expect(n >= era.min && n <= era.max, `season ${n}`).toBe(true);
+    }
+  });
+
+  it("falls back to the newest era below the first band", () => {
     expect(getSeasonEra(0).id).toBe("new");
   });
 
-  it("covers 1 through 50 without gaps", () => {
-    for (let n = 1; n <= 50; n++) {
+  it("covers 1 through 52 without gaps", () => {
+    for (let n = 1; n <= 52; n++) {
       const era = getSeasonEra(n);
       expect(n >= era.min && n <= era.max, `season ${n}`).toBe(true);
     }

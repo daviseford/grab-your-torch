@@ -5,7 +5,8 @@ export const SEASON_ERAS = [
   { id: "classic", label: "Classic", range: "1–8", min: 1, max: 8 },
   { id: "middle", label: "Middle", range: "9–20", min: 9, max: 20 },
   { id: "modern", label: "Modern", range: "21–33", min: 21, max: 33 },
-  { id: "new", label: "New Era", range: "34–51", min: 34, max: 51 },
+  // Open-ended so a newly registered season joins the newest era by itself.
+  { id: "new", label: "New Era", range: "34+", min: 34, max: Infinity },
 ] as const;
 
 export type SeasonEraId = (typeof SEASON_ERAS)[number]["id"];
