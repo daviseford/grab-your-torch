@@ -716,6 +716,8 @@ const IGNORED_ADVANTAGE_EVENTS = new Set([
   "Destroyed",
   "Discarded",
   "Expired",
+  "Gave", // Recipient's "Received" event handles the scoring
+  "Holding", // Status snapshot at a vote, not a lifecycle change
   "Left game with advantage",
   "Medically evacuated with advantage",
   "Quit with advantage",
