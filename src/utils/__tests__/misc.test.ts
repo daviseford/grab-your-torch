@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SlimUser } from "../../types";
-import { getParticipantName } from "../misc";
+import { formatPoints, getParticipantName } from "../misc";
 
 const participants: SlimUser[] = [
   {
@@ -38,5 +38,21 @@ describe("getParticipantName", () => {
     expect(getParticipantName(participants, "uid_zzz", {})).toBe(
       "Unknown participant",
     );
+  });
+});
+
+describe("formatPoints", () => {
+  it("signs positive points", () => {
+    expect(formatPoints(3)).toBe("+3");
+    expect(formatPoints(0.5)).toBe("+0.5");
+  });
+
+  it("shows negative points with a single minus sign", () => {
+    expect(formatPoints(-2)).toBe("-2");
+    expect(formatPoints(-0.5)).toBe("-0.5");
+  });
+
+  it("leaves zero unsigned", () => {
+    expect(formatPoints(0)).toBe("0");
   });
 });

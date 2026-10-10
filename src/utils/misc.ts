@@ -7,6 +7,9 @@ export const getNumberWithOrdinal = (n: number) => {
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 };
 
+/** Signed point label: "+3", "-2", "0". */
+export const formatPoints = (n: number) => (n > 0 ? `+${n}` : `${n}`);
+
 /**
  * Display name for a participant uid. A per-competition team name (from
  * `Competition.team_names`) wins, then displayName, then email.

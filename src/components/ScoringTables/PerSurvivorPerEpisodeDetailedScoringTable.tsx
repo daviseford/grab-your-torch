@@ -14,7 +14,11 @@ import { useScoringCalculations } from "../../hooks/useScoringCalculations";
 import { useSeason } from "../../hooks/useSeason";
 import { useUser } from "../../hooks/useUser";
 import { CastawayId, PlayerAction } from "../../types";
-import { getNumberWithOrdinal, getParticipantName } from "../../utils/misc";
+import {
+  formatPoints,
+  getNumberWithOrdinal,
+  getParticipantName,
+} from "../../utils/misc";
 import {
   getAcquisitionLabel,
   getUpcomingMoveLabel,
@@ -446,10 +450,13 @@ export const PerSurvivorPerEpisodeDetailedScoringTable = () => {
                     <Badge
                       size="xs"
                       variant="filled"
-                      color={getBadgeColor(x.action)}
+                      color={
+                        x.points_awarded < 0 ? "red" : getBadgeColor(x.action)
+                      }
                       className={classes.eventBadge}
                     >
-                      {x.action.replace(/_/g, " ")} +{x.points_awarded}
+                      {x.action.replace(/_/g, " ")}{" "}
+                      {formatPoints(x.points_awarded)}
                     </Badge>
                   </Tooltip>
                 ))}
