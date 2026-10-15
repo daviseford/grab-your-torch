@@ -151,9 +151,13 @@ describe("regenerateSeasonFile on the committed Season 51 file", () => {
       /episode_id: "episode_2",[^}]*castaway_id: "US0763"/,
     );
     expect(formatted).toContain("SEASON_51_EVENTS = {} satisfies");
-    // The committed ages and hometowns were moved to survivoR's values, so
-    // survivoR@7336413 has nothing left to disagree with.
-    expect(keptDifferences).toEqual([]);
+    // The committed ages and hometowns were moved to survivoR's values.
+    // survivoR@c0f2511 then corrected two ages that this fixture, from
+    // survivoR@7336413, still has.
+    expect(keptDifferences).toEqual([
+      "US0764 Kristin Flickinger: kept age 49; survivoR has 53",
+      "US0771 Rob Antonson: kept age 40; survivoR has 34",
+    ]);
   });
 
   it("reads every curated field of the committed cast", () => {

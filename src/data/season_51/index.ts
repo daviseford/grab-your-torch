@@ -202,8 +202,8 @@ export const SEASON_51_PLAYERS = [
     full_name: "Kristin Flickinger",
     img: "/images/season_51/Kristin-Flickinger.jpg",
     description:
-      "Age: 53 | Hometown: Santa Barbara, California | Occupation: Crisis Management",
-    age: 53,
+      "Age: 49 | Hometown: Santa Barbara, California | Occupation: Crisis Management",
+    age: 49,
     profession: "Crisis Management",
     hometown: "Santa Barbara, California",
   }),
@@ -273,8 +273,8 @@ export const SEASON_51_PLAYERS = [
     full_name: "Rob Antonson",
     img: "/images/season_51/Rob-Antonson.jpg",
     description:
-      "Age: 34 | Hometown: Cumberland, Rhode Island | Occupation: Airline Gate Agent",
-    age: 34,
+      "Age: 40 | Hometown: Cumberland, Rhode Island | Occupation: Airline Gate Agent",
+    age: 40,
     profession: "Airline Gate Agent",
     hometown: "Cumberland, Rhode Island",
   }),
