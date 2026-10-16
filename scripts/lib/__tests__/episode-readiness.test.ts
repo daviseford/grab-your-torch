@@ -4,15 +4,16 @@ import {
   assessEpisodeReadiness,
   assessNewEpisodes,
   heldReasons,
-  READINESS_WAIVERS,
-  type ReadinessData,
 } from "../episode-readiness";
+import type { SurvivorSeasonData } from "../survivor-client";
 
 /*
  * Fixtures are real survivoR rows, trimmed to one season, at these upstream
  * commits:
+ * - c0f2511 (2026-10-15): US51 Episode 4 with every scoring row;
+ *   challenge_description covers only Episodes 1 and 2.
  * - 2b8c3a3 (2026-10-09): US51 Episode 3 with every scoring row but no
- *   challenge_description row, the one waived import.
+ *   challenge_description row.
  * - 7336413 (2026-09-26): US51 Episode 1 complete, the state the app imported.
  * - d4a75af (45 minutes earlier): US51 added without challenge_description.
  * - ba77948 (2026-05-03): US50 Episode 10 with its challenge rows missing,
@@ -20,6 +21,14 @@ import {
  * - 403f4a4 (2026-04-23): US50 Episode 9 complete, tribe_mapping already at
  *   Episode 10. Rows before Episode 8 are trimmed.
  */
+/**
+ * The gate no longer reads challenge descriptions, but the fixtures keep
+ * survivoR's rows so the tests prove they cannot hold an episode.
+ */
+type ReadinessData = SurvivorSeasonData & {
+  challengeDescription: { episode: number; challenge_id: number }[];
+};
+
 function load(name: string): ReadinessData {
   const raw = JSON.parse(
     fs.readFileSync(
@@ -51,10 +60,12 @@ describe("assessEpisodeReadiness on real survivoR snapshots", () => {
     expect(r.status).toBe("complete");
   });
 
-  it("holds US51 Episode 1 while challenge_description had not landed", () => {
-    const r = assessEpisodeReadiness(load("us51-d4a75af"), 51, 1);
-    expect(r.status).toBe("partial");
-    expect(r.missing).toEqual(["challenge_description: no rows"]);
+  it("accepts US51 Episode 1 before challenge_description landed", () => {
+    const data = load("us51-d4a75af");
+    expect(data.challengeDescription).toEqual([]);
+    const r = assessEpisodeReadiness(data, 51, 1);
+    expect(r.missing).toEqual([]);
+    expect(r.status).toBe("complete");
   });
 
   it("holds US50 Episode 10 while its challenge results were missing", () => {
@@ -112,12 +123,6 @@ describe("assessEpisodeReadiness rules", () => {
     data.challengeResults.push(
       ...bump(data.challengeResults).map((c) => ({ ...c, challenge_id: 2 })),
     );
-    data.challengeDescription.push(
-      ...bump(data.challengeDescription).map((c) => ({
-        ...c,
-        challenge_id: 2,
-      })),
-    );
     // A second boot: someone still in the game is voted out.
     const next = data.castaways.find((c) => !c.result)!;
     next.result = "2nd voted out";
@@ -149,7 +154,6 @@ describe("assessEpisodeReadiness rules", () => {
     expect(r.missing).toEqual(
       expect.arrayContaining([
         "challenge_results: no rows",
-        "challenge_description: no rows",
         "castaways: nobody left the game this episode",
       ]),
     );
@@ -188,24 +192,18 @@ describe("assessEpisodeReadiness rules", () => {
     ]);
   });
 
-  it("holds when challenge_description and challenge_results disagree", () => {
-    const extraDescribed = withEpisode2();
-    extraDescribed.challengeDescription.push({
-      ...extraDescribed.challengeDescription.at(-1)!,
-      challenge_id: 3,
-      challenge_type: "Reward",
-    });
-    expect(assessEpisodeReadiness(extraDescribed, 51, 2).missing).toEqual([
-      "challenge_results: no rows for challenge 3",
-    ]);
-    const undescribed = withEpisode2();
-    undescribed.challengeResults.push({
-      ...undescribed.challengeResults.at(-1)!,
+  it("ignores challenge descriptions, missing or partial", () => {
+    const partial = withEpisode2();
+    // Episode 2 has no description; another challenge is described but has
+    // no results; Episode 1's description is gone.
+    partial.challengeDescription = [{ episode: 2, challenge_id: 9 }];
+    partial.challengeResults.push({
+      ...partial.challengeResults.at(-1)!,
       challenge_id: 4,
     });
-    expect(assessEpisodeReadiness(undescribed, 51, 2).missing).toEqual([
-      "challenge_description: no row for challenge 4",
-    ]);
+    const r = assessEpisodeReadiness(partial, 51, 2);
+    expect(r.missing).toEqual([]);
+    expect(r.status).toBe("complete");
   });
 
   it("holds when the boot and the votes disagree", () => {
@@ -300,144 +298,86 @@ describe("assessEpisodeReadiness rules", () => {
     expect(r.status).toBe("complete");
     expect(r.reviewNotes.join("\n")).toMatch(/idol protecting/);
     expect(r.reviewNotes.join("\n")).toMatch(/journeys has no row/);
-    expect(r.reviewNotes.at(-1)).toMatch(/check idol finds and journeys/);
+    expect(r.reviewNotes.at(-1)).toMatch(
+      /check idol finds, journeys and reward challenges/,
+    );
   });
 });
 
-describe("the US51 Episode 3 waiver", () => {
-  const WAIVED_REF = "2b8c3a32ed7b2b59e24105b0a89b3322eb1b1b0a";
-  const data = load("us51-2b8c3a3");
-  const ep3 = <T extends { episode: number }>(rows: T[]) =>
-    rows.filter((r) => Math.round(r.episode) === 3);
+describe("US51 Episodes 3 and 4 without challenge descriptions", () => {
+  const ep = <T extends { episode: number }>(rows: T[], n: number) =>
+    rows.filter((r) => Math.round(r.episode) === n);
 
-  it("is the only waiver, and lifts one reason for one episode", () => {
-    expect(READINESS_WAIVERS).toEqual([
-      expect.objectContaining({
-        seasonNum: 51,
-        episodeNum: 3,
-        upstreamRef: WAIVED_REF,
-        missing: "challenge_description: no rows",
-        challengeIds: [4],
-      }),
-    ]);
-  });
-
-  it("imports Episode 3 at the inspected commit", () => {
-    expect(ep3(data.challengeDescription)).toEqual([]);
-    const r = assessEpisodeReadiness(data, 51, 3, WAIVED_REF);
-    expect(r.status).toBe("complete");
-    expect(r.missing).toEqual([]);
-    expect(r.waived).toEqual(["challenge_description: no rows"]);
-    expect(r.reviewNotes[0]).toMatch(
-      /^waived "challenge_description: no rows"/,
-    );
-
-    const added = assessNewEpisodes(data, 51, 2, WAIVED_REF);
-    expect(added.map((e) => [e.episodeNum, e.status])).toEqual([
-      [3, "complete"],
+  it("imports Episode 3 at 2b8c3a3, where it has no description", () => {
+    const data = load("us51-2b8c3a3");
+    expect(ep(data.challengeDescription, 3)).toEqual([]);
+    const added = assessNewEpisodes(data, 51, 2);
+    expect(added.map((e) => [e.episodeNum, e.status, e.missing])).toEqual([
+      [3, "complete", []],
     ]);
     expect(heldReasons(added)).toEqual([]);
   });
 
-  it("holds the same rows read at master or at any other commit", () => {
-    for (const ref of [
-      undefined,
-      "07ce1660d8312f8e2882244c36dc24fca597998a",
-      WAIVED_REF.slice(0, 7),
-    ]) {
-      const r = assessEpisodeReadiness(data, 51, 3, ref);
-      expect(r.status).toBe("partial");
-      expect(r.missing).toEqual(["challenge_description: no rows"]);
-      expect(r.waived).toEqual([]);
-    }
-    expect(heldReasons(assessNewEpisodes(data, 51, 2))).toEqual([
-      "Episode 3: challenge_description: no rows",
+  it("imports Episode 4 at c0f2511, where only Episodes 1 and 2 are described", () => {
+    const data = load("us51-c0f2511");
+    expect(
+      [...new Set(data.challengeDescription.map((c) => c.episode))].sort(),
+    ).toEqual([1, 2]);
+    expect([
+      ...new Set(ep(data.challengeResults, 4).map((c) => c.challenge_id)),
+    ]).toEqual([5]);
+    const added = assessNewEpisodes(data, 51, 3);
+    expect(added.map((e) => [e.episodeNum, e.status, e.missing])).toEqual([
+      [4, "complete", []],
+    ]);
+    // From the Episode 2 bundle, both undescribed episodes import together.
+    expect(
+      assessNewEpisodes(data, 51, 2).map((e) => [e.episodeNum, e.status]),
+    ).toEqual([
+      [3, "complete"],
+      [4, "complete"],
     ]);
   });
 
-  it("still holds Episode 3 for every other missing input", () => {
-    const noVotes = clone(data);
+  it("still holds Episode 4 for a missing scoring input", () => {
+    const base = load("us51-c0f2511");
+
+    const noVotes = clone(base);
     noVotes.voteHistory = noVotes.voteHistory.filter(
-      (v) => Math.round(v.episode) !== 3,
+      (v) => Math.round(v.episode) !== 4,
     );
-    const r = assessEpisodeReadiness(noVotes, 51, 3, WAIVED_REF);
-    expect(r.status).toBe("partial");
-    expect(r.missing).toEqual([
+    expect(assessEpisodeReadiness(noVotes, 51, 4).missing).toEqual([
       "vote_history: no rows for a voted-out castaway",
     ]);
 
-    const noImmunity = clone(data);
-    for (const c of ep3(noImmunity.challengeResults)) c.won = 0;
-    expect(
-      assessEpisodeReadiness(noImmunity, 51, 3, WAIVED_REF).missing,
-    ).toEqual(["challenge_results: no immunity challenge winner"]);
-  });
+    const noImmunity = clone(base);
+    for (const c of ep(noImmunity.challengeResults, 4)) c.won = 0;
+    expect(assessEpisodeReadiness(noImmunity, 51, 4).missing).toEqual([
+      "challenge_results: no immunity challenge winner",
+    ]);
 
-  it("does not cover a challenge survivoR adds later", () => {
-    const extra = clone(data);
-    extra.challengeResults.push(
-      ...ep3(extra.challengeResults).map((c) => ({ ...c, challenge_id: 5 })),
+    const noChallenges = clone(base);
+    noChallenges.challengeResults = noChallenges.challengeResults.filter(
+      (c) => Math.round(c.episode) !== 4,
     );
-    const r = assessEpisodeReadiness(extra, 51, 3, WAIVED_REF);
-    expect(r.status).toBe("partial");
-    expect(r.missing).toEqual(["challenge_description: no rows"]);
-    expect(r.waived).toEqual([]);
-  });
+    expect(assessEpisodeReadiness(noChallenges, 51, 4).missing).toEqual([
+      "challenge_results: no rows",
+    ]);
 
-  it("checks description rows as usual once survivoR adds them", () => {
-    const described = clone(data);
-    const template = described.challengeDescription[0];
-    described.challengeDescription.push({
-      ...template,
-      episode: 3,
-      challenge_id: 4,
-    });
-    const r = assessEpisodeReadiness(described, 51, 3, WAIVED_REF);
-    expect(r.status).toBe("complete");
-    expect(r.waived).toEqual([]);
-
-    described.challengeDescription.push({
-      ...template,
-      episode: 3,
-      challenge_id: 5,
-    });
-    expect(
-      assessEpisodeReadiness(described, 51, 3, WAIVED_REF).missing,
-    ).toEqual(["challenge_results: no rows for challenge 5"]);
-  });
-
-  it("holds other episodes and seasons read at the waived commit", () => {
-    // US51 Episode 1 before its description landed, and US50 Episode 10
-    // before its challenge rows did.
-    expect(
-      assessEpisodeReadiness(load("us51-d4a75af"), 51, 1, WAIVED_REF).missing,
-    ).toEqual(["challenge_description: no rows"]);
-    const us50 = assessEpisodeReadiness(
-      load("us50-ba77948"),
-      50,
-      10,
-      WAIVED_REF,
-    );
-    expect(us50.status).toBe("partial");
-    expect(us50.waived).toEqual([]);
-
-    // Episode 3's rows relabelled as Season 50 or as Episode 4.
-    const asSeason50 = assessEpisodeReadiness(data, 50, 3, WAIVED_REF);
-    expect(asSeason50.missing).toEqual(["challenge_description: no rows"]);
-    const asEpisode4 = clone(data);
-    for (const rows of [
-      asEpisode4.episodes,
-      asEpisode4.challengeResults,
-      asEpisode4.voteHistory,
-      asEpisode4.castaways,
-      asEpisode4.advantageMovement,
-    ] as { episode: number }[][]) {
-      for (const row of rows)
-        if (Math.round(row.episode) === 3) row.episode = 4;
+    const wrongBoot = clone(base);
+    const other = wrongBoot.castaways.find((c) => !c.result)!;
+    for (const v of ep(wrongBoot.voteHistory, 4)) {
+      v.voted_out_id = other.castaway_id;
     }
-    asEpisode4.episodes.push({ ...ep3(data.episodes)[0] });
-    const r4 = assessEpisodeReadiness(asEpisode4, 51, 4, WAIVED_REF);
-    expect(r4.missing).toContain("challenge_description: no rows");
-    expect(r4.waived).toEqual([]);
+    expect(assessEpisodeReadiness(wrongBoot, 51, 4).status).toBe("partial");
+
+    const unmapped = clone(base);
+    unmapped.tribeMapping = unmapped.tribeMapping.filter(
+      (t) =>
+        !(Math.round(t.episode) === 4 && t.castaway_id === other.castaway_id),
+    );
+    expect(assessEpisodeReadiness(unmapped, 51, 4).missing).toEqual([
+      "tribe_mapping: 1 castaway(s) in the game have no row",
+    ]);
   });
 });

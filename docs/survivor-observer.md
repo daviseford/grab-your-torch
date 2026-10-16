@@ -42,15 +42,14 @@ All must hold on the pull request's exact head commit:
 
 - one `episodes` row with a title and air date, and the previous episode present;
 - an immunity winner in `challenge_results`;
-- `challenge_description` lists the episode's challenges, and its ids match `challenge_results` both ways (this is what shows a reward challenge landed);
 - someone left the game in `castaways` (or there was no vote and the next episode is listed), and the voted-out ids agree with `vote_history` both ways;
 - once survivoR publishes `tribe_mapping` for the season, rows for everyone still in the game, and a merge shown in `challenge_results` is shown there too.
 
-One exception is on record: `READINESS_WAIVERS` in the same file lifts the missing `challenge_description` row for US51 Episode 3, and only when the sync reads survivoR at `2b8c3a3`, the commit that was inspected. The owner chose to publish that episode's scores without it. Every other rule still applies to that episode, and nothing else is waived.
+`challenge_description` is not a rule. It is narrative metadata that nothing scores, and survivoR often fills it days after the results, so the owner removed it as a prerequisite on 2026-10-15 (it had held US51 Episodes 3 and 4). The radar still reports when it changes.
 
-Checked against real data at survivoR `7336413`: 145 of 146 episodes of Seasons 41 to 51 pass. The exception is S47 Episode 6, a reward challenge survivoR describes but has no results for; that season is never synced again. The rules also hold the two real partial states found in survivoR's history: US50 Episode 10 before its challenge results landed, and US51 Episode 1 in the 45 minutes before `challenge_description` did.
+The rules still hold the real partial state found in survivoR's history: US50 Episode 10 before its challenge results landed.
 
-**What cannot be proven.** Idol and advantage finds (`advantage_movement`) and journeys (`journeys`) are scored, but an episode can legitimately have none, and nothing upstream says "this episode had none". Cross-checks against `vote_history` had exceptions in nine real episodes, so they are listed in the pull request as notes for the reviewer, never used to hold or to pass. The reviewer checks these against the broadcast. A later survivoR correction arrives as a new sync pull request and goes through the same gates.
+**What cannot be proven.** Idol and advantage finds (`advantage_movement`), journeys (`journeys`) and reward challenges are scored, but an episode can legitimately have none, and nothing upstream says "this episode had none". Cross-checks against `vote_history` had exceptions in nine real episodes, so they are listed in the pull request as notes for the reviewer, never used to hold or to pass. The reviewer checks these against the broadcast. A later survivoR correction arrives as a new sync pull request and goes through the same gates.
 
 ## Notifications
 

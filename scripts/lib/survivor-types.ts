@@ -145,17 +145,6 @@ export interface SurvivorJourney extends SurvivorBaseRecord {
 }
 
 /**
- * challenge_description.json — one row per challenge. Not transformed into
- * app data; the episode readiness gate reads it as survivoR's own list of an
- * episode's challenges (see episode-readiness.ts).
- */
-export interface SurvivorChallengeDescription extends SurvivorBaseRecord {
-  episode: number;
-  challenge_id: number;
-  challenge_type: string;
-}
-
-/**
  * castaway_details.json: one row per person across every season and
  * version, with no `version` or `season` column. Only the columns the sync
  * reads are typed.

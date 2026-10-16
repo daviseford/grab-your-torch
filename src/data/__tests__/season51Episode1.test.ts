@@ -187,10 +187,8 @@ describe("season 51 episode 2", () => {
 });
 
 /**
- * Season 51 episode 3 as published in doehm/survivoR@2b8c3a3, imported under
- * the one waiver in scripts/lib/episode-readiness.ts: survivoR has no
- * challenge_description row for its challenge (4), so nothing confirms it was
- * the episode's only one. Savu (the seven castaways below) won the combined
+ * Season 51 episode 3 as published in doehm/survivoR@2b8c3a3, which has no
+ * challenge_description row for its challenge (4). Savu (the seven castaways below) won the combined
  * immunity and reward challenge; Rob Antonson quit on day 6; Patt Cannaday was
  * voted out 6 to 5 over Danny Kilby; Carter Krull received Rob's idol; Devin
  * Way and Brady Booker found extra votes, and Brady gave his to Maggie Nestor.
@@ -304,5 +302,75 @@ describe("season 51 episode 3", () => {
     );
     expect(others).toHaveLength(8);
     for (const id of others) expect(totals[id]).toBe(0);
+  });
+});
+
+/**
+ * Season 51 episode 4 as published in doehm/survivoR@c0f2511, which describes
+ * no challenge after Episode 2. After the second swap, Toka and Dina won the
+ * combined immunity and reward challenge (5); Jenna Doore was voted out of
+ * Savu 4 to 1. The four advantage rows are holdings, not finds, and survivoR
+ * has no journey for the episode.
+ */
+describe("season 51 episode 4", () => {
+  const TOKA = ["US0754", "US0757", "US0758", "US0764", "US0767", "US0768"];
+  const DINA = ["US0759", "US0760", "US0762", "US0765", "US0766", "US0772"];
+
+  it("is the fourth aired episode, not a finale and not the merge", () => {
+    expect(SEASON_51_EPISODES[3]).toMatchObject({
+      id: "episode_4",
+      order: 4,
+      name: "That's the Magic of Survivor",
+      air_date: "2026-10-14",
+      finale: false,
+      merge_occurs: false,
+    });
+  });
+
+  it("credits Toka and Dina's immunity and reward wins and the boot", () => {
+    const challenges = inEpisode(SEASON_51_CHALLENGES, 4);
+    expect(
+      challenges.map((c) => [c.variant, [...c.winning_castaways].sort()]),
+    ).toEqual([
+      ["team_immunity", TOKA],
+      ["team_immunity", DINA],
+      ["team_reward", TOKA],
+      ["team_reward", DINA],
+    ]);
+    expect(
+      inEpisode(SEASON_51_ELIMINATIONS, 4).map((e) => [
+        e.castaway_id,
+        e.order,
+        e.variant,
+      ]),
+    ).toEqual([["US0763", 5, "tribal"]]);
+    expect(inEpisode(SEASON_51_EVENTS, 4)).toEqual([]);
+
+    const votes = inEpisode(SEASON_51_VOTE_HISTORY, 4);
+    expect(votes).toHaveLength(5);
+    for (const v of votes) expect(v.voted_out_castaway_id).toBe("US0763");
+    expect(votes.filter((v) => v.target_castaway_id === "US0763")).toHaveLength(
+      4,
+    );
+  });
+
+  it("scores the episode under the existing rules", () => {
+    const points = (action: string) =>
+      BASE_PLAYER_SCORING.find((r) => r.action === action)!.fixed_value!;
+    for (const p of SEASON_51_PLAYERS) {
+      const total = getEnhancedSurvivorPoints(
+        Object.values(SEASON_51_CHALLENGES),
+        Object.values(SEASON_51_ELIMINATIONS),
+        Object.values(SEASON_51_EVENTS),
+        4,
+        p.castaway_id as CastawayId,
+      ).total;
+      const expected = [...TOKA, ...DINA].includes(p.castaway_id)
+        ? points("team_immunity") + points("team_reward")
+        : p.castaway_id === "US0763"
+          ? 4
+          : 0;
+      expect([p.castaway_id, total]).toEqual([p.castaway_id, expected]);
+    }
   });
 });

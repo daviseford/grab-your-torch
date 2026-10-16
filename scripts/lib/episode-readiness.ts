@@ -12,10 +12,6 @@
  * - `episodes`: exactly one row, with a title and a valid air date, and the
  *   previous episode is present, so episodes never arrive out of order.
  * - `challenge_results`: an immunity challenge with at least one winner.
- * - `challenge_description` lists the episode's challenges, and its challenge
- *   ids match `challenge_results` in both directions. This is what proves a
- *   reward challenge landed: an episode need not have one, so its absence
- *   from `challenge_results` alone proves nothing.
  * - `castaways`: at least one castaway whose game ended that episode, unless
  *   the episode had no vote at all and survivoR already lists the next one.
  * - `vote_history`: rows whenever someone was voted out, and the voted-out
@@ -25,61 +21,25 @@
  *   `challenge_results` shows a merged tribe, `tribe_mapping` must show the
  *   merge too, since the merge bonus is read from it.
  *
+ * Challenge descriptions are not a rule. `challenge_description` is narrative
+ * metadata that nothing scores, and survivoR often fills it days after the
+ * results (US51 Episodes 3 and 4), so the owner removed it as a publication
+ * prerequisite on 2026-10-15.
+ *
  * What cannot be proven. Finding an idol or advantage, and going on a
  * journey, are scored from `advantage_movement` and `journeys`, and an
- * episode can legitimately have no rows in either. Nothing upstream says
- * "this episode had no advantage events", so their completeness cannot be
- * shown from the data. The checks that can be made (an idol or vote
+ * episode can legitimately have no rows in either. A reward challenge is the
+ * same: an episode need not have one, so its absence from
+ * `challenge_results` proves nothing. Nothing upstream says "this episode had
+ * none", so their completeness cannot be shown from the data. The checks that can be made (an idol or vote
  * advantage visible in `vote_history` with no matching play) had exceptions
  * in nine real episodes of Seasons 43 to 50, so they are review notes for the
  * person approving the import, never a reason to hold or to pass.
- *
- * Waivers. `READINESS_WAIVERS` lists the few times the owner chose to import
- * an episode despite one named hard rule failing. Each covers one episode at
- * one inspected survivoR commit and lifts only that one reason; every other
- * rule still holds the episode, and a read at any other commit (or at master)
- * gets no waiver at all.
  */
 
 import type { SurvivorSeasonData } from "./survivor-client.js";
-import type { SurvivorChallengeDescription } from "./survivor-types.js";
 
 export type EpisodeReadinessStatus = "absent" | "partial" | "complete";
-
-/** An owner-authorized exception to one hard rule; see "Waivers" above. */
-export interface ReadinessWaiver {
-  seasonNum: number;
-  episodeNum: number;
-  /** The full survivoR commit whose rows were inspected. */
-  upstreamRef: string;
-  /** The one `missing` reason lifted, exactly as reported. */
-  missing: string;
-  /** The episode's challenge ids in `challenge_results` when inspected. */
-  challengeIds: number[];
-  reason: string;
-}
-
-export const READINESS_WAIVERS: readonly ReadinessWaiver[] = [
-  {
-    // survivoR has every scoring row for Episode 3 but no challenge_description
-    // row for its one listed challenge (4, immunity and reward). The owner
-    // chose to publish the available scores on 2026-10-09 rather than wait. The
-    // missing row would have confirmed that challenge 4 was the episode's only
-    // one.
-    seasonNum: 51,
-    episodeNum: 3,
-    upstreamRef: "2b8c3a32ed7b2b59e24105b0a89b3322eb1b1b0a",
-    missing: "challenge_description: no rows",
-    challengeIds: [4],
-    reason:
-      "owner chose to publish before survivoR described challenge 4 (2026-10-09)",
-  },
-];
-
-/** Season data plus the tables only the readiness gate reads. */
-export interface ReadinessData extends SurvivorSeasonData {
-  challengeDescription: SurvivorChallengeDescription[];
-}
 
 export interface EpisodeReadiness {
   seasonNum: number;
@@ -87,8 +47,6 @@ export interface EpisodeReadiness {
   status: EpisodeReadinessStatus;
   /** Why the episode is not complete; empty when it is. */
   missing: string[];
-  /** Reasons lifted by a waiver in `READINESS_WAIVERS`; usually empty. */
-  waived: string[];
   /**
    * Things a reviewer should check by hand. They never change the status:
    * see "What cannot be proven" above.
@@ -98,7 +56,6 @@ export interface EpisodeReadiness {
   counts: {
     episodes: number;
     challengeResults: number;
-    challengeDescription: number;
     voteHistory: number;
     castawaysOut: number;
     tribeMapping: number;
@@ -123,18 +80,15 @@ const ADVANTAGE_VOTE_EVENT =
   /^(extra vote|steal a vote|block a vote|played block a vote|played bank your vote|played banked vote)/i;
 
 export function assessEpisodeReadiness(
-  data: ReadinessData,
+  data: SurvivorSeasonData,
   seasonNum: number,
   episodeNum: number,
-  upstreamRef?: string,
-  waivers: readonly ReadinessWaiver[] = READINESS_WAIVERS,
 ): EpisodeReadiness {
   const onEpisode = <T extends { episode?: number | null }>(rows: T[]) =>
     rows.filter((r) => episodeOf(r) === episodeNum);
 
   const episodeRows = onEpisode(data.episodes);
   const challengeRows = onEpisode(data.challengeResults);
-  const descriptionRows = onEpisode(data.challengeDescription);
   const voteRows = onEpisode(data.voteHistory);
   const castawaysOut = onEpisode(data.castaways).filter(
     (c) => c.result != null && c.result !== "",
@@ -146,7 +100,6 @@ export function assessEpisodeReadiness(
   const counts = {
     episodes: episodeRows.length,
     challengeResults: challengeRows.length,
-    challengeDescription: descriptionRows.length,
     voteHistory: voteRows.length,
     castawaysOut: castawaysOut.length,
     tribeMapping: tribeRows.length,
@@ -161,7 +114,6 @@ export function assessEpisodeReadiness(
       episodeNum,
       status: "absent",
       missing: [`no survivoR rows for episode ${episodeNum}`],
-      waived: [],
       reviewNotes: [],
       counts,
     };
@@ -193,23 +145,6 @@ export function assessEpisodeReadiness(
     missing.push("challenge_results: no rows");
   } else if (immunityWinners.length === 0) {
     missing.push("challenge_results: no immunity challenge winner");
-  }
-
-  const resultIds = new Set(challengeRows.map((c) => c.challenge_id));
-  const describedIds = new Set(descriptionRows.map((c) => c.challenge_id));
-  if (descriptionRows.length === 0) {
-    missing.push("challenge_description: no rows");
-  } else {
-    for (const id of [...describedIds].sort((a, b) => a - b)) {
-      if (!resultIds.has(id)) {
-        missing.push(`challenge_results: no rows for challenge ${id}`);
-      }
-    }
-    for (const id of [...resultIds].sort((a, b) => a - b)) {
-      if (!describedIds.has(id)) {
-        missing.push(`challenge_description: no row for challenge ${id}`);
-      }
-    }
   }
 
   // A few episodes have no tribal council and no boot (S41 and S42 episode
@@ -280,38 +215,20 @@ export function assessEpisodeReadiness(
     );
   }
 
-  const waiver = waivers.find(
-    (w) =>
-      w.seasonNum === seasonNum &&
-      w.episodeNum === episodeNum &&
-      upstreamRef !== undefined &&
-      w.upstreamRef === upstreamRef &&
-      missing.includes(w.missing) &&
-      [...resultIds].sort((a, b) => a - b).join() ===
-        [...w.challengeIds].sort((a, b) => a - b).join(),
-  );
-  const waived = waiver ? [waiver.missing] : [];
-  const stillMissing = missing.filter((m) => !waived.includes(m));
   const notes = reviewNotes(data, episodeNum, voteRows, counts);
-  if (waiver) {
-    notes.unshift(
-      `waived "${waiver.missing}" at survivoR ${waiver.upstreamRef.slice(0, 7)}: ${waiver.reason}`,
-    );
-  }
 
   return {
     seasonNum,
     episodeNum,
-    status: stillMissing.length === 0 ? "complete" : "partial",
-    missing: stillMissing,
-    waived,
+    status: missing.length === 0 ? "complete" : "partial",
+    missing,
     reviewNotes: notes,
     counts,
   };
 }
 
 function reviewNotes(
-  data: ReadinessData,
+  data: SurvivorSeasonData,
   episodeNum: number,
   voteRows: SurvivorSeasonData["voteHistory"],
   counts: EpisodeReadiness["counts"],
@@ -359,7 +276,7 @@ function reviewNotes(
     }
   }
   notes.push(
-    `advantage_movement has ${counts.advantageMovement} row(s) and journeys ${counts.journeys} for this episode; check idol finds and journeys against the broadcast`,
+    `advantage_movement has ${counts.advantageMovement} row(s) and journeys ${counts.journeys} for this episode; check idol finds, journeys and reward challenges against the broadcast`,
   );
   return [...new Set(notes)];
 }
@@ -375,13 +292,12 @@ function reviewNotes(
  * and tribe_mapping to 10), so counting it would hold every import.
  */
 export function upstreamEpisodesAfter(
-  data: ReadinessData,
+  data: SurvivorSeasonData,
   afterEpisode: number,
 ): number[] {
   const tables = [
     data.episodes,
     data.challengeResults,
-    data.challengeDescription,
     data.voteHistory,
     data.castaways,
     data.advantageMovement,
@@ -399,13 +315,12 @@ export function upstreamEpisodesAfter(
 
 /** Readiness of every episode survivoR has above the committed count. */
 export function assessNewEpisodes(
-  data: ReadinessData,
+  data: SurvivorSeasonData,
   seasonNum: number,
   committedEpisodes: number,
-  upstreamRef?: string,
 ): EpisodeReadiness[] {
   return upstreamEpisodesAfter(data, committedEpisodes).map((ep) =>
-    assessEpisodeReadiness(data, seasonNum, ep, upstreamRef),
+    assessEpisodeReadiness(data, seasonNum, ep),
   );
 }
 

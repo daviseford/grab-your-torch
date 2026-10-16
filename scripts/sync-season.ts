@@ -32,11 +32,7 @@ import {
 } from "./lib/episode-readiness.js";
 import { planSeasonFileWrite } from "./lib/season-file-change.js";
 import { readLocalSeasonImg } from "./lib/season-img.js";
-import {
-  fetchSeasonData,
-  fetchTable,
-  filterBySeason,
-} from "./lib/survivor-client.js";
+import { fetchSeasonData, fetchTable } from "./lib/survivor-client.js";
 import {
   transformPlayers,
   transformResults,
@@ -44,7 +40,6 @@ import {
 import type {
   SurvivorCastaway,
   SurvivorCastawayDetails,
-  SurvivorChallengeDescription,
 } from "./lib/survivor-types.js";
 import { validateSeasonData } from "./lib/validate-season.js";
 
@@ -66,7 +61,7 @@ interface SyncResult {
   /** Readiness of each episode this import adds; all complete when written. */
   newEpisodes?: Pick<
     EpisodeReadiness,
-    "episodeNum" | "status" | "waived" | "reviewNotes" | "counts"
+    "episodeNum" | "status" | "reviewNotes" | "counts"
   >[];
   summary?: {
     episodes: number;
@@ -238,26 +233,11 @@ async function main(): Promise<void> {
   // holds the whole import.
   let newEpisodes: EpisodeReadiness[] = [];
   if (existingEpisodeCount !== undefined) {
-    const challengeDescription = filterBySeason(
-      await fetchTable<SurvivorChallengeDescription>(
-        "challenge_description",
-        ref,
-      ),
-      seasonNum,
-    );
     newEpisodes = assessNewEpisodes(
-      { ...seasonData, challengeDescription },
+      seasonData,
       seasonNum,
       existingEpisodeCount,
-      ref,
     );
-    for (const r of newEpisodes) {
-      for (const w of r.waived) {
-        console.log(
-          `  Episode ${r.episodeNum}: waived "${w}" (READINESS_WAIVERS)`,
-        );
-      }
-    }
     const held = heldReasons(newEpisodes);
     if (held.length > 0) {
       writeResult(RESULT_PATH, {
@@ -353,10 +333,9 @@ async function main(): Promise<void> {
     firestorePushed,
     upstreamRef: ref,
     newEpisodes: newEpisodes.map(
-      ({ episodeNum, status, waived, reviewNotes, counts }) => ({
+      ({ episodeNum, status, reviewNotes, counts }) => ({
         episodeNum,
         status,
-        waived,
         reviewNotes,
         counts,
       }),
