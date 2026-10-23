@@ -585,6 +585,8 @@ const IGNORED_VOTE_EVENTS = new Set([
   "Abstain to gain",
   "Countback",
   "Deadlock",
+  // A deadlocked tie where the remaining voters agreed on the boot (S51 ep5).
+  "Deadlock consensus",
   "Do or die",
   "Exiled",
   "Final 3 tribal",
