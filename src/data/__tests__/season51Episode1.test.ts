@@ -374,3 +374,106 @@ describe("season 51 episode 4", () => {
     }
   });
 });
+
+/**
+ * Season 51 episode 5 as published in doehm/survivoR@00ecda0. Toka won the
+ * combined immunity and reward challenge, so Savu and Dina both went to
+ * Tribal: Alexis Levine was voted out of Savu, and Linnea Capobianco was
+ * voted out of Dina after two tied votes and a deadlock the remaining voters
+ * settled by agreement. On her journey Maggie won an extra vote and had to
+ * give away a second one; Lewis and Kilby each received one and played it.
+ */
+describe("season 51 episode 5", () => {
+  const TOKA = ["US0754", "US0757", "US0758", "US0764", "US0767", "US0768"];
+
+  it("is the fifth aired episode, not a finale and not the merge", () => {
+    expect(SEASON_51_EPISODES[4]).toMatchObject({
+      id: "episode_5",
+      order: 5,
+      name: "Not Here to Get a Pedicure",
+      air_date: "2026-10-21",
+      finale: false,
+      merge_occurs: false,
+    });
+  });
+
+  it("credits Toka's wins, both boots and the extra votes", () => {
+    expect(
+      inEpisode(SEASON_51_CHALLENGES, 5).map((c) => [
+        c.variant,
+        [...c.winning_castaways].sort(),
+      ]),
+    ).toEqual([
+      ["team_immunity", TOKA],
+      ["team_reward", TOKA],
+    ]);
+    expect(
+      inEpisode(SEASON_51_ELIMINATIONS, 5).map((e) => [
+        e.castaway_id,
+        e.order,
+        e.variant,
+      ]),
+    ).toEqual([
+      ["US0753", 6, "tribal"],
+      ["US0766", 7, "tribal"],
+    ]);
+    expect(
+      inEpisode(SEASON_51_EVENTS, 5).map((e) => `${e.castaway_id}:${e.action}`),
+    ).toEqual([
+      "US0767:find_extra_vote",
+      "US0765:win_other_advantage",
+      "US0765:use_extra_vote",
+      "US0760:win_other_advantage",
+      "US0760:use_extra_vote",
+      "US0767:go_on_journey",
+      "US0767:journey_risked_vote",
+      "US0767:journey_won_game",
+      "US0767:win_extra_vote",
+    ]);
+
+    // The deadlock agreement is the third Dina vote; it earns no points.
+    const deadlock = inEpisode(SEASON_51_VOTE_HISTORY, 5).filter(
+      (v) => v.vote_order === 3,
+    );
+    expect(deadlock.map((v) => v.voter_castaway_id).sort()).toEqual([
+      "US0759",
+      "US0760",
+      "US0762",
+      "US0772",
+    ]);
+    for (const v of deadlock) expect(v.target_castaway_id).toBe("US0766");
+  });
+
+  it("scores the episode under the existing rules", () => {
+    const points = (action: string) =>
+      BASE_PLAYER_SCORING.find((r) => r.action === action)!.fixed_value!;
+    const toka = points("team_immunity") + points("team_reward");
+    const expected: Record<string, number> = {
+      ...Object.fromEntries(TOKA.map((id) => [id, toka])),
+      US0767:
+        toka +
+        points("find_extra_vote") +
+        points("go_on_journey") +
+        points("journey_risked_vote") +
+        points("journey_won_game") +
+        points("win_extra_vote"),
+      US0765: points("win_other_advantage") + points("use_extra_vote"),
+      US0760: points("win_other_advantage") + points("use_extra_vote"),
+      US0753: 5,
+      US0766: 5.5,
+    };
+    for (const p of SEASON_51_PLAYERS) {
+      const total = getEnhancedSurvivorPoints(
+        Object.values(SEASON_51_CHALLENGES),
+        Object.values(SEASON_51_ELIMINATIONS),
+        Object.values(SEASON_51_EVENTS),
+        5,
+        p.castaway_id as CastawayId,
+      ).total;
+      expect([p.castaway_id, total]).toEqual([
+        p.castaway_id,
+        expected[p.castaway_id] ?? 0,
+      ]);
+    }
+  });
+});

@@ -531,4 +531,60 @@ describe("transformResults", { timeout: 60000 }, () => {
       );
     });
   });
+
+  describe("S51 deadlock consensus", () => {
+    // survivoR 00ecda0 added Episode 5, where Dina's deadlocked tie was
+    // settled by the remaining voters agreeing on the boot: four
+    // vote_history rows with vote_event "Deadlock consensus".
+    const BEFORE_EP5 = "c0f2511f9a88e637f744ae0dda537a8d937b66d5";
+    const WITH_EP5 = "00ecda002d63f63c7d5ec54660cc55f185ca5ea4";
+    const events = (data: SurvivorSeasonData) =>
+      transformResults(data, 51).events.map(
+        (e) => `${e.episodeNum}:${e.castawayId}:${e.action}`,
+      );
+
+    let withEp5: SurvivorSeasonData;
+    beforeAll(async () => {
+      withEp5 = await fetchSeasonData(51, WITH_EP5);
+    });
+
+    it("scores nothing for the deadlock and keeps Episodes 1 to 4", async () => {
+      const deadlock = withEp5.voteHistory.filter(
+        (v) => v.vote_event === "Deadlock consensus",
+      );
+      expect(deadlock).toHaveLength(4);
+
+      const all = events(withEp5);
+      expect(all.filter((e) => e.startsWith("5:"))).toEqual([
+        "5:US0767:find_extra_vote",
+        "5:US0765:win_other_advantage",
+        "5:US0765:use_extra_vote",
+        "5:US0760:win_other_advantage",
+        "5:US0760:use_extra_vote",
+        "5:US0767:go_on_journey",
+        "5:US0767:journey_risked_vote",
+        "5:US0767:journey_won_game",
+        "5:US0767:win_extra_vote",
+      ]);
+      expect(all.filter((e) => !e.startsWith("5:")).sort()).toEqual(
+        events(await fetchSeasonData(51, BEFORE_EP5)).sort(),
+      );
+    });
+
+    it("still fails closed on a vote event it does not know", () => {
+      const row = withEp5.voteHistory.find(
+        (v) => v.vote_event === "Deadlock consensus",
+      )!;
+      const withUnknown = {
+        ...withEp5,
+        voteHistory: [
+          ...withEp5.voteHistory,
+          { ...row, vote_event: "Deadlock compromise" },
+        ],
+      };
+      expect(() => transformResults(withUnknown, 51)).toThrow(
+        'Unknown vote_event "Deadlock compromise"',
+      );
+    });
+  });
 });
