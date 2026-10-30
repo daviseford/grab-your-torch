@@ -688,7 +688,11 @@ const ADVANTAGE_PLAY_VOTE_EVENTS = new Set([
   "Control the vote",
 ]);
 
-/** Journey rewards that don't grant a new advantage — explicitly skipped. */
+/**
+ * Journey rewards that don't grant a new advantage — explicitly skipped.
+ * Like vote events, reward names are matched case-insensitively: survivoR
+ * re-cases them between releases (S44 "Bank your Vote", "Sanctuary Feast").
+ */
 const IGNORED_JOURNEY_REWARDS = new Set([
   "Regained vote",
   "Returned to camp",
@@ -698,21 +702,19 @@ const IGNORED_JOURNEY_REWARDS = new Set([
   "Ribs and corn",
 ]);
 
-/** Map journeys.reward → specific win action. */
+/** Map journeys.reward (lowercased) → specific win action. */
 const JOURNEY_REWARD_TO_WIN: Record<string, string> = {
-  "Extra vote": "win_extra_vote",
-  "Extra Vote": "win_extra_vote",
-  "Block a Vote": "win_block_a_vote",
-  "Block a vote": "win_block_a_vote",
-  "Steal a Vote": "win_steal_a_vote",
-  "Bank your vote": "win_other_advantage",
-  "Safety Without Power": "win_other_advantage",
-  Idol: "win_idol",
-  "Hidden Immunity Idol": "win_idol",
-  "Knowledge is Power": "win_other_advantage",
-  Amulet: "win_other_advantage",
-  "Challenge advantage": "win_other_advantage",
-  "Inheritance advantage": "win_other_advantage",
+  "extra vote": "win_extra_vote",
+  "block a vote": "win_block_a_vote",
+  "steal a vote": "win_steal_a_vote",
+  "bank your vote": "win_other_advantage",
+  "safety without power": "win_other_advantage",
+  idol: "win_idol",
+  "hidden immunity idol": "win_idol",
+  "knowledge is power": "win_other_advantage",
+  amulet: "win_other_advantage",
+  "challenge advantage": "win_other_advantage",
+  "inheritance advantage": "win_other_advantage",
 };
 
 /** Non-scoring advantage lifecycle events — explicitly skipped. */
@@ -963,18 +965,22 @@ function transformEvents(
   for (const adv of idolPlays) {
     const epNum = Math.round(adv.episode);
 
-    // If survivoR provides votes_nullified directly, use it
-    if (adv.votes_nullified != null && adv.votes_nullified > 0) {
-      events.push({
-        episodeNum: epNum,
-        castawayId: adv.castaway_id,
-        action: "votes_negated_by_idol",
-        multiplier: adv.votes_nullified,
-      });
-      // Consume the matching nullified entries so they aren't double-matched
-      const protectedId = adv.played_for_id ?? adv.castaway_id;
-      const targets = nullifiedByEp.get(epNum);
-      if (targets) targets.delete(protectedId);
+    // If survivoR provides votes_nullified directly, use it. An explicit 0 is
+    // final: falling back would hand this idol another play's nullified votes
+    // from the same episode (S47 ep13, Sue's unneeded idol took Rachel's 3).
+    if (adv.votes_nullified != null) {
+      if (adv.votes_nullified > 0) {
+        events.push({
+          episodeNum: epNum,
+          castawayId: adv.castaway_id,
+          action: "votes_negated_by_idol",
+          multiplier: adv.votes_nullified,
+        });
+        // Consume the matching nullified entries so they aren't double-matched
+        const protectedId = adv.played_for_id ?? adv.castaway_id;
+        const targets = nullifiedByEp.get(epNum);
+        if (targets) targets.delete(protectedId);
+      }
       continue;
     }
 
@@ -1028,12 +1034,13 @@ function transformEvents(
     const rewardParts = j.reward ? j.reward.split("; ") : [];
     const winParts = rewardParts.filter(
       (p) =>
-        !p.toLowerCase().includes("lost") && !IGNORED_JOURNEY_REWARDS.has(p),
+        !p.toLowerCase().includes("lost") &&
+        !hasVoteEvent(IGNORED_JOURNEY_REWARDS, p),
     );
     const winActions = winParts
       .map((p) => {
-        const action = JOURNEY_REWARD_TO_WIN[p];
-        if (!action && !IGNORED_JOURNEY_REWARDS.has(p)) {
+        const action = JOURNEY_REWARD_TO_WIN[p.toLowerCase()];
+        if (!action) {
           throw new Error(
             `Unknown journey reward part "${p}" (from "${j.reward}") for ${castawayId} in episode ${epNum}. Add it to JOURNEY_REWARD_TO_WIN or IGNORED_JOURNEY_REWARDS.`,
           );
@@ -1048,7 +1055,8 @@ function transformEvents(
     // Filter out ignored rewards (e.g., "Returned to camp") before inferring risk
     const hasNonLossReward = rewardParts.some(
       (p) =>
-        !p.toLowerCase().includes("lost") && !IGNORED_JOURNEY_REWARDS.has(p),
+        !p.toLowerCase().includes("lost") &&
+        !hasVoteEvent(IGNORED_JOURNEY_REWARDS, p),
     );
     const risked =
       j.chose_to_play !== undefined

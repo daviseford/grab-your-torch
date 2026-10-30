@@ -1131,16 +1131,6 @@ export const SEASON_20_EVENTS = {
     action: "votes_negated_by_idol",
     multiplier: 4,
   },
-  event_17: {
-    id: "event_17",
-    season_id: "season_20",
-    season_num: 20,
-    episode_id: "episode_10",
-    episode_num: 10,
-    castaway_id: "US0197",
-    action: "votes_negated_by_idol",
-    multiplier: 5,
-  },
   event_18: {
     id: "event_18",
     season_id: "season_20",

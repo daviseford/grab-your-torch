@@ -655,4 +655,131 @@ describe("transformResults", { timeout: 60000 }, () => {
       expect(merged.every((e) => e.startsWith("7:"))).toBe(true);
     });
   });
+
+  describe("historical seasons at survivoR d2bdda6", () => {
+    const REF = "d2bdda65fbba2887a0960fafe6a22b01e16a6c10";
+    const keys = (data: SurvivorSeasonData, season: number) =>
+      transformResults(data, season).events.map(
+        (e) => `${e.episodeNum}:${e.castawayId}:${e.action}:${e.multiplier}`,
+      );
+    const withReward = (
+      data: SurvivorSeasonData,
+      from: string,
+      to: string,
+    ) => ({
+      ...data,
+      journeys: data.journeys.map((j) =>
+        j.reward === from ? { ...j, reward: to } : j,
+      ),
+    });
+
+    describe("S44 journey reward casing", () => {
+      let s44: SurvivorSeasonData;
+      beforeAll(async () => {
+        s44 = await fetchSeasonData(44, REF);
+      });
+
+      it("scores Bank your Vote and the Sanctuary Feast as before", () => {
+        // survivoR re-cased both rewards after this season was imported.
+        const rewards = s44.journeys.map((j) => j.reward);
+        expect(rewards).toContain("Bank your Vote");
+        expect(rewards).toContain("Sanctuary Feast");
+
+        const events = keys(s44, 44);
+        expect(events.filter((e) => e.startsWith("1:US0648:"))).toEqual([
+          "1:US0648:find_bank_your_vote:null", // advantage_movement, unchanged
+          "1:US0648:go_on_journey:null",
+          "1:US0648:journey_risked_vote:null",
+          "1:US0648:journey_won_game:null",
+          "1:US0648:win_other_advantage:null",
+        ]);
+        for (const id of ["US0645", "US0652", "US0658"]) {
+          expect(
+            events.filter(
+              (e) => e.startsWith(`5:${id}:`) && e.includes("journey"),
+            ),
+          ).toEqual([`5:${id}:go_on_journey:null`]);
+        }
+      });
+
+      it("scores the earlier casing identically", () => {
+        const older = withReward(
+          withReward(s44, "Bank your Vote", "Bank your vote"),
+          "Sanctuary Feast",
+          "Sanctuary feast",
+        );
+        expect(keys(older, 44)).toEqual(keys(s44, 44));
+      });
+
+      it("still fails closed on rewards it does not know", () => {
+        expect(() =>
+          transformResults(
+            withReward(s44, "Bank your Vote", "Bank your Votes"),
+            44,
+          ),
+        ).toThrow('Unknown journey reward part "Bank your Votes"');
+        expect(() =>
+          transformResults(
+            withReward(s44, "Sanctuary Feast", "Sanctuary Banquet"),
+            44,
+          ),
+        ).toThrow('Unknown journey reward part "Sanctuary Banquet"');
+      });
+    });
+
+    describe("idol plays that nullified no votes", () => {
+      const negated = (data: SurvivorSeasonData, season: number, ep: number) =>
+        keys(data, season)
+          .filter(
+            (e) =>
+              e.startsWith(`${ep}:`) && e.includes(":votes_negated_by_idol:"),
+          )
+          .sort();
+      let s47: SurvivorSeasonData;
+      beforeAll(async () => {
+        s47 = await fetchSeasonData(47, REF);
+      });
+
+      it("credits only Rachel's idol at S47 Episode 13, in either row order", () => {
+        // Rachel's idol cancelled 3 votes at the final six; Sue's at the final
+        // five was not needed (votes_nullified 0). survivoR listed Sue's play
+        // first until 07ce1660; that order once gave Sue Rachel's 3 votes.
+        expect(negated(s47, 47, 13)).toEqual([
+          "13:US0707:votes_negated_by_idol:3",
+        ]);
+        const oldOrder = {
+          ...s47,
+          advantageMovement: [...s47.advantageMovement].reverse(),
+        };
+        expect(negated(oldOrder, 47, 13)).toEqual([
+          "13:US0707:votes_negated_by_idol:3",
+        ]);
+      });
+
+      it("credits Parvati's two idols at S20 Episode 10 once", async () => {
+        // One idol for Sandra (not needed), one for Jerri (5 votes).
+        expect(negated(await fetchSeasonData(20, REF), 20, 10)).toEqual([
+          "10:US0197:votes_negated_by_idol:5",
+        ]);
+      });
+
+      it("credits only Davie's idol at S37 Episode 12", async () => {
+        expect(negated(await fetchSeasonData(37, REF), 37, 12)).toEqual([
+          "12:US0551:votes_negated_by_idol:2",
+        ]);
+      });
+
+      it("still matches nullified votes when the count is missing", () => {
+        const noCounts = {
+          ...s47,
+          advantageMovement: s47.advantageMovement.map((a) =>
+            a.episode === 13 ? { ...a, votes_nullified: null } : a,
+          ),
+        };
+        expect(negated(noCounts, 47, 13)).toEqual([
+          "13:US0707:votes_negated_by_idol:3",
+        ]);
+      });
+    });
+  });
 });
