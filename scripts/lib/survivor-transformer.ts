@@ -128,11 +128,16 @@ export function transformResults(
   const idMap = buildCastawayIdMap(data.castaways);
 
   const hasWinner = data.castaways.some((c) => c.winner);
-  const episodes = transformEpisodes(
-    data.episodes,
-    data.tribeMapping,
-    hasWinner,
+  // survivoR publishes the next episode's tribe_mapping (day it opens on)
+  // before that episode exists, e.g. S51 ep7 "Merged" rows alongside ep6.
+  // Reading them would score make_merge for an episode not yet published.
+  const lastEpisode = Math.max(
+    ...data.episodes.map((e) => Math.round(e.episode)),
   );
+  const tribeMapping = data.tribeMapping.filter(
+    (t) => Math.round(t.episode) <= lastEpisode,
+  );
+  const episodes = transformEpisodes(data.episodes, tribeMapping, hasWinner);
   const challenges = transformChallenges(
     data.challengeResults,
     data.voteHistory,
@@ -144,7 +149,7 @@ export function transformResults(
     data.voteHistory,
     data.journeys,
     data.castaways,
-    data.tribeMapping,
+    tribeMapping,
     idMap,
     warnings,
   );
@@ -689,6 +694,8 @@ const IGNORED_JOURNEY_REWARDS = new Set([
   "Returned to camp",
   "Sanctuary feast",
   "Escaped Exile Island",
+  // Food brought back from the S51 ep6 summit by the two who left the idol.
+  "Ribs and corn",
 ]);
 
 /** Map journeys.reward → specific win action. */
