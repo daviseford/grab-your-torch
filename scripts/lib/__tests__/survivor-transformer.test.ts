@@ -587,4 +587,72 @@ describe("transformResults", { timeout: 60000 }, () => {
       );
     });
   });
+
+  describe("S51 Episode 6 summit and next-episode tribe rows", () => {
+    // survivoR d2bdda6 added Episode 6: two summit attendees came back with
+    // "Ribs and corn" (a meal, no advantage), and the merge's Episode 7
+    // tribe_mapping rows arrived before Episode 7 itself.
+    const WITH_EP5 = "00ecda002d63f63c7d5ec54660cc55f185ca5ea4";
+    const WITH_EP6 = "d2bdda65fbba2887a0960fafe6a22b01e16a6c10";
+    const events = (data: SurvivorSeasonData) =>
+      transformResults(data, 51).events.map(
+        (e) => `${e.episodeNum}:${e.castawayId}:${e.action}`,
+      );
+
+    let withEp6: SurvivorSeasonData;
+    beforeAll(async () => {
+      withEp6 = await fetchSeasonData(51, WITH_EP6);
+    });
+
+    it("scores the meal as journey participation only", () => {
+      const meal = withEp6.journeys.filter((j) => j.reward === "Ribs and corn");
+      expect(meal.map((j) => j.castaway_id).sort()).toEqual([
+        "US0769",
+        "US0772",
+      ]);
+      const ep6 = events(withEp6).filter((e) => e.startsWith("6:"));
+      expect(ep6.filter((e) => e.startsWith("6:US0772:"))).toEqual([
+        "6:US0772:go_on_journey",
+      ]);
+      expect(ep6.filter((e) => e.startsWith("6:US0769:")).sort()).toEqual([
+        "6:US0769:go_on_journey",
+        "6:US0769:use_shot_in_the_dark_unsuccessfully",
+      ]);
+    });
+
+    it("still fails closed on a journey reward it does not know", () => {
+      const row = withEp6.journeys.find((j) => j.reward === "Ribs and corn")!;
+      const withUnknown = {
+        ...withEp6,
+        journeys: [...withEp6.journeys, { ...row, reward: "Ribs and slaw" }],
+      };
+      expect(() => transformResults(withUnknown, 51)).toThrow(
+        'Unknown journey reward part "Ribs and slaw"',
+      );
+    });
+
+    it("ignores tribe rows for an episode survivoR has not published", async () => {
+      const ahead = withEp6.tribeMapping.filter((t) => t.episode === 7);
+      expect(ahead.length).toBeGreaterThan(0);
+      expect(ahead.every((t) => t.tribe_status === "Merged")).toBe(true);
+
+      const all = events(withEp6);
+      expect(all.filter((e) => Number(e.split(":")[0]) > 6)).toEqual([]);
+      // Episodes 1 to 5 score exactly as they did before the correction.
+      expect(all.filter((e) => !e.startsWith("6:")).sort()).toEqual(
+        events(await fetchSeasonData(51, WITH_EP5)).sort(),
+      );
+    });
+
+    it("scores the merge once its episode is published", () => {
+      const ep6 = withEp6.episodes.find((e) => e.episode === 6)!;
+      const withEp7 = {
+        ...withEp6,
+        episodes: [...withEp6.episodes, { ...ep6, episode: 7 }],
+      };
+      const merged = events(withEp7).filter((e) => e.endsWith(":make_merge"));
+      expect(merged).toHaveLength(13);
+      expect(merged.every((e) => e.startsWith("7:"))).toBe(true);
+    });
+  });
 });

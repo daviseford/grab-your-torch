@@ -382,6 +382,10 @@ describe("season 51 episode 4", () => {
  * voted out of Dina after two tied votes and a deadlock the remaining voters
  * settled by agreement. On her journey Maggie won an extra vote and had to
  * give away a second one; Lewis and Kilby each received one and played it.
+ *
+ * doehm/survivoR@d2bdda6 recorded the deadlock as a "Unanimous decision"
+ * with no votes cast, replacing four "Deadlock consensus" votes for Linnea,
+ * and renumbered Maggie's handover. Points are unchanged.
  */
 describe("season 51 episode 5", () => {
   const TOKA = ["US0754", "US0757", "US0758", "US0764", "US0767", "US0768"];
@@ -418,30 +422,25 @@ describe("season 51 episode 5", () => {
       ["US0766", 7, "tribal"],
     ]);
     expect(
-      inEpisode(SEASON_51_EVENTS, 5).map((e) => `${e.castaway_id}:${e.action}`),
+      inEpisode(SEASON_51_EVENTS, 5)
+        .map((e) => `${e.castaway_id}:${e.action}`)
+        .sort(),
     ).toEqual([
-      "US0767:find_extra_vote",
-      "US0765:win_other_advantage",
-      "US0765:use_extra_vote",
-      "US0760:win_other_advantage",
       "US0760:use_extra_vote",
+      "US0760:win_other_advantage",
+      "US0765:use_extra_vote",
+      "US0765:win_other_advantage",
+      "US0767:find_extra_vote",
       "US0767:go_on_journey",
       "US0767:journey_risked_vote",
       "US0767:journey_won_game",
       "US0767:win_extra_vote",
     ]);
 
-    // The deadlock agreement is the third Dina vote; it earns no points.
-    const deadlock = inEpisode(SEASON_51_VOTE_HISTORY, 5).filter(
-      (v) => v.vote_order === 3,
-    );
-    expect(deadlock.map((v) => v.voter_castaway_id).sort()).toEqual([
-      "US0759",
-      "US0760",
-      "US0762",
-      "US0772",
-    ]);
-    for (const v of deadlock) expect(v.target_castaway_id).toBe("US0766");
+    // The deadlock was settled by a unanimous decision: no third vote.
+    const votes = inEpisode(SEASON_51_VOTE_HISTORY, 5);
+    expect(votes).toHaveLength(16);
+    expect(votes.filter((v) => v.vote_order === 3)).toEqual([]);
   });
 
   it("scores the episode under the existing rules", () => {
@@ -468,6 +467,119 @@ describe("season 51 episode 5", () => {
         Object.values(SEASON_51_ELIMINATIONS),
         Object.values(SEASON_51_EVENTS),
         5,
+        p.castaway_id as CastawayId,
+      ).total;
+      expect([p.castaway_id, total]).toEqual([
+        p.castaway_id,
+        expected[p.castaway_id] ?? 0,
+      ]);
+    }
+  });
+});
+
+/**
+ * Season 51 episode 6 as published in doehm/survivoR@d2bdda6. Toka and Dina
+ * won immunity, so Savu went to Tribal and Ori Cohen was voted out after a
+ * failed shot in the dark. At the summit Kristin stayed on Exile Island and
+ * earned a tethered idol (also recorded as a find), while Ori and Sharonda
+ * went back to camp with a ribs-and-corn meal that scores only the journey.
+ * survivoR also lists Episode 7 tribe rows (the merge); none of it is here.
+ */
+describe("season 51 episode 6", () => {
+  const TOKA = ["US0754", "US0757", "US0758", "US0764", "US0767", "US0768"];
+  const DINA = ["US0759", "US0760", "US0762", "US0765", "US0772"];
+
+  it("is the sixth and newest episode, not a finale and not the merge", () => {
+    expect(SEASON_51_EPISODES).toHaveLength(6);
+    expect(SEASON_51_EPISODES[5]).toMatchObject({
+      id: "episode_6",
+      order: 6,
+      name: "I Love Crying",
+      air_date: "2026-10-28",
+      finale: false,
+      merge_occurs: false,
+      post_merge: false,
+    });
+  });
+
+  it("credits both immunity wins, the boot, the summit and the votes", () => {
+    expect(
+      inEpisode(SEASON_51_CHALLENGES, 6).map((c) => [
+        c.variant,
+        [...c.winning_castaways].sort(),
+      ]),
+    ).toEqual([
+      ["team_immunity", TOKA],
+      ["team_immunity", DINA],
+    ]);
+    expect(
+      inEpisode(SEASON_51_ELIMINATIONS, 6).map((e) => [
+        e.castaway_id,
+        e.order,
+        e.variant,
+      ]),
+    ).toEqual([["US0769", 8, "tribal"]]);
+    expect(
+      inEpisode(SEASON_51_EVENTS, 6)
+        .map((e) => `${e.castaway_id}:${e.action}`)
+        .sort(),
+    ).toEqual([
+      "US0764:find_idol",
+      "US0764:go_on_journey",
+      "US0764:journey_risked_vote",
+      "US0764:journey_won_game",
+      "US0764:win_idol",
+      "US0769:go_on_journey",
+      "US0769:use_shot_in_the_dark_unsuccessfully",
+      "US0772:go_on_journey",
+    ]);
+    // Ori's shot in the dark replaces his vote, leaving two votes for him.
+    const votes = inEpisode(SEASON_51_VOTE_HISTORY, 6);
+    expect(votes.map((v) => v.voter_castaway_id).sort()).toEqual([
+      "US0756",
+      "US0761",
+    ]);
+    for (const v of votes) expect(v.target_castaway_id).toBe("US0769");
+  });
+
+  it("holds nothing from an episode survivoR has not published", () => {
+    for (const records of [
+      SEASON_51_CHALLENGES,
+      SEASON_51_ELIMINATIONS,
+      SEASON_51_EVENTS,
+      SEASON_51_VOTE_HISTORY,
+    ]) {
+      for (const r of Object.values(records)) {
+        expect(r.episode_num).toBeLessThanOrEqual(6);
+      }
+    }
+  });
+
+  it("scores the episode under the existing rules", () => {
+    const points = (action: string) =>
+      BASE_PLAYER_SCORING.find((r) => r.action === action)!.fixed_value!;
+    const immune = points("team_immunity");
+    const expected: Record<string, number> = {
+      ...Object.fromEntries([...TOKA, ...DINA].map((id) => [id, immune])),
+      US0764:
+        immune +
+        points("find_idol") +
+        points("go_on_journey") +
+        points("journey_risked_vote") +
+        points("journey_won_game") +
+        points("win_idol"),
+      US0772: immune + points("go_on_journey"),
+      US0769:
+        6 +
+        points("go_on_journey") +
+        points("use_shot_in_the_dark_unsuccessfully"),
+    };
+    for (const p of SEASON_51_PLAYERS) {
+      const total = getEnhancedSurvivorPoints(
+        Object.values(SEASON_51_CHALLENGES),
+        Object.values(SEASON_51_ELIMINATIONS),
+        Object.values(SEASON_51_EVENTS),
+        6,
         p.castaway_id as CastawayId,
       ).total;
       expect([p.castaway_id, total]).toEqual([
