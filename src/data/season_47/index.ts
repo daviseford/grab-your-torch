@@ -1266,16 +1266,6 @@ export const SEASON_47_EVENTS = {
     action: "votes_negated_by_idol",
     multiplier: 1,
   },
-  event_34: {
-    id: "event_34",
-    season_id: "season_47",
-    season_num: 47,
-    episode_id: "episode_13",
-    episode_num: 13,
-    castaway_id: "US0712",
-    action: "votes_negated_by_idol",
-    multiplier: 3,
-  },
   event_35: {
     id: "event_35",
     season_id: "season_47",
