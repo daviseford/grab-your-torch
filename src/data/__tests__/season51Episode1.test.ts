@@ -483,14 +483,15 @@ describe("season 51 episode 5", () => {
  * failed shot in the dark. At the summit Kristin stayed on Exile Island and
  * earned a tethered idol (also recorded as a find), while Ori and Sharonda
  * went back to camp with a ribs-and-corn meal that scores only the journey.
- * survivoR also lists Episode 7 tribe rows (the merge); none of it is here.
+ *
+ * doehm/survivoR@7c96d3e removed Jelly's (US0756) vote for Ori, leaving
+ * Devin's as the only recorded vote. Votes score nothing; points are unchanged.
  */
 describe("season 51 episode 6", () => {
   const TOKA = ["US0754", "US0757", "US0758", "US0764", "US0767", "US0768"];
   const DINA = ["US0759", "US0760", "US0762", "US0765", "US0772"];
 
-  it("is the sixth and newest episode, not a finale and not the merge", () => {
-    expect(SEASON_51_EPISODES).toHaveLength(6);
+  it("is the sixth aired episode, not a finale and not the merge", () => {
     expect(SEASON_51_EPISODES[5]).toMatchObject({
       id: "episode_6",
       order: 6,
@@ -533,26 +534,10 @@ describe("season 51 episode 6", () => {
       "US0769:use_shot_in_the_dark_unsuccessfully",
       "US0772:go_on_journey",
     ]);
-    // Ori's shot in the dark replaces his vote, leaving two votes for him.
+    // Ori's shot in the dark replaces his vote; only Devin's vote is recorded.
     const votes = inEpisode(SEASON_51_VOTE_HISTORY, 6);
-    expect(votes.map((v) => v.voter_castaway_id).sort()).toEqual([
-      "US0756",
-      "US0761",
-    ]);
+    expect(votes.map((v) => v.voter_castaway_id)).toEqual(["US0761"]);
     for (const v of votes) expect(v.target_castaway_id).toBe("US0769");
-  });
-
-  it("holds nothing from an episode survivoR has not published", () => {
-    for (const records of [
-      SEASON_51_CHALLENGES,
-      SEASON_51_ELIMINATIONS,
-      SEASON_51_EVENTS,
-      SEASON_51_VOTE_HISTORY,
-    ]) {
-      for (const r of Object.values(records)) {
-        expect(r.episode_num).toBeLessThanOrEqual(6);
-      }
-    }
   });
 
   it("scores the episode under the existing rules", () => {
@@ -580,6 +565,126 @@ describe("season 51 episode 6", () => {
         Object.values(SEASON_51_ELIMINATIONS),
         Object.values(SEASON_51_EVENTS),
         6,
+        p.castaway_id as CastawayId,
+      ).total;
+      expect([p.castaway_id, total]).toEqual([
+        p.castaway_id,
+        expected[p.castaway_id] ?? 0,
+      ]);
+    }
+  });
+});
+
+/**
+ * Season 51 episode 7 as published in doehm/survivoR@7c96d3e: the merge. All
+ * 13 remaining castaways merged, ten won the individual reward, Mike won
+ * individual immunity and Brady was voted out 9 to 4 over Eric. Kristin gave
+ * her tethered idol to Sharonda; the recipient's "Received" row scores it.
+ */
+describe("season 51 episode 7", () => {
+  const MERGED = [
+    "US0754",
+    "US0756",
+    "US0757",
+    "US0758",
+    "US0759",
+    "US0760",
+    "US0761",
+    "US0762",
+    "US0764",
+    "US0765",
+    "US0767",
+    "US0768",
+    "US0772",
+  ];
+  const REWARD = [
+    "US0754",
+    "US0756",
+    "US0757",
+    "US0758",
+    "US0760",
+    "US0761",
+    "US0762",
+    "US0765",
+    "US0767",
+    "US0768",
+  ];
+
+  it("is the seventh and newest episode, the merge and not a finale", () => {
+    expect(SEASON_51_EPISODES).toHaveLength(7);
+    expect(SEASON_51_EPISODES[6]).toMatchObject({
+      id: "episode_7",
+      order: 7,
+      name: "The Girl at the Prom",
+      air_date: "2026-11-04",
+      finale: false,
+      merge_occurs: true,
+      post_merge: true,
+    });
+  });
+
+  it("credits the reward, immunity, merge, idol, boot and votes", () => {
+    expect(
+      inEpisode(SEASON_51_CHALLENGES, 7).map((c) => [
+        c.variant,
+        [...c.winning_castaways].sort(),
+      ]),
+    ).toEqual([
+      ["reward", REWARD],
+      ["immunity", ["US0768"]],
+    ]);
+    expect(
+      inEpisode(SEASON_51_ELIMINATIONS, 7).map((e) => [
+        e.castaway_id,
+        e.order,
+        e.variant,
+      ]),
+    ).toEqual([["US0757", 9, "tribal"]]);
+    expect(
+      inEpisode(SEASON_51_EVENTS, 7)
+        .map((e) => `${e.castaway_id}:${e.action}`)
+        .sort(),
+    ).toEqual(
+      [...MERGED.map((id) => `${id}:make_merge`), "US0772:win_idol"].sort(),
+    );
+    const votes = inEpisode(SEASON_51_VOTE_HISTORY, 7);
+    expect(votes.map((v) => v.voter_castaway_id).sort()).toEqual(MERGED);
+    const against = (id: string) =>
+      votes.filter((v) => v.target_castaway_id === id).length;
+    expect([against("US0757"), against("US0762")]).toEqual([9, 4]);
+  });
+
+  it("holds nothing from an episode survivoR has not published", () => {
+    for (const records of [
+      SEASON_51_CHALLENGES,
+      SEASON_51_ELIMINATIONS,
+      SEASON_51_EVENTS,
+      SEASON_51_VOTE_HISTORY,
+    ]) {
+      for (const r of Object.values(records)) {
+        expect(r.episode_num).toBeLessThanOrEqual(7);
+      }
+    }
+  });
+
+  it("scores the episode under the existing rules", () => {
+    const points = (action: string) =>
+      BASE_PLAYER_SCORING.find((r) => r.action === action)!.fixed_value!;
+    const expected: Record<string, number> = Object.fromEntries(
+      MERGED.map((id) => [
+        id,
+        points("make_merge") + (REWARD.includes(id) ? points("reward") : 0),
+      ]),
+    );
+    expected.US0768 += points("immunity");
+    expected.US0772 += points("win_idol");
+    expected.US0757 += 7; // voted out in episode 7
+    for (const p of SEASON_51_PLAYERS) {
+      const total = getEnhancedSurvivorPoints(
+        Object.values(SEASON_51_CHALLENGES),
+        Object.values(SEASON_51_ELIMINATIONS),
+        Object.values(SEASON_51_EVENTS),
+        7,
         p.castaway_id as CastawayId,
       ).total;
       expect([p.castaway_id, total]).toEqual([
