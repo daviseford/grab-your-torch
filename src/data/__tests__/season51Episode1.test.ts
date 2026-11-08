@@ -580,6 +580,9 @@ describe("season 51 episode 6", () => {
  * 13 remaining castaways merged, ten won the individual reward, Mike won
  * individual immunity and Brady was voted out 9 to 4 over Eric. Kristin gave
  * her tethered idol to Sharonda; the recipient's "Received" row scores it.
+ * doehm/survivoR@b161c05 then named the merged tribe Tovuto (it was "Merged",
+ * and Episode 7's challenge, tribe and vote rows carried the original tribes);
+ * only the vote rows' tribe label reaches this file, and no score moves.
  */
 describe("season 51 episode 7", () => {
   const MERGED = [
@@ -652,6 +655,20 @@ describe("season 51 episode 7", () => {
     const against = (id: string) =>
       votes.filter((v) => v.target_castaway_id === id).length;
     expect([against("US0757"), against("US0762")]).toEqual([9, 4]);
+  });
+
+  it("records the Episode 7 votes under the merged tribe Tovuto", () => {
+    const tribes = (episodes: number[]) => [
+      ...new Set(
+        Object.values(SEASON_51_VOTE_HISTORY)
+          .filter((v) => episodes.includes(v.episode_num))
+          .map((v) => v.tribe),
+      ),
+    ];
+    expect(inEpisode(SEASON_51_VOTE_HISTORY, 7)).toHaveLength(13);
+    expect(tribes([7])).toEqual(["Tovuto"]);
+    // The rename is the merge only: pre-merge votes keep their own tribes.
+    expect(tribes([1, 2, 3, 4, 5, 6]).sort()).toEqual(["Dina", "Savu", "Toka"]);
   });
 
   it("holds nothing from an episode survivoR has not published", () => {
