@@ -1485,16 +1485,6 @@ export const SEASON_50_EVENTS = {
     action: "use_shot_in_the_dark_unsuccessfully",
     multiplier: null,
   },
-  event_36: {
-    id: "event_36",
-    season_id: "season_50",
-    season_num: 50,
-    episode_id: "episode_8",
-    episode_num: 8,
-    castaway_id: "US0277",
-    action: "use_shot_in_the_dark_unsuccessfully",
-    multiplier: null,
-  },
   event_37: {
     id: "event_37",
     season_id: "season_50",
