@@ -702,6 +702,38 @@ const IGNORED_JOURNEY_REWARDS = new Set([
   "Ribs and corn",
 ]);
 
+/**
+ * Reviewed corrections to specific survivoR journey rows, keyed by
+ * `version_season|episode|castaway` exactly as published. A correction
+ * applies only while the row still has exactly the published values below;
+ * if survivoR changes that row, the import fails so the correction is
+ * reviewed again. Every other row is used as published.
+ *
+ * US51 ep8, survivoR c729c775 ("Update to US51E08"): the row names
+ * "Christian" with no castaway_id. Season 51 has no Christian (the US
+ * castaway of that name is US0550, Season 50); survivoR's advantage_details 7
+ * for this journey names Cristian (US0759). It also says lost_vote true with
+ * reward "Regained vote": he lost his vote at docking and won it back (CBS's
+ * Paramount+ recap, survivoR's Extra Vote record), and every other "Regained
+ * vote" row in survivoR (S45-S49) has lost_vote false. Approved by Davis (#320).
+ */
+const JOURNEY_ROW_CORRECTIONS: Record<
+  string,
+  {
+    published: { reward: string; lost_vote: boolean };
+    castaway: string;
+    castawayId: string;
+    lost_vote: boolean;
+  }
+> = {
+  "US51|8|Christian": {
+    published: { reward: "Regained vote", lost_vote: true },
+    castaway: "Cristian",
+    castawayId: "US0759",
+    lost_vote: false,
+  },
+};
+
 /** Map journeys.reward (lowercased) → specific win action. */
 const JOURNEY_REWARD_TO_WIN: Record<string, string> = {
   "extra vote": "win_extra_vote",
@@ -1018,9 +1050,36 @@ function transformEvents(
   }
 
   // Journey events (S41+) — risk/reward scoring
-  for (const j of journeys) {
-    const epNum = Math.round(j.episode);
-    const castawayId = j.castaway_id;
+  for (const published of journeys) {
+    const epNum = Math.round(published.episode);
+    const key = `${published.version_season}|${epNum}|${published.castaway}`;
+    const correction = JOURNEY_ROW_CORRECTIONS[key];
+    if (
+      correction &&
+      (published.castaway_id != null ||
+        published.chose_to_play != null ||
+        published.reward !== correction.published.reward ||
+        published.lost_vote !== correction.published.lost_vote)
+    ) {
+      throw new Error(
+        `survivoR changed the corrected journey row ${key}; review JOURNEY_ROW_CORRECTIONS.`,
+      );
+    }
+    const j = correction
+      ? { ...published, lost_vote: correction.lost_vote }
+      : published;
+    // survivoR can publish a journey row without castaway_id (US51 ep8).
+    // Resolve its name exactly against the season's cast; an unknown or
+    // misspelled name throws instead of emitting events for "undefined".
+    const castawayId = resolveCastawayId(
+      correction?.castaway ?? j.castaway_id ?? j.castaway,
+      idMap,
+    );
+    if (correction && castawayId !== correction.castawayId) {
+      throw new Error(
+        `Journey correction ${key} -> "${correction.castaway}" resolved to ${castawayId}, expected ${correction.castawayId}.`,
+      );
+    }
 
     // Base participation event
     events.push({
@@ -1101,6 +1160,11 @@ function transformEvents(
     }
   }
 
+  // A Shot in the Dark is one play per castaway per tribal, but survivoR
+  // repeats it on every vote row that castaway has at that tribal (revotes,
+  // two-boot tribals). Credit it once; conflicting outcomes are a data error.
+  const shotInTheDark = new Map<string, boolean>();
+
   // Vote history events (S41+) — SITD and advantage plays from vote_event
   for (const v of voteHistory) {
     if (!v.vote_event) continue;
@@ -1124,6 +1188,17 @@ function transformEvents(
 
       if (matchesVoteEvent(voteEvent, "Shot in the dark")) {
         const success = matchesVoteEvent(outcome, "Safe");
+        const play = `${epNum}|${castawayId}|${v.sog_id}`;
+        const seen = shotInTheDark.get(play);
+        if (seen !== undefined) {
+          if (seen !== success) {
+            throw new Error(
+              `Conflicting Shot in the dark outcomes for ${castawayId} at episode ${epNum} tribal (sog ${v.sog_id}).`,
+            );
+          }
+          continue;
+        }
+        shotInTheDark.set(play, success);
         events.push({
           episodeNum: epNum,
           castawayId,

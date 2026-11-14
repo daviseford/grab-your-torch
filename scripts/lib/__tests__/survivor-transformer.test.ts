@@ -782,4 +782,228 @@ describe("transformResults", { timeout: 60000 }, () => {
       });
     });
   });
+
+  describe("survivoR c729c775 (Update to US51E08)", () => {
+    const REF = "c729c775f76ea2d57158c02907a394c6d55a49b5";
+    const keys = (data: SurvivorSeasonData, season: number) =>
+      transformResults(data, season).events.map(
+        (e) => `${e.episodeNum}:${e.castawayId}:${e.action}`,
+      );
+    const shots = (data: SurvivorSeasonData, season: number, ep: number) =>
+      keys(data, season).filter(
+        (e) => e.startsWith(`${ep}:`) && e.includes("shot_in_the_dark"),
+      );
+
+    describe("one Shot in the Dark per castaway per tribal", () => {
+      // survivoR repeats the clause on each of a castaway's vote rows at a
+      // tribal (revotes, two-boot tribals); the play itself happens once.
+      it.each([
+        [45, 6, "US0673", "successfully", 2],
+        [47, 8, "US0707", "unsuccessfully", 2],
+        [48, 3, "US0727", "successfully", 4],
+        [50, 8, "US0277", "unsuccessfully", 2],
+      ])(
+        "S%i Episode %i: %s once (%s), from %i vote rows",
+        async (season, ep, id, how, rows) => {
+          const data = await fetchSeasonData(season, REF);
+          const repeated = data.voteHistory.filter(
+            (v) =>
+              v.episode === ep &&
+              v.castaway_id === id &&
+              /shot in the dark/i.test(v.vote_event ?? ""),
+          );
+          expect(repeated).toHaveLength(rows);
+          expect(shots(data, season, ep)).toEqual([
+            `${ep}:${id}:use_shot_in_the_dark_${how}`,
+          ]);
+        },
+      );
+
+      it("fails closed when the repeated rows disagree on the outcome", async () => {
+        const s48 = await fetchSeasonData(48, REF);
+        const rows = s48.voteHistory.filter(
+          (v) => v.castaway_id === "US0727" && v.vote_event,
+        );
+        const conflicting = {
+          ...s48,
+          voteHistory: s48.voteHistory.map((v) =>
+            v === rows[1] ? { ...v, vote_event_outcome: "Not safe" } : v,
+          ),
+        };
+        expect(() => transformResults(conflicting, 48)).toThrow(
+          "Conflicting Shot in the dark outcomes for US0727",
+        );
+      });
+    });
+
+    describe("S51 Episode 8 journey row correction", () => {
+      let s51: SurvivorSeasonData;
+      let row: SurvivorSeasonData["journeys"][number];
+      const withRow = (patch: object) => ({
+        ...s51,
+        journeys: s51.journeys.map((j) => (j === row ? { ...j, ...patch } : j)),
+      });
+      const journeyEvents = (data: SurvivorSeasonData) =>
+        keys(data, 51).filter(
+          (e) => e.startsWith("8:") && e.includes("journey"),
+        );
+      beforeAll(async () => {
+        s51 = await fetchSeasonData(51, REF);
+        row = s51.journeys.find((j) => j.episode === 8)!;
+      });
+
+      it("matches the exact row survivoR published", () => {
+        expect(row).toMatchObject({
+          version_season: "US51",
+          castaway: "Christian",
+          reward: "Regained vote",
+          lost_vote: true,
+        });
+        expect(row.castaway_id).toBeUndefined();
+        expect(row.chose_to_play).toBeUndefined();
+        const cristian = s51.castaways.filter((c) => c.castaway === "Cristian");
+        expect(cristian.map((c) => c.castaway_id)).toEqual(["US0759"]);
+        expect(s51.castaways.some((c) => /christian/i.test(c.castaway))).toBe(
+          false,
+        );
+      });
+
+      it("scores Cristian's regained vote like every other one", () => {
+        // He lost his vote at docking and won it back (Extra Vote found via
+        // advantage_movement). survivoR's other "Regained vote" rows have
+        // lost_vote false and score journey participation only.
+        expect(journeyEvents(s51)).toEqual(["8:US0759:go_on_journey"]);
+        const regained = keys(
+          withRow({
+            castaway_id: undefined,
+            castaway: "Cristian",
+            lost_vote: false,
+          }),
+          51,
+        );
+        expect(keys(s51, 51)).toEqual(regained);
+        expect(keys(s51, 51).every((e) => !e.includes("undefined"))).toBe(true);
+      });
+
+      it("fails when survivoR changes the corrected row", () => {
+        for (const patch of [
+          { castaway_id: "US0759" }, // id now supplied
+          { lost_vote: false }, // survivoR fixed the flag
+          { reward: "Extra Vote" }, // different outcome
+          { chose_to_play: true }, // new field
+        ]) {
+          expect(() => transformResults(withRow(patch), 51)).toThrow(
+            "survivoR changed the corrected journey row US51|8|Christian",
+          );
+        }
+      });
+
+      it("leaves every other row as published", () => {
+        for (const patch of [
+          { castaway: "Kristian" }, // another misspelling
+          { castaway: "christian" }, // casing is not the reviewed value
+          { episode: 7 }, // same name, another episode
+          { version_season: "US50" }, // same name, another season key
+        ]) {
+          expect(() => transformResults(withRow(patch), 51)).toThrow(
+            "Could not resolve",
+          );
+        }
+        // Spelled correctly, the same facts score as published.
+        expect(journeyEvents(withRow({ castaway: "Cristian" })).sort()).toEqual(
+          [
+            "8:US0759:go_on_journey",
+            "8:US0759:journey_lost_vote",
+            "8:US0759:journey_risked_vote",
+          ],
+        );
+      });
+
+      it("fails if the season's Cristian is not US0759", () => {
+        const renamed = {
+          ...s51,
+          castaways: s51.castaways.map((c) =>
+            c.castaway_id === "US0759"
+              ? { ...c, castaway: "Cris" }
+              : c.castaway_id === "US0762"
+                ? { ...c, castaway: "Cristian" }
+                : c,
+          ),
+        };
+        expect(() => transformResults(renamed, 51)).toThrow(
+          "resolved to US0762, expected US0759",
+        );
+        const missing = {
+          ...s51,
+          castaways: s51.castaways.map((c) =>
+            c.castaway_id === "US0759" ? { ...c, castaway: "Cris" } : c,
+          ),
+        };
+        expect(() => transformResults(missing, 51)).toThrow(
+          'Could not resolve "Cristian"',
+        );
+      });
+
+      it("leaves Season 50's real Christian (US0550) alone", async () => {
+        const s50 = await fetchSeasonData(50, REF);
+        const theirs = s50.journeys.filter((j) => j.castaway === "Christian");
+        expect(theirs.map((j) => j.castaway_id)).toEqual(["US0550"]);
+        const noId = {
+          ...s50,
+          journeys: s50.journeys.map((j) =>
+            j.castaway === "Christian"
+              ? { ...j, castaway_id: undefined as unknown as string }
+              : j,
+          ),
+        };
+        expect(keys(noId, 50)).toEqual(keys(s50, 50));
+      });
+
+      it("resolves a missing id from the castaway's exact name", () => {
+        const known = s51.journeys.filter((j) => j.episode !== 8);
+        const withoutIds = known.map((j) => ({
+          ...j,
+          castaway_id: undefined as unknown as string,
+        }));
+        expect(keys({ ...s51, journeys: withoutIds }, 51)).toEqual(
+          keys({ ...s51, journeys: known }, 51),
+        );
+      });
+
+      it("credits the Episode 8 Shots in the Dark once each", () => {
+        // Two vote rows per voter: survivoR records each pair vote per member.
+        expect(shots(s51, 51, 8).sort()).toEqual([
+          "8:US0759:use_shot_in_the_dark_successfully",
+          "8:US0764:use_shot_in_the_dark_unsuccessfully",
+        ]);
+      });
+    });
+
+    describe("historical challenge corrections", () => {
+      const winners = async (season: number, ep: number, variant: string) =>
+        transformResults(await fetchSeasonData(season, REF), season)
+          .challenges.filter(
+            (c) => c.episodeNum === ep && c.variant === variant,
+          )
+          .map((c) => [...c.winnerCastawayIds].sort());
+
+      it("S38 Episode 13 duel has one winner", async () => {
+        expect(await winners(38, 13, "duel")).toEqual([["US0559"]]);
+      });
+
+      it("S39 Episode 11 team reward went to US0586 and US0590", async () => {
+        expect(await winners(39, 11, "team_reward")).toEqual([
+          ["US0586", "US0590"],
+        ]);
+      });
+
+      it("S50 Episode 1 credits US0682, not US0550, with the tribe", async () => {
+        for (const variant of ["team_immunity", "team_reward"]) {
+          const groups = await winners(50, 1, variant);
+          expect(groups.some((g) => g.includes("US0682"))).toBe(true);
+          expect(groups).not.toContainEqual(["US0550"]);
+        }
+      });
+    });
+  });
 });

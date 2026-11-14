@@ -724,7 +724,7 @@ export const SEASON_39_CHALLENGES = {
     episode_num: 11,
     variant: "team_reward",
     order: 19,
-    winning_castaways: ["US0585", "US0587"],
+    winning_castaways: ["US0586", "US0590"],
   },
   challenge_20: {
     id: "challenge_20",
