@@ -1020,7 +1020,10 @@ function transformEvents(
   // Journey events (S41+) — risk/reward scoring
   for (const j of journeys) {
     const epNum = Math.round(j.episode);
-    const castawayId = j.castaway_id;
+    // survivoR can publish a journey row without castaway_id (US51 ep8).
+    // Resolve its name exactly against the season's cast; an unknown or
+    // misspelled name throws instead of emitting events for "undefined".
+    const castawayId = resolveCastawayId(j.castaway_id ?? j.castaway, idMap);
 
     // Base participation event
     events.push({
@@ -1101,6 +1104,11 @@ function transformEvents(
     }
   }
 
+  // A Shot in the Dark is one play per castaway per tribal, but survivoR
+  // repeats it on every vote row that castaway has at that tribal (revotes,
+  // two-boot tribals). Credit it once; conflicting outcomes are a data error.
+  const shotInTheDark = new Map<string, boolean>();
+
   // Vote history events (S41+) — SITD and advantage plays from vote_event
   for (const v of voteHistory) {
     if (!v.vote_event) continue;
@@ -1124,6 +1132,17 @@ function transformEvents(
 
       if (matchesVoteEvent(voteEvent, "Shot in the dark")) {
         const success = matchesVoteEvent(outcome, "Safe");
+        const play = `${epNum}|${castawayId}|${v.sog_id}`;
+        const seen = shotInTheDark.get(play);
+        if (seen !== undefined) {
+          if (seen !== success) {
+            throw new Error(
+              `Conflicting Shot in the dark outcomes for ${castawayId} at episode ${epNum} tribal (sog ${v.sog_id}).`,
+            );
+          }
+          continue;
+        }
+        shotInTheDark.set(play, success);
         events.push({
           episodeNum: epNum,
           castawayId,
