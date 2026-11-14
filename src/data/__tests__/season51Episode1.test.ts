@@ -613,8 +613,7 @@ describe("season 51 episode 7", () => {
     "US0768",
   ];
 
-  it("is the seventh and newest episode, the merge and not a finale", () => {
-    expect(SEASON_51_EPISODES).toHaveLength(7);
+  it("is the seventh episode, the merge and not a finale", () => {
     expect(SEASON_51_EPISODES[6]).toMatchObject({
       id: "episode_7",
       order: 7,
@@ -671,19 +670,6 @@ describe("season 51 episode 7", () => {
     expect(tribes([1, 2, 3, 4, 5, 6]).sort()).toEqual(["Dina", "Savu", "Toka"]);
   });
 
-  it("holds nothing from an episode survivoR has not published", () => {
-    for (const records of [
-      SEASON_51_CHALLENGES,
-      SEASON_51_ELIMINATIONS,
-      SEASON_51_EVENTS,
-      SEASON_51_VOTE_HISTORY,
-    ]) {
-      for (const r of Object.values(records)) {
-        expect(r.episode_num).toBeLessThanOrEqual(7);
-      }
-    }
-  });
-
   it("scores the episode under the existing rules", () => {
     const points = (action: string) =>
       BASE_PLAYER_SCORING.find((r) => r.action === action)!.fixed_value!;
@@ -702,6 +688,141 @@ describe("season 51 episode 7", () => {
         Object.values(SEASON_51_ELIMINATIONS),
         Object.values(SEASON_51_EVENTS),
         7,
+        p.castaway_id as CastawayId,
+      ).total;
+      expect([p.castaway_id, total]).toEqual([
+        p.castaway_id,
+        expected[p.castaway_id] ?? 0,
+      ]);
+    }
+  });
+});
+
+/**
+ * Episode 8 from doehm/survivoR@c729c775 ("Update to US51E08"), a pairs
+ * episode: one Tribal Council voted out a pair, and survivoR records each vote
+ * once per pair member. The journey row is corrected in the importer
+ * (JOURNEY_ROW_CORRECTIONS): survivoR names "Christian" with no castaway_id
+ * and lost_vote true, but it was Cristian, who won his vote back.
+ */
+describe("season 51 episode 8", () => {
+  const PAIR_VOTERS = [
+    "US0754",
+    "US0756",
+    "US0758",
+    "US0760",
+    "US0761",
+    "US0762",
+    "US0765",
+    "US0767",
+    "US0768",
+    "US0772",
+  ];
+
+  it("is the eighth and newest episode, post-merge and not a finale", () => {
+    expect(SEASON_51_EPISODES).toHaveLength(8);
+    expect(SEASON_51_EPISODES[7]).toMatchObject({
+      id: "episode_8",
+      order: 8,
+      name: "Load the Ark, Two by Two",
+      air_date: "2026-11-11",
+      finale: false,
+      merge_occurs: false,
+      post_merge: true,
+    });
+  });
+
+  it("credits the pair's immunity, the double boot and the votes", () => {
+    expect(
+      inEpisode(SEASON_51_CHALLENGES, 8).map((c) => [
+        c.variant,
+        [...c.winning_castaways].sort(),
+      ]),
+    ).toEqual([
+      ["team_immunity", ["US0765", "US0772"]],
+      ["team_reward", ["US0765", "US0772"]],
+    ]);
+    expect(
+      inEpisode(SEASON_51_ELIMINATIONS, 8).map((e) => [
+        e.castaway_id,
+        e.order,
+        e.variant,
+      ]),
+    ).toEqual([
+      ["US0764", 10, "tribal"],
+      ["US0760", 11, "tribal"],
+    ]);
+    const votes = inEpisode(SEASON_51_VOTE_HISTORY, 8);
+    expect([...new Set(votes.map((v) => v.voter_castaway_id))].sort()).toEqual(
+      PAIR_VOTERS,
+    );
+    const against = (id: string, nullified: boolean) =>
+      votes.filter(
+        (v) => v.target_castaway_id === id && v.nullified === nullified,
+      ).length;
+    // Jelly's idol cancelled the 8 votes for her pair (Jelly and Devin);
+    // Cristian's Shot in the Dark cancelled the one for his (Cristian, Carter).
+    expect([against("US0756", true), against("US0761", true)]).toEqual([8, 8]);
+    expect([against("US0759", true), against("US0758", true)]).toEqual([1, 1]);
+    expect([against("US0764", false), against("US0760", false)]).toEqual([
+      1, 1,
+    ]);
+  });
+
+  it("records each advantage, journey and Shot in the Dark once", () => {
+    expect(
+      inEpisode(SEASON_51_EVENTS, 8)
+        .map((e) => `${e.castaway_id}:${e.action}:${e.multiplier}`)
+        .sort(),
+    ).toEqual(
+      [
+        "US0756:use_idol:null",
+        "US0756:votes_negated_by_idol:8",
+        "US0759:find_extra_vote:null",
+        "US0759:go_on_journey:null",
+        "US0759:use_shot_in_the_dark_successfully:null",
+        "US0762:win_other_advantage:null",
+        "US0764:use_shot_in_the_dark_unsuccessfully:null",
+      ].sort(),
+    );
+  });
+
+  it("holds nothing from an episode survivoR has not published", () => {
+    for (const records of [
+      SEASON_51_CHALLENGES,
+      SEASON_51_ELIMINATIONS,
+      SEASON_51_EVENTS,
+      SEASON_51_VOTE_HISTORY,
+    ]) {
+      for (const r of Object.values(records)) {
+        expect(r.episode_num).toBeLessThanOrEqual(8);
+      }
+    }
+  });
+
+  it("scores the episode under the existing rules", () => {
+    const points = (action: string) =>
+      BASE_PLAYER_SCORING.find((r) => r.action === action)!.fixed_value!;
+    const pair = points("team_immunity") + points("team_reward");
+    const expected: Record<string, number> = {
+      US0756: points("use_idol") + 8 * points("votes_negated_by_idol"),
+      US0759:
+        points("find_extra_vote") +
+        points("go_on_journey") +
+        points("use_shot_in_the_dark_successfully"),
+      US0762: points("win_other_advantage"),
+      US0764: 8 + points("use_shot_in_the_dark_unsuccessfully"),
+      US0760: 8.5, // second of two boots in episode 8
+      US0765: pair,
+      US0772: pair,
+    };
+    expect(expected.US0759).toBe(7.5);
+    for (const p of SEASON_51_PLAYERS) {
+      const total = getEnhancedSurvivorPoints(
+        Object.values(SEASON_51_CHALLENGES),
+        Object.values(SEASON_51_ELIMINATIONS),
+        Object.values(SEASON_51_EVENTS),
+        8,
         p.castaway_id as CastawayId,
       ).total;
       expect([p.castaway_id, total]).toEqual([

@@ -723,7 +723,7 @@ export const SEASON_38_CHALLENGES = {
     episode_num: 13,
     variant: "duel",
     order: 29,
-    winning_castaways: ["US0557", "US0559", "US0564"],
+    winning_castaways: ["US0559"],
   },
   challenge_30: {
     id: "challenge_30",
