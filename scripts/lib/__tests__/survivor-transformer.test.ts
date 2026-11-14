@@ -838,17 +838,94 @@ describe("transformResults", { timeout: 60000 }, () => {
 
     describe("S51 Episode 8 journey row without a castaway_id", () => {
       let s51: SurvivorSeasonData;
+      let row: SurvivorSeasonData["journeys"][number];
+      const withRow = (patch: object) => ({
+        ...s51,
+        journeys: s51.journeys.map((j) => (j === row ? { ...j, ...patch } : j)),
+      });
       beforeAll(async () => {
         s51 = await fetchSeasonData(51, REF);
+        row = s51.journeys.find((j) => j.episode === 8)!;
       });
 
-      it("holds the import instead of scoring an unknown castaway", () => {
-        const row = s51.journeys.find((j) => j.episode === 8)!;
+      it("maps survivoR's 'Christian' to Cristian (US0759) for that row only", () => {
+        // Season 51 has no Christian; survivoR's advantage_details for this
+        // journey names Cristian. Approved alias, #320.
         expect(row.castaway_id).toBeUndefined();
-        expect(row.castaway).toBe("Christian"); // no such cast member
-        expect(() => transformResults(s51, 51)).toThrow(
-          'Could not resolve "Christian" to a castaway_id',
+        expect(row.castaway).toBe("Christian");
+        expect(row.version_season).toBe("US51");
+        const cristian = s51.castaways.filter((c) => c.castaway === "Cristian");
+        expect(cristian.map((c) => c.castaway_id)).toEqual(["US0759"]);
+        expect(s51.castaways.some((c) => /christian/i.test(c.castaway))).toBe(
+          false,
         );
+
+        const ep8 = keys(s51, 51).filter((e) => e.startsWith("8:"));
+        expect(ep8.filter((e) => e.includes("journey")).sort()).toEqual([
+          "8:US0759:go_on_journey",
+          "8:US0759:journey_lost_vote",
+          "8:US0759:journey_risked_vote",
+        ]);
+        expect(ep8.every((e) => !e.includes("undefined"))).toBe(true);
+      });
+
+      it("still fails on any other unmatched name or row", () => {
+        for (const patch of [
+          { castaway: "Kristian" }, // another misspelling
+          { castaway: "christian" }, // casing is not the reviewed value
+          { episode: 7 }, // same name, another episode
+          { version_season: "US50" }, // same name, another season key
+        ]) {
+          expect(() => transformResults(withRow(patch), 51)).toThrow(
+            "Could not resolve",
+          );
+        }
+      });
+
+      it("never overrides a castaway_id survivoR supplies", () => {
+        const events = keys(withRow({ castaway_id: "US0762" }), 51);
+        expect(events).toContain("8:US0762:go_on_journey");
+        expect(events).not.toContain("8:US0759:go_on_journey");
+      });
+
+      it("fails if the season's Cristian is not US0759", () => {
+        const renamed = {
+          ...s51,
+          castaways: s51.castaways.map((c) =>
+            c.castaway_id === "US0759"
+              ? { ...c, castaway: "Cris" }
+              : c.castaway_id === "US0762"
+                ? { ...c, castaway: "Cristian" }
+                : c,
+          ),
+        };
+        expect(() => transformResults(renamed, 51)).toThrow(
+          "resolved to US0762, expected US0759",
+        );
+        const missing = {
+          ...s51,
+          castaways: s51.castaways.map((c) =>
+            c.castaway_id === "US0759" ? { ...c, castaway: "Cris" } : c,
+          ),
+        };
+        expect(() => transformResults(missing, 51)).toThrow(
+          'Could not resolve "Cristian"',
+        );
+      });
+
+      it("leaves Season 50's real Christian (US0550) alone", async () => {
+        const s50 = await fetchSeasonData(50, REF);
+        const theirs = s50.journeys.filter((j) => j.castaway === "Christian");
+        expect(theirs.map((j) => j.castaway_id)).toEqual(["US0550"]);
+        const noId = {
+          ...s50,
+          journeys: s50.journeys.map((j) =>
+            j.castaway === "Christian"
+              ? { ...j, castaway_id: undefined as unknown as string }
+              : j,
+          ),
+        };
+        expect(keys(noId, 50)).toEqual(keys(s50, 50));
       });
 
       it("resolves a missing id from the castaway's exact name", () => {
@@ -863,13 +940,8 @@ describe("transformResults", { timeout: 60000 }, () => {
       });
 
       it("credits the Episode 8 Shots in the Dark once each", () => {
-        // Two vote rows per voter at the two-boot tribal (sog 10). Journeys
-        // are left out only because the Episode 8 row cannot be resolved.
-        const voteRowsOnly = {
-          ...s51,
-          journeys: s51.journeys.filter((j) => j.episode !== 8),
-        };
-        expect(shots(voteRowsOnly, 51, 8).sort()).toEqual([
+        // Two vote rows per voter at the two-boot tribal (sog 10).
+        expect(shots(s51, 51, 8).sort()).toEqual([
           "8:US0759:use_shot_in_the_dark_successfully",
           "8:US0764:use_shot_in_the_dark_unsuccessfully",
         ]);

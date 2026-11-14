@@ -702,6 +702,23 @@ const IGNORED_JOURNEY_REWARDS = new Set([
   "Ribs and corn",
 ]);
 
+/**
+ * Reviewed survivoR name errors on journey rows that have no castaway_id,
+ * keyed by `version_season|episode|castaway` exactly as published. Used only
+ * for that row; every other name still resolves exactly or throws.
+ *
+ * US51 ep8: survivoR c729c775 ("Update to US51E08") lists the journey player
+ * as "Christian" with no castaway_id. Season 51 has no Christian (the US
+ * castaway of that name is US0550, Season 50); survivoR's advantage_details 7
+ * for the same journey names Cristian (US0759). Approved by Davis (#320).
+ */
+const JOURNEY_NAME_ALIASES: Record<
+  string,
+  { castaway: string; castawayId: string }
+> = {
+  "US51|8|Christian": { castaway: "Cristian", castawayId: "US0759" },
+};
+
 /** Map journeys.reward (lowercased) → specific win action. */
 const JOURNEY_REWARD_TO_WIN: Record<string, string> = {
   "extra vote": "win_extra_vote",
@@ -1022,8 +1039,20 @@ function transformEvents(
     const epNum = Math.round(j.episode);
     // survivoR can publish a journey row without castaway_id (US51 ep8).
     // Resolve its name exactly against the season's cast; an unknown or
-    // misspelled name throws instead of emitting events for "undefined".
-    const castawayId = resolveCastawayId(j.castaway_id ?? j.castaway, idMap);
+    // misspelled name throws instead of emitting events for "undefined",
+    // unless the exact row has a reviewed alias.
+    const alias = j.castaway_id
+      ? undefined
+      : JOURNEY_NAME_ALIASES[`${j.version_season}|${epNum}|${j.castaway}`];
+    const castawayId = resolveCastawayId(
+      alias?.castaway ?? j.castaway_id ?? j.castaway,
+      idMap,
+    );
+    if (alias && castawayId !== alias.castawayId) {
+      throw new Error(
+        `Journey alias "${j.castaway}" -> "${alias.castaway}" resolved to ${castawayId}, expected ${alias.castawayId}.`,
+      );
+    }
 
     // Base participation event
     events.push({
