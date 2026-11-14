@@ -703,20 +703,35 @@ const IGNORED_JOURNEY_REWARDS = new Set([
 ]);
 
 /**
- * Reviewed survivoR name errors on journey rows that have no castaway_id,
- * keyed by `version_season|episode|castaway` exactly as published. Used only
- * for that row; every other name still resolves exactly or throws.
+ * Reviewed corrections to specific survivoR journey rows, keyed by
+ * `version_season|episode|castaway` exactly as published. A correction
+ * applies only while the row still has exactly the published values below;
+ * if survivoR changes that row, the import fails so the correction is
+ * reviewed again. Every other row is used as published.
  *
- * US51 ep8: survivoR c729c775 ("Update to US51E08") lists the journey player
- * as "Christian" with no castaway_id. Season 51 has no Christian (the US
+ * US51 ep8, survivoR c729c775 ("Update to US51E08"): the row names
+ * "Christian" with no castaway_id. Season 51 has no Christian (the US
  * castaway of that name is US0550, Season 50); survivoR's advantage_details 7
- * for the same journey names Cristian (US0759). Approved by Davis (#320).
+ * for this journey names Cristian (US0759). It also says lost_vote true with
+ * reward "Regained vote": he lost his vote at docking and won it back (CBS's
+ * Paramount+ recap, survivoR's Extra Vote record), and every other "Regained
+ * vote" row in survivoR (S45-S49) has lost_vote false. Approved by Davis (#320).
  */
-const JOURNEY_NAME_ALIASES: Record<
+const JOURNEY_ROW_CORRECTIONS: Record<
   string,
-  { castaway: string; castawayId: string }
+  {
+    published: { reward: string; lost_vote: boolean };
+    castaway: string;
+    castawayId: string;
+    lost_vote: boolean;
+  }
 > = {
-  "US51|8|Christian": { castaway: "Cristian", castawayId: "US0759" },
+  "US51|8|Christian": {
+    published: { reward: "Regained vote", lost_vote: true },
+    castaway: "Cristian",
+    castawayId: "US0759",
+    lost_vote: false,
+  },
 };
 
 /** Map journeys.reward (lowercased) → specific win action. */
@@ -1035,22 +1050,34 @@ function transformEvents(
   }
 
   // Journey events (S41+) — risk/reward scoring
-  for (const j of journeys) {
-    const epNum = Math.round(j.episode);
+  for (const published of journeys) {
+    const epNum = Math.round(published.episode);
+    const key = `${published.version_season}|${epNum}|${published.castaway}`;
+    const correction = JOURNEY_ROW_CORRECTIONS[key];
+    if (
+      correction &&
+      (published.castaway_id != null ||
+        published.chose_to_play != null ||
+        published.reward !== correction.published.reward ||
+        published.lost_vote !== correction.published.lost_vote)
+    ) {
+      throw new Error(
+        `survivoR changed the corrected journey row ${key}; review JOURNEY_ROW_CORRECTIONS.`,
+      );
+    }
+    const j = correction
+      ? { ...published, lost_vote: correction.lost_vote }
+      : published;
     // survivoR can publish a journey row without castaway_id (US51 ep8).
     // Resolve its name exactly against the season's cast; an unknown or
-    // misspelled name throws instead of emitting events for "undefined",
-    // unless the exact row has a reviewed alias.
-    const alias = j.castaway_id
-      ? undefined
-      : JOURNEY_NAME_ALIASES[`${j.version_season}|${epNum}|${j.castaway}`];
+    // misspelled name throws instead of emitting events for "undefined".
     const castawayId = resolveCastawayId(
-      alias?.castaway ?? j.castaway_id ?? j.castaway,
+      correction?.castaway ?? j.castaway_id ?? j.castaway,
       idMap,
     );
-    if (alias && castawayId !== alias.castawayId) {
+    if (correction && castawayId !== correction.castawayId) {
       throw new Error(
-        `Journey alias "${j.castaway}" -> "${alias.castaway}" resolved to ${castawayId}, expected ${alias.castawayId}.`,
+        `Journey correction ${key} -> "${correction.castaway}" resolved to ${castawayId}, expected ${correction.castawayId}.`,
       );
     }
 

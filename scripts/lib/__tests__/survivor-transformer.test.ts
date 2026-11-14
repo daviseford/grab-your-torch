@@ -836,40 +836,69 @@ describe("transformResults", { timeout: 60000 }, () => {
       });
     });
 
-    describe("S51 Episode 8 journey row without a castaway_id", () => {
+    describe("S51 Episode 8 journey row correction", () => {
       let s51: SurvivorSeasonData;
       let row: SurvivorSeasonData["journeys"][number];
       const withRow = (patch: object) => ({
         ...s51,
         journeys: s51.journeys.map((j) => (j === row ? { ...j, ...patch } : j)),
       });
+      const journeyEvents = (data: SurvivorSeasonData) =>
+        keys(data, 51).filter(
+          (e) => e.startsWith("8:") && e.includes("journey"),
+        );
       beforeAll(async () => {
         s51 = await fetchSeasonData(51, REF);
         row = s51.journeys.find((j) => j.episode === 8)!;
       });
 
-      it("maps survivoR's 'Christian' to Cristian (US0759) for that row only", () => {
-        // Season 51 has no Christian; survivoR's advantage_details for this
-        // journey names Cristian. Approved alias, #320.
+      it("matches the exact row survivoR published", () => {
+        expect(row).toMatchObject({
+          version_season: "US51",
+          castaway: "Christian",
+          reward: "Regained vote",
+          lost_vote: true,
+        });
         expect(row.castaway_id).toBeUndefined();
-        expect(row.castaway).toBe("Christian");
-        expect(row.version_season).toBe("US51");
+        expect(row.chose_to_play).toBeUndefined();
         const cristian = s51.castaways.filter((c) => c.castaway === "Cristian");
         expect(cristian.map((c) => c.castaway_id)).toEqual(["US0759"]);
         expect(s51.castaways.some((c) => /christian/i.test(c.castaway))).toBe(
           false,
         );
-
-        const ep8 = keys(s51, 51).filter((e) => e.startsWith("8:"));
-        expect(ep8.filter((e) => e.includes("journey")).sort()).toEqual([
-          "8:US0759:go_on_journey",
-          "8:US0759:journey_lost_vote",
-          "8:US0759:journey_risked_vote",
-        ]);
-        expect(ep8.every((e) => !e.includes("undefined"))).toBe(true);
       });
 
-      it("still fails on any other unmatched name or row", () => {
+      it("scores Cristian's regained vote like every other one", () => {
+        // He lost his vote at docking and won it back (Extra Vote found via
+        // advantage_movement). survivoR's other "Regained vote" rows have
+        // lost_vote false and score journey participation only.
+        expect(journeyEvents(s51)).toEqual(["8:US0759:go_on_journey"]);
+        const regained = keys(
+          withRow({
+            castaway_id: undefined,
+            castaway: "Cristian",
+            lost_vote: false,
+          }),
+          51,
+        );
+        expect(keys(s51, 51)).toEqual(regained);
+        expect(keys(s51, 51).every((e) => !e.includes("undefined"))).toBe(true);
+      });
+
+      it("fails when survivoR changes the corrected row", () => {
+        for (const patch of [
+          { castaway_id: "US0759" }, // id now supplied
+          { lost_vote: false }, // survivoR fixed the flag
+          { reward: "Extra Vote" }, // different outcome
+          { chose_to_play: true }, // new field
+        ]) {
+          expect(() => transformResults(withRow(patch), 51)).toThrow(
+            "survivoR changed the corrected journey row US51|8|Christian",
+          );
+        }
+      });
+
+      it("leaves every other row as published", () => {
         for (const patch of [
           { castaway: "Kristian" }, // another misspelling
           { castaway: "christian" }, // casing is not the reviewed value
@@ -880,12 +909,14 @@ describe("transformResults", { timeout: 60000 }, () => {
             "Could not resolve",
           );
         }
-      });
-
-      it("never overrides a castaway_id survivoR supplies", () => {
-        const events = keys(withRow({ castaway_id: "US0762" }), 51);
-        expect(events).toContain("8:US0762:go_on_journey");
-        expect(events).not.toContain("8:US0759:go_on_journey");
+        // Spelled correctly, the same facts score as published.
+        expect(journeyEvents(withRow({ castaway: "Cristian" })).sort()).toEqual(
+          [
+            "8:US0759:go_on_journey",
+            "8:US0759:journey_lost_vote",
+            "8:US0759:journey_risked_vote",
+          ],
+        );
       });
 
       it("fails if the season's Cristian is not US0759", () => {
@@ -940,7 +971,7 @@ describe("transformResults", { timeout: 60000 }, () => {
       });
 
       it("credits the Episode 8 Shots in the Dark once each", () => {
-        // Two vote rows per voter at the two-boot tribal (sog 10).
+        // Two vote rows per voter: survivoR records each pair vote per member.
         expect(shots(s51, 51, 8).sort()).toEqual([
           "8:US0759:use_shot_in_the_dark_successfully",
           "8:US0764:use_shot_in_the_dark_unsuccessfully",
