@@ -63,6 +63,67 @@ export const getCompetitionLoadState = ({
   return { kind: "ready" };
 };
 
+/** Timing for one load of the competition page, from start to an outcome. */
+export interface CompetitionLoadVisit {
+  start: number;
+  authMs?: number;
+  competitionMs?: number;
+  slowSent: boolean;
+  /** The outcome once `competition_load` has been sent for this visit. */
+  done?: CompetitionLoadState["kind"];
+}
+
+export const newCompetitionLoadVisit = (now: number): CompetitionLoadVisit => ({
+  start: now,
+  slowSent: false,
+});
+
+type LoadEvent = [
+  "competition_load" | "competition_load_slow",
+  ReturnType<typeof competitionLoadEventParams>,
+];
+
+/**
+ * Advances a visit to `state` and returns the events to send: at most one
+ * `competition_load_slow` and one `competition_load` per visit. Signing in
+ * from the signed-out gate starts a new visit, so the load that follows gets
+ * its own slow and final events.
+ */
+export const stepCompetitionLoadVisit = (
+  visit: CompetitionLoadVisit,
+  state: CompetitionLoadState,
+  isSlow: boolean,
+  now: number,
+  origin: string,
+): { visit: CompetitionLoadVisit; events: LoadEvent[] } => {
+  const v =
+    visit.done === "signed-out" && state.kind !== "signed-out"
+      ? newCompetitionLoadVisit(now)
+      : visit;
+  if (v.done) return { visit: v, events: [] };
+  const elapsed = now - v.start;
+  if (state.kind !== "loading" || state.stage !== "auth") v.authMs ??= elapsed;
+  if (state.kind !== "loading" || state.stage === "season") {
+    if (state.kind !== "signed-out") v.competitionMs ??= elapsed;
+  }
+  const params = () =>
+    competitionLoadEventParams({
+      state,
+      elapsedMs: elapsed,
+      authMs: v.authMs,
+      competitionMs: v.competitionMs,
+      wasSlow: v.slowSent,
+      origin,
+    });
+  if (state.kind === "loading") {
+    if (!isSlow || v.slowSent) return { visit: v, events: [] };
+    v.slowSent = true;
+    return { visit: v, events: [["competition_load_slow", params()]] };
+  }
+  v.done = state.kind;
+  return { visit: v, events: [["competition_load", params()]] };
+};
+
 /**
  * Parameters for the `competition_load` analytics event. Only the outcome,
  * the stage, Firestore's error code and elapsed milliseconds: never a user,
