@@ -15,7 +15,7 @@ import {
 import { modals } from "@mantine/modals";
 import { IconArrowLeft, IconLogin, IconUserPlus } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { AwaitingDataBanner } from "../components/AwaitingDataBanner";
 import { EpisodeAdvanceControl } from "../components/EpisodeAdvanceControl";
 import {
@@ -41,6 +41,7 @@ import { TradesSection } from "../components/Trades";
 import { useAutoFinishCompetition } from "../hooks/useAutoFinishCompetition";
 import { useChallenges } from "../hooks/useChallenges";
 import { useCompetition } from "../hooks/useCompetition";
+import { useCompetitionLoad } from "../hooks/useCompetitionLoad";
 import { useEliminations } from "../hooks/useEliminations";
 import { useEvents } from "../hooks/useEvents";
 import { usePropBetScoring } from "../hooks/useGetPropBetScoring";
@@ -52,6 +53,7 @@ import {
   getCompetitionAwaitingDataEpisode,
   getLatestDataEpisode,
 } from "../utils/episodeAirDate";
+import { getCompetitionLoadState } from "./competitionLoad";
 import {
   competitionBugContext,
   competitionContextLine,
@@ -87,14 +89,24 @@ export const SingleCompetition = () => {
     return () => window.clearInterval(timer);
   }, []);
   const [searchParams, setSearchParams] = useSearchParams();
+  const { competitionId } = useParams();
   const tabsRef = useRef<HTMLDivElement>(null);
-  const { data: competition, isLoading: isCompetitionLoading } =
-    useCompetition();
+  const {
+    data: competition,
+    isLoading: isCompetitionLoading,
+    fromCache: isCompetitionFromCache,
+    error: competitionError,
+  } = useCompetition();
   const { slimUser, isAuthReady } = useUser();
   const { activeKeys: activePropBetKeys } = usePropBetScoring();
   const tradeState = useTrades(competition?.id);
 
-  const { data: season } = useSeason(competition?.season_id);
+  const {
+    data: season,
+    isLoading: isSeasonLoading,
+    fromCache: isSeasonFromCache,
+    error: seasonError,
+  } = useSeason(competition?.season_id);
   const { data: unfilteredEvents, isReady: areEventsReady } = useEvents(
     competition?.season_id,
   );
@@ -157,6 +169,28 @@ export const SingleCompetition = () => {
 
   useBugContext(competition ? competitionBugContext(competition) : null);
 
+  const loadState = getCompetitionLoadState({
+    isAuthReady,
+    isSignedIn: !!slimUser,
+    competition: {
+      exists: !!competition,
+      loaded: !isCompetitionLoading,
+      fromCache: isCompetitionFromCache,
+      error: competitionError,
+    },
+    season: {
+      exists: !!season,
+      // Before the competition arrives there is no season to load yet.
+      loaded: !!competition && !isSeasonLoading,
+      fromCache: isSeasonFromCache,
+      error: seasonError,
+    },
+  });
+  const { isSlow } = useCompetitionLoad(competitionId, loadState);
+  // A full reload rather than reopening one listener: in the emulator suite's
+  // mobile profile a re-added listener took 30 s to deliver; a reload did not.
+  const reloadPage = () => window.location.reload();
+
   if (requiresSignIn) {
     return (
       <Center py="xl">
@@ -202,7 +236,7 @@ export const SingleCompetition = () => {
     );
   }
 
-  if (!competition && !isCompetitionLoading) {
+  if (loadState.kind === "not-found") {
     return (
       <StandbySlate
         code="Not found"
@@ -220,10 +254,60 @@ export const SingleCompetition = () => {
     );
   }
 
+  if (loadState.kind === "error" || loadState.kind === "season-missing") {
+    const isMissing = loadState.kind === "season-missing";
+    return (
+      <StandbySlate
+        code={isMissing ? "Unavailable" : "Error"}
+        actions={
+          <>
+            {!isMissing && <Button onClick={reloadPage}>Try again</Button>}
+            <Button
+              component={Link}
+              to="/competitions"
+              variant="outline"
+              color="dark.0"
+            >
+              Back to competitions
+            </Button>
+          </>
+        }
+      >
+        <Title order={1}>
+          {isMissing
+            ? "This competition's season isn't available"
+            : "We couldn't load this competition"}
+        </Title>
+        <Text c="dimmed" maw={420}>
+          {isMissing
+            ? "The season this competition belongs to couldn't be found."
+            : "Something went wrong while loading it. Try again, or come back later."}
+        </Text>
+        {!isMissing && (
+          <Text c="dimmed" size="xs">
+            Error code: {loadState.code}
+          </Text>
+        )}
+      </StandbySlate>
+    );
+  }
+
   if (!competition || !season) {
     return (
       <Center h="60vh">
-        <Loader size="lg" />
+        <Stack align="center" gap="md">
+          <Loader size="lg" aria-label="Loading competition" />
+          {isSlow && (
+            <>
+              <Text ta="center" maw={360} role="status">
+                Taking longer than usual. Still trying to load this competition.
+              </Text>
+              <Button variant="default" onClick={reloadPage}>
+                Reload page
+              </Button>
+            </>
+          )}
+        </Stack>
       </Center>
     );
   }
