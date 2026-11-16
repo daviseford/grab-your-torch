@@ -11,12 +11,14 @@ export const useCompetition = (id?: Competition["id"]) => {
   // Competition docs are readable only by signed-in users (firestore.rules),
   // so don't open a listener that is guaranteed to be denied. The page gate
   // handles the signed-out state; the listener opens once a user signs in.
-  const { data, loaded } = useSharedSnapshot(
+  const { data, loaded, fromCache, error } = useSharedSnapshot(
     "competitions",
     slimUser ? key : undefined,
   );
   return {
     data: data as Competition | undefined,
     isLoading: !!key && !loaded,
+    fromCache,
+    error,
   };
 };
