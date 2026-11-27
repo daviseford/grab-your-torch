@@ -534,9 +534,13 @@ describe("season 51 episode 6", () => {
       "US0769:use_shot_in_the_dark_unsuccessfully",
       "US0772:go_on_journey",
     ]);
-    // Ori's shot in the dark replaces his vote; only Devin's vote is recorded.
+    // Ori's shot in the dark replaces his vote; Devin and Jelly voted for him
+    // (survivoR 04d4a558 added Jelly's vote, which earlier releases lacked).
     const votes = inEpisode(SEASON_51_VOTE_HISTORY, 6);
-    expect(votes.map((v) => v.voter_castaway_id)).toEqual(["US0761"]);
+    expect(votes.map((v) => v.voter_castaway_id).sort()).toEqual([
+      "US0756",
+      "US0761",
+    ]);
     for (const v of votes) expect(v.target_castaway_id).toBe("US0769");
   });
 
@@ -641,7 +645,7 @@ describe("season 51 episode 7", () => {
         e.order,
         e.variant,
       ]),
-    ).toEqual([["US0757", 9, "tribal"]]);
+    ).toEqual([["US0757", 9, "quitter"]]);
     expect(
       inEpisode(SEASON_51_EVENTS, 7)
         .map((e) => `${e.castaway_id}:${e.action}`)
@@ -681,7 +685,9 @@ describe("season 51 episode 7", () => {
     );
     expected.US0768 += points("immunity");
     expected.US0772 += points("win_idol");
-    expected.US0757 += 7; // voted out in episode 7
+    // Voted out in episode 7, then quit the jury (survivoR 04d4a558: "8th
+    // voted out; Quit"), which scores as a quit like S45 Sean's.
+    expected.US0757 += 7 + points("quitter");
     for (const p of SEASON_51_PLAYERS) {
       const total = getEnhancedSurvivorPoints(
         Object.values(SEASON_51_CHALLENGES),
@@ -719,8 +725,7 @@ describe("season 51 episode 8", () => {
     "US0772",
   ];
 
-  it("is the eighth and newest episode, post-merge and not a finale", () => {
-    expect(SEASON_51_EPISODES).toHaveLength(8);
+  it("is the eighth episode, post-merge and not a finale", () => {
     expect(SEASON_51_EPISODES[7]).toMatchObject({
       id: "episode_8",
       order: 8,
@@ -787,19 +792,6 @@ describe("season 51 episode 8", () => {
     );
   });
 
-  it("holds nothing from an episode survivoR has not published", () => {
-    for (const records of [
-      SEASON_51_CHALLENGES,
-      SEASON_51_ELIMINATIONS,
-      SEASON_51_EVENTS,
-      SEASON_51_VOTE_HISTORY,
-    ]) {
-      for (const r of Object.values(records)) {
-        expect(r.episode_num).toBeLessThanOrEqual(8);
-      }
-    }
-  });
-
   it("scores the episode under the existing rules", () => {
     const points = (action: string) =>
       BASE_PLAYER_SCORING.find((r) => r.action === action)!.fixed_value!;
@@ -829,6 +821,143 @@ describe("season 51 episode 8", () => {
         p.castaway_id,
         expected[p.castaway_id] ?? 0,
       ]);
+    }
+  });
+});
+
+const seasonPoints = (episode: number) =>
+  Object.fromEntries(
+    SEASON_51_PLAYERS.map((p) => [
+      p.castaway_id,
+      getEnhancedSurvivorPoints(
+        Object.values(SEASON_51_CHALLENGES),
+        Object.values(SEASON_51_ELIMINATIONS),
+        Object.values(SEASON_51_EVENTS),
+        episode,
+        p.castaway_id as CastawayId,
+      ).total,
+    ]),
+  );
+const nonZero = (scores: Record<string, number>) =>
+  Object.fromEntries(Object.entries(scores).filter(([, v]) => v !== 0));
+
+/**
+ * Episodes 9 and 10 from doehm/survivoR@04d4a558 ("US51E10"). Episode 9 ended
+ * in a coin flip, not a vote: Lewis "Lost coin flip", and survivoR's vote rows
+ * for it carry no vote, so none is recorded. Episode 10 had two boots.
+ */
+describe("season 51 episode 9", () => {
+  it("is the ninth episode, post-merge and not a finale", () => {
+    expect(SEASON_51_EPISODES[8]).toMatchObject({
+      id: "episode_9",
+      order: 9,
+      name: "Wilder Than a Cat in a Bathtub",
+      air_date: "2026-11-18",
+      finale: false,
+      merge_occurs: false,
+      post_merge: true,
+    });
+  });
+
+  it("credits the team reward, Carter's immunity and the coin flip boot", () => {
+    expect(
+      inEpisode(SEASON_51_CHALLENGES, 9).map((c) => [
+        c.variant,
+        [...c.winning_castaways].sort(),
+      ]),
+    ).toEqual([
+      ["team_reward", ["US0754", "US0761", "US0762", "US0765", "US0768"]],
+      ["immunity", ["US0758"]],
+    ]);
+    expect(
+      inEpisode(SEASON_51_ELIMINATIONS, 9).map((e) => [
+        e.castaway_id,
+        e.order,
+        e.variant,
+      ]),
+    ).toEqual([["US0765", 12, "tribal"]]);
+    expect(inEpisode(SEASON_51_EVENTS, 9)).toEqual([]);
+    expect(inEpisode(SEASON_51_VOTE_HISTORY, 9)).toEqual([]);
+  });
+
+  it("scores the episode under the existing rules", () => {
+    expect(nonZero(seasonPoints(9))).toEqual({
+      US0754: 1,
+      US0758: 3,
+      US0761: 1,
+      US0762: 1,
+      US0765: 10, // team reward plus 9 for leaving in episode 9
+      US0768: 1,
+    });
+  });
+});
+
+describe("season 51 episode 10", () => {
+  it("is the tenth and newest episode, post-merge and not a finale", () => {
+    expect(SEASON_51_EPISODES).toHaveLength(10);
+    expect(SEASON_51_EPISODES[9]).toMatchObject({
+      id: "episode_10",
+      order: 10,
+      name: "Sorting Hogs",
+      air_date: "2026-11-25",
+      finale: false,
+      merge_occurs: false,
+      post_merge: true,
+    });
+  });
+
+  it("credits both immunity wins, Mike's reward, the two boots and the votes", () => {
+    expect(
+      inEpisode(SEASON_51_CHALLENGES, 10).map((c) => [
+        c.variant,
+        [...c.winning_castaways].sort(),
+      ]),
+    ).toEqual([
+      ["immunity", ["US0768"]],
+      ["reward", ["US0768"]],
+      ["immunity", ["US0759"]],
+    ]);
+    expect(
+      inEpisode(SEASON_51_ELIMINATIONS, 10).map((e) => [
+        e.castaway_id,
+        e.order,
+        e.variant,
+      ]),
+    ).toEqual([
+      ["US0767", 13, "tribal"],
+      ["US0758", 14, "tribal"],
+    ]);
+    expect(
+      inEpisode(SEASON_51_EVENTS, 10).map(
+        (e) => `${e.castaway_id}:${e.action}`,
+      ),
+    ).toEqual(["US0758:voted_out_with_idol"]);
+    const votes = inEpisode(SEASON_51_VOTE_HISTORY, 10);
+    const against = (id: string) =>
+      votes.filter((v) => v.target_castaway_id === id).length;
+    expect(votes).toHaveLength(17);
+    expect([against("US0767"), against("US0758")]).toEqual([7, 5]);
+  });
+
+  it("scores the episode under the existing rules", () => {
+    expect(nonZero(seasonPoints(10))).toEqual({
+      US0758: 9.5, // second boot (10.5) holding an unplayed idol (-1)
+      US0759: 3,
+      US0767: 10,
+      US0768: 5,
+    });
+  });
+
+  it("holds nothing from an episode survivoR has not published", () => {
+    for (const records of [
+      SEASON_51_CHALLENGES,
+      SEASON_51_ELIMINATIONS,
+      SEASON_51_EVENTS,
+      SEASON_51_VOTE_HISTORY,
+    ]) {
+      for (const r of Object.values(records)) {
+        expect(r.episode_num).toBeLessThanOrEqual(10);
+      }
     }
   });
 });
