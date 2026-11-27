@@ -487,6 +487,48 @@ function emitChallengeEntries(
 
 // --- Elimination transformation ---
 
+/**
+ * Reviewed corrections to specific survivoR castaways results, keyed by
+ * `version_season|castaway_id`. A correction applies only while the row still
+ * has exactly the published values below; if survivoR publishes a different
+ * quit for that castaway, the import fails so the correction is reviewed
+ * again. A plain boot (as before 04d4a558) passes through.
+ *
+ * US51 Brady, survivoR 04d4a558 ("US51E10"): "8th voted out; Quit" with
+ * jury_status "1st jury member; Quit" and jury false. He was voted out in
+ * episode 7 (9 votes) and later left the jury; the quitter rule is for leaving
+ * the game. Approved by Davis (#324) as a one-row exception: he scores and
+ * displays as a regular boot. Earlier seasons' compound quits are unchanged.
+ */
+const CASTAWAY_RESULT_CORRECTIONS: Record<
+  string,
+  { published: { result: string; jury_status: string }; result: string }
+> = {
+  "US51|US0757": {
+    published: {
+      result: "8th voted out; Quit",
+      jury_status: "1st jury member; Quit",
+    },
+    result: "8th voted out",
+  },
+};
+
+function correctedResult(c: SurvivorCastaway): string {
+  const key = `${c.version_season}|${c.castaway_id}`;
+  const correction = CASTAWAY_RESULT_CORRECTIONS[key];
+  // Older pins list a plain boot, which needs no correction.
+  if (!correction || !c.result.toLowerCase().includes("quit")) return c.result;
+  if (
+    c.result !== correction.published.result ||
+    c.jury_status !== correction.published.jury_status
+  ) {
+    throw new Error(
+      `survivoR changed the corrected castaways row ${key}; review CASTAWAY_RESULT_CORRECTIONS.`,
+    );
+  }
+  return correction.result;
+}
+
 function transformEliminations(
   castaways: SurvivorCastaway[],
 ): ScrapedElimination[] {
@@ -497,7 +539,7 @@ function transformEliminations(
     .sort((a, b) => a.order - b.order);
 
   return eliminated.map((c, idx) => {
-    const variant = mapResultToVariant(c.result);
+    const variant = mapResultToVariant(correctedResult(c));
     const epNum = Math.round(c.episode);
 
     return {
@@ -522,11 +564,13 @@ function mapResultToVariant(result: string): ScrapedEliminationVariant {
   if (lower.includes("quit") || lower.includes("withdrew")) return "quitter";
   if (lower.includes("ejected")) return "ejected";
   if (lower.includes("switched")) return "switched";
-  // Covers "voted out", "Xth voted out", "eliminated", and fire-making
+  // Covers "voted out", "Xth voted out", "eliminated", fire-making, and the
+  // S51 ep9 tiebreaker coin flip ("Lost coin flip"), which is like a rock draw.
   if (
     lower.includes("voted out") ||
     lower.includes("eliminated") ||
-    lower.includes("fire")
+    lower.includes("fire") ||
+    lower.includes("coin flip")
   )
     return "tribal";
   throw new Error(
@@ -606,6 +650,8 @@ const IGNORED_VOTE_EVENTS = new Set([
   "Player quit",
   "Quit",
   "Rock draw",
+  // The S51 ep9 tiebreaker that replaced the rock draw.
+  "Coin flip",
   "Unanimous decision",
   "Won immunity challenge",
   "Sacrificed vote to extend idol",

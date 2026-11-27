@@ -25,6 +25,7 @@ export interface SurvivorCastaway extends SurvivorBaseRecord {
   day: number | null;
   order: number;
   result: string;
+  jury_status?: string | null;
   place: number;
   original_tribe: string;
   jury: boolean;
