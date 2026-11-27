@@ -835,7 +835,7 @@ export const SEASON_51_ELIMINATIONS = {
     episode_num: 7,
     order: 9,
     castaway_id: "US0757",
-    variant: "quitter",
+    variant: "tribal",
   },
   elimination_10: {
     id: "elimination_10",

@@ -645,7 +645,7 @@ describe("season 51 episode 7", () => {
         e.order,
         e.variant,
       ]),
-    ).toEqual([["US0757", 9, "quitter"]]);
+    ).toEqual([["US0757", 9, "tribal"]]);
     expect(
       inEpisode(SEASON_51_EVENTS, 7)
         .map((e) => `${e.castaway_id}:${e.action}`)
@@ -685,9 +685,11 @@ describe("season 51 episode 7", () => {
     );
     expected.US0768 += points("immunity");
     expected.US0772 += points("win_idol");
-    // Voted out in episode 7, then quit the jury (survivoR 04d4a558: "8th
-    // voted out; Quit"), which scores as a quit like S45 Sean's.
-    expected.US0757 += 7 + points("quitter");
+    // Voted out in episode 7. survivoR 04d4a558 adds that he later quit the
+    // jury ("8th voted out; Quit"); a reviewed correction keeps him a regular
+    // boot (#324), so this stays 11.
+    expected.US0757 += 7;
+    expect(expected.US0757).toBe(11);
     for (const p of SEASON_51_PLAYERS) {
       const total = getEnhancedSurvivorPoints(
         Object.values(SEASON_51_CHALLENGES),
