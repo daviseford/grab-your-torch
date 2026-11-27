@@ -1006,4 +1006,56 @@ describe("transformResults", { timeout: 60000 }, () => {
       });
     });
   });
+
+  describe("survivoR 04d4a558 (US51E10)", () => {
+    // Episode 9 ended in a coin flip instead of a vote: Lewis "Lost coin
+    // flip", and every vote_history row carries vote_event "Coin flip".
+    // Brady (Episode 7 boot) quit the jury, like S45 Sean before him.
+    const REF = "04d4a5584847fee864513ed140d74bafe295589c";
+    let data: SurvivorSeasonData;
+    beforeAll(async () => {
+      data = await fetchSeasonData(51, REF);
+    });
+
+    it("eliminates the coin flip loser like any boot and scores no event", () => {
+      const results = transformResults(data, 51);
+      expect(
+        results.eliminations
+          .filter((e) => e.episodeNum >= 9)
+          .map((e) => [e.episodeNum, e.castawayId, e.variant]),
+      ).toEqual([
+        [9, "US0765", "tribal"],
+        [10, "US0767", "tribal"],
+        [10, "US0758", "tribal"],
+      ]);
+      expect(
+        data.voteHistory.filter((v) => v.vote_event === "Coin flip"),
+      ).toHaveLength(10);
+      expect(
+        results.events
+          .filter((e) => e.episodeNum >= 9)
+          .map((e) => `${e.episodeNum}:${e.castawayId}:${e.action}`),
+      ).toEqual(["10:US0758:voted_out_with_idol"]);
+    });
+
+    it("scores a jury quit as a quit, as in earlier seasons", () => {
+      const brady = transformResults(data, 51).eliminations.find(
+        (e) => e.castawayId === "US0757",
+      );
+      expect(brady).toMatchObject({ episodeNum: 7, variant: "quitter" });
+    });
+
+    it("still fails closed on an elimination result it does not know", () => {
+      const lewis = data.castaways.find((c) => c.castaway_id === "US0765")!;
+      const withUnknown = {
+        ...data,
+        castaways: data.castaways.map((c) =>
+          c === lewis ? { ...c, result: "Lost dice roll" } : c,
+        ),
+      };
+      expect(() => transformResults(withUnknown, 51)).toThrow(
+        'Unknown elimination result "Lost dice roll"',
+      );
+    });
+  });
 });

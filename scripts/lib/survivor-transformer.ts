@@ -522,11 +522,13 @@ function mapResultToVariant(result: string): ScrapedEliminationVariant {
   if (lower.includes("quit") || lower.includes("withdrew")) return "quitter";
   if (lower.includes("ejected")) return "ejected";
   if (lower.includes("switched")) return "switched";
-  // Covers "voted out", "Xth voted out", "eliminated", and fire-making
+  // Covers "voted out", "Xth voted out", "eliminated", fire-making, and the
+  // S51 ep9 tiebreaker coin flip ("Lost coin flip"), which is like a rock draw.
   if (
     lower.includes("voted out") ||
     lower.includes("eliminated") ||
-    lower.includes("fire")
+    lower.includes("fire") ||
+    lower.includes("coin flip")
   )
     return "tribal";
   throw new Error(
@@ -606,6 +608,8 @@ const IGNORED_VOTE_EVENTS = new Set([
   "Player quit",
   "Quit",
   "Rock draw",
+  // The S51 ep9 tiebreaker that replaced the rock draw.
+  "Coin flip",
   "Unanimous decision",
   "Won immunity challenge",
   "Sacrificed vote to extend idol",
