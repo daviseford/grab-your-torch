@@ -1090,4 +1090,36 @@ describe("transformResults", { timeout: 60000 }, () => {
       );
     });
   });
+
+  describe("survivoR 4e571ca (duplicate Season 31 votes removed)", () => {
+    // survivoR 04d4a558 recorded both of Stephen's Episode 11 ballots twice
+    // (survivoR issue #43); 4e571ca removed one copy of each. The importer's
+    // vote-row dedup already dropped the copies, so nothing we ship changes.
+    const ballots = (data: SurvivorSeasonData) =>
+      data.voteHistory.filter(
+        (v) => v.episode === 11 && v.castaway_id === "US0280",
+      );
+
+    it("imports Season 31 identically before and after the fix", async () => {
+      const [before, after] = await Promise.all([
+        fetchSeasonData(31, "04d4a5584847fee864513ed140d74bafe295589c"),
+        fetchSeasonData(31, "4e571ca302e0d97f3d9028d6f38febc544600757"),
+      ]);
+      expect([before.voteHistory.length, after.voteHistory.length]).toEqual([
+        143, 141,
+      ]);
+      expect([ballots(before).length, ballots(after).length]).toEqual([4, 2]);
+
+      const results = transformResults(after, 31);
+      expect({
+        ...transformResults(before, 31),
+        scrapedAt: results.scrapedAt,
+      }).toEqual(results);
+      expect(
+        results.voteHistory
+          .filter((v) => v.episodeNum === 11 && v.voterCastawayId === "US0280")
+          .map((v) => v.targetCastawayId),
+      ).toEqual(["US0383", "US0451"]);
+    });
+  });
 });
